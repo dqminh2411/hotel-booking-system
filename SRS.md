@@ -97,16 +97,13 @@ Kiến trúc gồm 4 lớp: (1) Lớp giao diện người dùng (Customer Web/A
 | --- | --- | --- |
 | API Gateway | Định tuyến request, rate limiting, xác thực JWT đầu vào | Đã có |
 | Eureka Server | Service Discovery, đăng ký & tìm kiếm service | Đã có |
-| Auth Service | Xác thực, OAuth2 Google, phát hành/làm mới JWT | Cần bổ sung |
-| User Service | Hồ sơ người dùng, vai trò người dùng, quản | Đã có (mở rộng) |
-| Tenant Service | Đăng ký, quản lý gói thuê bao (subscription) của tenant | Cần bổ sung |
+| User Service | Xác thực người dùng, Hồ sơ người dùng, vai trò người dùng, Đăng ký, quản lý gói thuê bao (subscription) của tenant | Đã có (mở rộng) |
 | Hotel Service | Quản lý khách sạn, loại phòng, phòng, tiện ích, hình ảnh | Đã có (mở rộng) |
 | Staff Management Service | Quản lý nhân viên khách sạn, phân quyền nội bộ | Cần bổ sung |
 | Booking Service | Quản lý đặt phòng, trạng thái booking, lịch sử | Đã có |
 | Place Booking Service | Saga Orchestrator điều phối luồng đặt phòng – thanh toán – tự động xác nhận | Đã có |
 | Payment Service | Xử lý thanh toán, tích hợp Stripe/VNPay, refund | Đã có (mở rộng) |
 | Promotion Service | Coupon, chương trình giảm giá, campaign | Cần bổ sung |
-| Analytics Service | Tổng hợp số liệu, dashboard báo cáo | Cần bổ sung |
 | Notification Service | Gửi email, push notification (FCM) | Đã có (mở rộng) |
 
 ## 2.2. Tóm tắt chức năng sản phẩm (Product Functions)
@@ -806,6 +803,4 @@ Bảng dưới tổng hợp việc hợp nhất phạm vi giữa hệ thống hi
 
 - **Phiên bản 1.0** — Soạn thảo trên cơ sở tài liệu yêu cầu mở rộng nội bộ và luồng nghiệp vụ tham khảo Booking.com.
 
-- **Phiên bản 1.1** — Loại bỏ yêu cầu "Nhân viên xác nhận booking thủ công" (FR-STAFF-04 cũ); quy trình đặt phòng được tự động hoá toàn phần từ lúc khách hàng nhấn đặt phòng đến khi xác nhận thành công, bao gồm logic rollback khi thất bại. Bổ sung Mục 3.2.1 (Danh sách Use Case), tái cấu trúc yêu cầu chức năng có gắn mã UC (Mục 3.2.2), và bổ sung Mục 3.2.3 (Kịch bản Use Case) cho toàn bộ 28 use case của hệ thống.
-
-Các phụ lục mô hình dữ liệu chi tiết, đặc tả API (OpenAPI) chi tiết theo từng service, và đặc tả giao diện (wireframe) sẽ được trình bày trong các tài liệu kỹ thuật bổ sung (SDD, API Spec, UI Spec).
+- **Phiên bản 1.1** -  Bổ sung Mục 3.2.1 (Danh sách Use Case), tái cấu trúc yêu cầu chức năng có gắn mã UC (Mục 3.2.2), và bổ sung Mục 3.2.3 (Kịch bản Use Case) cho toàn bộ 28 use case của hệ thống.

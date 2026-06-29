@@ -110,3 +110,7 @@ coverage/
 .pytest_cache/
 htmlcov/
 test-results/
+bugs.md
+business_rules.md
+notes.md
+TODO.md

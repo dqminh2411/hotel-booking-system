@@ -176,11 +176,8 @@ Các service đã được triển khai trong phiên bản hiện tại gồm:
 
 | Service                  | Mục đích                    |
 | ------------------------ | --------------------------- |
-| Auth Service             | Authentication, OAuth2, JWT |
 | Staff Management Service | Quản lý nhân viên           |
 | Promotion Service        | Coupon, discount            |
-| Analytics Service        | Dashboard và báo cáo        |
-| Tenant Service           | Quản lý tenant SaaS         |
 
 ---
 
