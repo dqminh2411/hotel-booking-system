@@ -8,15 +8,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.dto.Hotel;
 import com.place_booking_service.dto.PlaceBookingRequest;
 import com.place_booking_service.dto.User;
-import com.place_booking_service.entity.OutboxMessage;
 import com.place_booking_service.entity.SagaState;
-import com.place_booking_service.repository.OutboxMessageRepository;
+import com.place_booking_service.exception.SagaStateConflictException;
 import com.place_booking_service.repository.SagaStateRepository;
 
 @Service
@@ -36,7 +33,11 @@ public class PlaceBookingService {
     public String startSaga(PlaceBookingRequest placeBookingRequest, User user, Hotel hotel) {
 
         if(sagaStateRepository.existsSagaStateByIdempotencyKey(placeBookingRequest.getIdempotencyKey())){
-            return sagaStateRepository.findSagaStateByIdempotencyKey(placeBookingRequest.getIdempotencyKey()).getBookingId();
+            SagaState sagaState = sagaStateRepository.findSagaStateByIdempotencyKey(placeBookingRequest.getIdempotencyKey());
+            if (sagaState == null || sagaState.getBookingId() == null) {
+                throw new SagaStateConflictException(placeBookingRequest.getIdempotencyKey());
+            }
+            return sagaState.getBookingId();
         }
 
         CreateBooking createBooking = new CreateBooking(placeBookingRequest);

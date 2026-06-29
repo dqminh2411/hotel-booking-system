@@ -10,9 +10,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RoomType {
+    @NotBlank
     private String roomTypeId;
     private String name;
     private int bedCount;
+    @Min(1)
     private int bookingQuantity;
     private int totalQuantity;
     private double price;

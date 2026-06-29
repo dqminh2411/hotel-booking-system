@@ -4,6 +4,7 @@ import com.hotelbooking.hotelservice.dto.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
 import com.hotelbooking.hotelservice.dto.PagedResponse;
 import com.hotelbooking.hotelservice.dto.RoomTypeResponse;
+import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -16,5 +17,7 @@ public interface HotelService {
     List<RoomTypeResponse> getRoomTypesByHotel(String hotelId, LocalDate checkin, LocalDate checkout);
 
     RoomTypeResponse getRoomTypeById(String hotelId, String roomTypeId, LocalDate checkin, LocalDate checkout);
+
+    HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList);
 }
 

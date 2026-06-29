@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
 
 @RestController
 @RequestMapping("/hotels")
@@ -48,6 +49,15 @@ public class HotelController {
         return hotelService.getHotelById(hotelId);
     }
 
+    @GetMapping("/{hotelId}/requested-room-types")
+    public HotelAndRoomTypesResponse getHotelAndRequestedRoomTypes(
+            @PathVariable
+            @Pattern(regexp = ID_PATTERN, message = "hotelId has invalid format")
+            String hotelId,
+            @RequestParam(required = false, name = "roomTypeList") List<String> roomTypeList
+    ) {
+        return hotelService.getRequestedRoomTypesByHotel(hotelId, roomTypeList);
+    }
     @GetMapping("/{hotelId}/room-types")
     public List<RoomTypeResponse> getRoomTypesByHotel(
             @PathVariable

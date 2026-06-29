@@ -144,21 +144,6 @@ public class BookingService {
         Map<String, Long> activeByRoomType = activeRows.stream()
             .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
 
-        for (CreateBookingCommand.RoomTypeItem item : command.roomTypeList()) {
-            long existing = activeByRoomType.getOrDefault(item.roomTypeId(), 0L);
-            long expected = existing + item.bookingQuantity();
-            if (expected > item.totalQuantity()) {
-                saveOutboxEvent(
-                    new BookingFailed(
-                        command.sagaId(),
-                        "BookingFailed",
-                        toBookingDetail(command),
-                        "Room " + item.name() + " not available"
-                    )
-                );
-                return;
-            }
-        }
 
         BookingDetail bookingDetail = toBookingDetail(command);
 
@@ -176,8 +161,17 @@ public class BookingService {
         booking.setStatus(BookingStatus.PENDING);
         bookingRepository.save(booking);
 
+        boolean isBookingFailed = false;
+        List<String> unavailableRoomTypes = new ArrayList<>();
+
         long nights = ChronoUnit.DAYS.between(command.checkin(), command.checkout());
         for (CreateBookingCommand.RoomTypeItem item : command.roomTypeList()) {
+            long existing = activeByRoomType.getOrDefault(item.roomTypeId(), 0L);
+            long expected = existing + item.bookingQuantity();
+            if(expected > item.totalQuantity()) {
+                isBookingFailed = true;
+                unavailableRoomTypes.add(item.name());
+            }
             BookedRoomTypeEntity entity = new BookedRoomTypeEntity();
             entity.setId("BR-" + UUID.randomUUID());
             entity.setBookingId(command.bookingId());
@@ -189,6 +183,8 @@ public class BookingService {
             bookedRoomTypeRepository.save(entity);
         }
 
+        
+
         try {
             BookingInfoEntity info = new BookingInfoEntity();
 
@@ -197,6 +193,18 @@ public class BookingService {
             bookingInfoRepository.save(info);
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to persist booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        if(isBookingFailed){
+            saveOutboxEvent(
+                    new BookingFailed(
+                        command.sagaId(),
+                        "BookingFailed",
+                        toBookingDetail(command),
+                        "Room " + String.join(", ", unavailableRoomTypes) + " not available"
+                    )
+                );
+                return;
         }
 
         saveOutboxEvent(

@@ -19,6 +19,7 @@ public class PlaceBookingRequest {
     @NotBlank
     private String hotelId;
 
+    @Valid
     @NotEmpty
     private List<RoomType> roomTypeList;
 

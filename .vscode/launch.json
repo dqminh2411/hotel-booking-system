@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+        "type": "java",
+        "name": "place booking service",
+        "request": "attach",
+        "projectName": "place-booking-service",
+        "hostName": "localhost",
+        "port": 5011
+    },
+    {
+        "type": "java",
+        "name": "Attach to Booking Service",
+        "request": "attach",
+        "hostName": "localhost",
+        "port": 5010
+    }
+]
+}

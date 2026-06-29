@@ -248,12 +248,14 @@ services:
     networks:
       - app-network
     volumes:
-      - ./services/hotel-service:/workspace/hotel-service
+      - ./services/hotel-service:/app
+      - /root/.m2
 
   booking-service:
     build: ./services/booking-service
     ports:
       - "${BOOKING_SERVICE_PORT:-5004}:5000"
+      - "5010:5010" # debug
     env_file:
       - .env
     environment:
@@ -268,6 +270,10 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-booking-service-group}
       OUTBOX_RELAY_INTERVAL_MS: ${OUTBOX_RELAY_INTERVAL_MS:-100}
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010
     depends_on:
       booking-db:
         condition: service_healthy
@@ -275,6 +281,12 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks:
       - app-network
     volumes:
@@ -285,6 +297,7 @@ services:
     build: ./services/place_booking_service
     ports:
       - "${PLACE_BOOKING_SERVICE_PORT:-5001}:5000"
+      - "5011:5011" # debug
     env_file:
       - .env
     environment:
@@ -298,6 +311,10 @@ services:
       KAFKA_CONSUMER_GROUP: place-booking-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
       interval: 10s

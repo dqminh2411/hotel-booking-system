@@ -1,6 +1,7 @@
 package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
+import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
 import com.hotelbooking.hotelservice.dto.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
 import com.hotelbooking.hotelservice.dto.PagedResponse;
@@ -22,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import com.hotelbooking.hotelservice.dto.RoomTypeQuantityResponse;
+import com.hotelbooking.hotelservice.dto.Hotel;
 
 @Service
 @RequiredArgsConstructor
@@ -96,6 +99,23 @@ public class HotelServiceImpl implements HotelService {
         return toRoomTypeResponse(roomType, bookedCount);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList){
+        HotelDetailsResponse hotelDetails = getHotelById(hotelId);
+        Hotel h = new Hotel(hotelDetails.hotelId(), hotelDetails.name(), hotelDetails.address());
+        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
+        if (roomTypes.isEmpty()) {
+            return new HotelAndRoomTypesResponse(h, List.of());
+        }
+
+        List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
+                .map(roomType -> new RoomTypeQuantityResponse(roomType.getId(), roomType.getQuantity()))
+                .toList();
+
+        return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
+    };
+    
     private void ensureHotelExists(String hotelId) {
         if (!hotelRepository.existsById(hotelId)) {
             throw new HotelNotFoundException(hotelId);
@@ -129,6 +149,8 @@ public class HotelServiceImpl implements HotelService {
         List<String> roomTypeIds = roomTypes.stream().map(RoomTypeEntity::getId).toList();
         return bookingServiceClient.countActiveBookingsByRoomType(hotelId, roomTypeIds, checkin, checkout);
     }
+
+    
 
     private HotelSummaryResponse toHotelSummary(HotelEntity entity) {
         return new HotelSummaryResponse(
