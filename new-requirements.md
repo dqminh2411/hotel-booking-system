@@ -229,7 +229,6 @@ Các service đã được triển khai trong phiên bản hiện tại gồm:
 
 ## Payment
 
-* Stripe
 * VNPay
 
 ## Notification
@@ -239,7 +238,7 @@ Các service đã được triển khai trong phiên bản hiện tại gồm:
 
 ## File Storage
 
-* MinIO hoặc AWS S3
+* MinIO 
 
 ## Monitoring
 
@@ -360,7 +359,7 @@ Bổ sung cho User Service/Auth Service:
 
 ---
 
-## Stripe/VNPay Integration
+## VNPay Integration
 
 Bổ sung cho Payment Service:
 
@@ -375,9 +374,7 @@ Bổ sung cho Payment Service:
 
 ## Đã hoàn thành trong hệ thống hiện tại
 
-* Tìm kiếm khách sạn cơ bản
-* Xem chi tiết khách sạn
-* Kiểm tra availability
+* Kiểm tra availability của phòng khách sạn
 * Đặt phòng
 * Thanh toán mock
 * Gửi email
@@ -394,6 +391,7 @@ Bổ sung cho Payment Service:
 
 ### Nghiệp vụ
 
+* Tìm kiếm khách sạn, xem chi tiết khách sạn, xem loại phòng, kiểm tra phòng trống
 * Multi-tenant SaaS
 * Quản lý khách sạn, phòng
 * Quản lý nhân viên
@@ -407,7 +405,7 @@ Bổ sung cho Payment Service:
 * Redis Cache
 * OAuth2 Login
 * Firebase Notification
-* Stripe/VNPay
+* VNPay
 * Idempotency
 * Monitoring
 * Logging
