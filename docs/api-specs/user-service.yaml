@@ -2,9 +2,16 @@ openapi: 3.0.3
 info:
   title: User Service API
   description: |
-    Entity Service — quản lý thông tin user profile.
-    Được gọi bởi PlaceBookingService (sync REST) để xác minh user và lấy thông tin (tên, email) trước khi bắt đầu Saga.
-  version: 1.0.0
+    User Service — sở hữu toàn bộ vòng đời người dùng và tổ chức thuê (tenant) trên nền tảng HotelHub SaaS.
+    Gộp nghiệp vụ Identity & Access (đăng ký, đăng nhập, OAuth2 Google, JWT, RBAC, khóa/mở tài khoản)
+    và nghiệp vụ Tenant Management (tenant, subscription plan) vào cùng một service, theo Tài liệu
+    Phân tích Thiết kế (SDD) v1.0, mục 2.1 và 3.1.
+
+    Được gọi bởi:
+      - API Gateway (forward request từ Client, đính kèm xác thực JWT).
+      - Place Booking Service (Saga Orchestrator) qua endpoint nội bộ `GET /api/users/{id}`
+        để xác minh user tồn tại và lấy thông tin (tên, email) trước khi bắt đầu Saga đặt phòng.
+  version: 1.1.0
 
 servers:
   - url: http://localhost:5002
@@ -12,7 +19,12 @@ servers:
 
 tags:
   - name: Health
+  - name: Auth
+    description: Đăng ký, đăng nhập, OAuth2 Google, quản lý token, khôi phục mật khẩu
   - name: Users
+    description: Hồ sơ người dùng, khóa/mở tài khoản, thống kê
+  - name: Tenants
+    description: Quản lý tenant và gói thuê bao (subscription)
 
 paths:
   /health:
@@ -28,24 +40,365 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
-  /users/{userId}:
+  # ============================================================
+  # AUTH
+  # ============================================================
+
+  /api/users:
+    post:
+      tags: [Auth]
+      summary: Đăng ký tài khoản Customer
+      description: |
+        Tạo tài khoản mới với role mặc định CUSTOMER, trạng thái UNVERIFIED.
+        Hệ thống gửi email xác thực kèm liên kết kích hoạt sau khi tạo thành công.
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterUserRequest'
+      responses:
+        '201':
+          description: Đăng ký thành công, tài khoản ở trạng thái UNVERIFIED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Dữ liệu không hợp lệ (sai định dạng email, mật khẩu yếu...)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email hoặc số điện thoại đã tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: EMAIL_ALREADY_EXISTS
+                message: Email đã được sử dụng bởi tài khoản khác
+
+  /api/users/verify-email:
+    post:
+      tags: [Auth]
+      summary: Xác thực email qua token
+      description: Kích hoạt tài khoản (chuyển status UNVERIFIED → ACTIVE) bằng token gửi qua email khi đăng ký.
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Token xác thực email gửi kèm liên kết kích hoạt
+      responses:
+        '200':
+          description: Xác thực thành công, tài khoản đã ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Token đã hết hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: TOKEN_EXPIRED
+                message: Liên kết xác thực đã hết hạn, vui lòng đăng ký lại
+
+  /api/users/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập bằng email/mật khẩu
+      description: |
+        Xác thực email/mật khẩu, kiểm tra trạng thái tài khoản (UNVERIFIED/ACTIVE/LOCKED) rồi phát hành
+        Access Token (JWT) và Refresh Token. Refresh Token được lưu dưới dạng hash trong bảng `refresh_tokens`;
+        phía client khuyến nghị lưu Refresh Token trong cookie HttpOnly và Access Token trong local storage.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Thông tin đăng nhập sai
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Sai email hoặc mật khẩu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '423':
+          description: Tài khoản đang bị khóa (status = LOCKED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ACCOUNT_LOCKED
+                message: Tài khoản đang bị khóa, vui lòng liên hệ quản trị viên
+
+  /api/users/oauth/google:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập / đăng ký bằng Google OAuth2
+      description: |
+        Nhận authorization code từ Google, đổi lấy thông tin profile (google_id, email, name, avatar).
+        Quy tắc xử lý:
+          - User chưa tồn tại → tạo user mới với google_id, email, profile cơ bản (role mặc định CUSTOMER).
+          - User tồn tại nhưng chưa liên kết Google → liên kết google_id với user hiện có.
+          - User đã tồn tại và đã liên kết Google → cập nhật lại profile nếu có thay đổi.
+        Sau khi xác định user, hệ thống kiểm tra status; nếu LOCKED thì từ chối đăng nhập.
+      operationId: loginWithGoogle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: Authorization code do Google trả về sau khi người dùng cấp quyền
+      responses:
+        '200':
+          description: Đăng nhập thành công (user đã tồn tại)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '201':
+          description: Tài khoản mới được tạo và đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Authorization code không hợp lệ hoặc xác thực với Google thất bại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Tài khoản liên kết với email Google này đang bị khóa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ACCOUNT_LOCKED
+                message: Account is locked
+
+  /api/users/refresh-token:
+    post:
+      tags: [Auth]
+      summary: Làm mới Access Token
+      description: |
+        Kiểm tra hash của Refresh Token có tồn tại trong `refresh_tokens` và chưa bị thu hồi (revoked = false)
+        và chưa hết hạn (expires_at), sau đó phát hành Access Token mới.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Access Token mới được phát hành
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+        '401':
+          description: Refresh Token không hợp lệ, đã bị thu hồi hoặc hết hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Yêu cầu khôi phục mật khẩu
+      description: |
+        Gửi email chứa liên kết đặt lại mật khẩu có thời hạn hiệu lực. Vì lý do an toàn, API luôn trả về
+        200 OK kể cả khi email không tồn tại trong hệ thống (không tiết lộ thông tin tài khoản).
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Yêu cầu đã được tiếp nhận (luôn trả 200 dù email có tồn tại hay không)
+        '400':
+          description: Dữ liệu không hợp lệ (sai định dạng email)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/reset-password:
+    post:
+      tags: [Auth]
+      summary: Đặt lại mật khẩu
+      description: Đặt mật khẩu mới bằng token nhận từ email, đồng thời revoke toàn bộ refresh token cũ của user.
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Đặt lại mật khẩu thành công
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: Token đặt lại mật khẩu đã hết hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # USERS
+  # ============================================================
+
+  /api/users/me:
     get:
       tags: [Users]
-      summary: Lấy thông tin user theo ID
+      summary: Lấy hồ sơ cá nhân hiện tại
+      description: Yêu cầu Access Token hợp lệ trong header Authorization.
+      operationId: getMyProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Hồ sơ cá nhân của user đang đăng nhập
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Chưa đăng nhập hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [Users]
+      summary: Cập nhật hồ sơ cá nhân
+      operationId: updateMyProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Chưa đăng nhập hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{id}:
+    get:
+      tags: [Users]
+      summary: '[internal] Lấy thông tin người dùng theo ID'
       description: |
-        Được gọi bởi PlaceBookingService để xác minh user tồn tại
-        và lấy email, tên phục vụ các bước sau của Saga.
+        Endpoint nội bộ (service-to-service), không expose trực tiếp cho client cuối.
+        Được gọi bởi Place Booking Service (Saga Orchestrator) để xác minh user tồn tại
+        và lấy email, tên phục vụ các bước sau của Saga đặt phòng.
       operationId: getUserById
       parameters:
-        - name: userId
+        - name: id
           in: path
           required: true
           schema:
             type: string
-            minLength: 2
-            maxLength: 255
-            pattern: '^[A-Za-z0-9-]+$'
-          example: US-001
+            format: uuid
+          example: 9c858901-8a57-4791-81fe-4c455b099bc9
       responses:
         '200':
           description: Thông tin user
@@ -53,8 +406,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '404':
+          description: User không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: USER_NOT_FOUND
+                message: User với ID đã cho không tồn tại
+
+    patch:
+      tags: [Users]
+      summary: Admin khóa hoặc mở khóa tài khoản
+      description: |
+        Một endpoint dùng chung cho cả khóa và mở khóa, phân biệt qua trường `status` trong request body:
+          - `status = LOCKED`: khóa tài khoản, bắt buộc kèm `reason`; hệ thống ghi một bản ghi mới vào
+            `account_lock_history` (locked_at = now, unlocked_at = null) và revoke toàn bộ refresh token hiện tại.
+          - `status = ACTIVE`: mở khóa tài khoản; hệ thống cập nhật `unlocked_at` cho bản ghi
+            `account_lock_history` đang mở (unlocked_at IS NULL) của user đó.
+        Chỉ Platform Admin mới có quyền gọi endpoint này (kiểm soát qua RBAC tại API Gateway/Service).
+      operationId: updateUserAccountStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [LOCKED, ACTIVE]
+                  description: Trạng thái mới muốn chuyển sang
+                reason:
+                  type: string
+                  maxLength: 500
+                  description: Lý do khóa (bắt buộc khi status = LOCKED)
+      responses:
+        '200':
+          description: Cập nhật trạng thái tài khoản thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         '400':
-          description: Request không hợp lệ
+          description: Thiếu `reason` khi khóa tài khoản, hoặc trạng thái yêu cầu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Người gọi không có quyền Platform Admin
           content:
             application/json:
               schema:
@@ -65,38 +477,124 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: USER_NOT_FOUND
-                message: User với ID US-999 không tồn tại
+
+  /api/users/stats:
+    get:
+      tags: [Users]
+      summary: Số liệu tổng số người dùng
+      description: Phục vụ Admin Dashboard (theo SDD mục 1.2 — không có Analytics Service riêng, mỗi service tự expose số liệu thuộc domain của mình).
+      operationId: getUserStats
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thống kê người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatsResponse'
+        '403':
+          description: Người gọi không có quyền Platform Admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # TENANTS
+  # ============================================================
+
+  /api/tenants/{id}:
+    get:
+      tags: [Tenants]
+      summary: Lấy thông tin tenant
+      operationId: getTenantById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thông tin tenant kèm subscription đang ACTIVE (nếu có)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '404':
+          description: Tenant không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tenants/{id}/subscription:
+    put:
+      tags: [Tenants]
+      summary: Admin cập nhật gói thuê bao của tenant
+      description: |
+        Tạo một bản ghi mới trong `tenant_subscriptions` với `status = ACTIVE` cho gói được chỉ định,
+        đồng thời chuyển bản ghi subscription ACTIVE trước đó (nếu có) sang `EXPIRED` hoặc `CANCELLED`
+        để đảm bảo ràng buộc nghiệp vụ: tại một thời điểm tenant chỉ có duy nhất một subscription ACTIVE.
+      operationId: updateTenantSubscription
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [subscriptionPlanId]
+              properties:
+                subscriptionPlanId:
+                  type: string
+                  format: uuid
+                  description: ID gói thuê bao mới (tham chiếu `subscription_plans.id`)
+                expiresAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: Thời điểm hết hạn của subscription mới; bỏ trống nếu gói không giới hạn thời gian
+      responses:
+        '200':
+          description: Cập nhật gói thuê bao thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tenant'
+        '400':
+          description: Dữ liệu không hợp lệ (subscriptionPlanId không tồn tại...)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tenant không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
-  schemas:
-    User:
-      type: object
-      properties:
-        userId:
-          type: string
-          example: US-001
-        name:
-          type: string
-          example: Nguyen Van A
-        email:
-          type: string
-          format: email
-          example: nguyenvana@email.com
-        phone:
-          type: string
-          example: "0901234567"
-        createdAt:
-          type: string
-          format: date-time
-          example: "2024-01-15T08:30:00Z"
-        roles:
-          type: array
-          items:
-            type: string
-          example: ["CUSTOMER"]
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
+  schemas:
     HealthResponse:
       type: object
       properties:
@@ -113,3 +611,211 @@ components:
         message:
           type: string
           example: User không tồn tại
+
+    # ---------- Users / Roles ----------
+
+    Role:
+      type: object
+      description: Tương ứng bảng `roles`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          enum: [CUSTOMER, HOTEL_STAFF, HOTEL_OWNER, PLATFORM_ADMIN]
+        description:
+          type: string
+          nullable: true
+
+    User:
+      type: object
+      description: Tương ứng bảng `users`, kèm danh sách role lấy từ `user_roles`/`roles`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          nullable: true
+        fullName:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [UNVERIFIED, ACTIVE, LOCKED]
+        googleId:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [CUSTOMER, HOTEL_STAFF, HOTEL_OWNER, PLATFORM_ADMIN]
+          example: ["CUSTOMER"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 9c858901-8a57-4791-81fe-4c455b099bc9
+        email: nguyenvana@email.com
+        phone: "0901234567"
+        fullName: Nguyen Van A
+        avatarUrl: null
+        address: null
+        status: ACTIVE
+        googleId: null
+        roles: ["CUSTOMER"]
+        createdAt: "2026-06-15T08:30:00Z"
+        updatedAt: "2026-06-15T08:30:00Z"
+
+    RegisterUserRequest:
+      type: object
+      required: [email, password, fullName, phone]
+      properties:
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          format: phone
+        password:
+          type: string
+          format: password
+          minLength: 8
+        fullName:
+          type: string
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        fullName:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+
+    AuthResponse:
+      type: object
+      description: |
+        Kết quả đăng nhập (email/mật khẩu hoặc Google OAuth2). `refreshToken` khuyến nghị được phía client
+        lưu trong cookie HttpOnly, `accessToken` lưu trong local storage.
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    UserStatsResponse:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+          example: 1280
+        totalByRole:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            CUSTOMER: 1150
+            HOTEL_STAFF: 80
+            HOTEL_OWNER: 45
+            PLATFORM_ADMIN: 5
+        totalLocked:
+          type: integer
+          example: 12
+
+    # ---------- Tenants / Subscriptions ----------
+
+    SubscriptionPlan:
+      type: object
+      description: Tương ứng bảng `subscription_plans`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          enum: [FREE, BASIC, PRO]
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: double
+        billingCycle:
+          type: string
+          enum: [MONTHLY, YEARLY]
+
+    TenantSubscription:
+      type: object
+      description: Tương ứng bảng `tenant_subscriptions` — một bản ghi lịch sử subscription của tenant.
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        subscriptionPlan:
+          $ref: '#/components/schemas/SubscriptionPlan'
+        status:
+          type: string
+          enum: [ACTIVE, EXPIRED, CANCELLED, SUSPENDED]
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    Tenant:
+      type: object
+      description: Tương ứng bảng `tenants`, kèm subscription hiện đang ACTIVE (nếu có).
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerUserId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+        currentSubscription:
+          allOf:
+            - $ref: '#/components/schemas/TenantSubscription'
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

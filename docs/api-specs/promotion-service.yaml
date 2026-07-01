@@ -1,0 +1,1236 @@
+openapi: 3.1.0
+info:
+  title: Promotion Service API
+  version: 1.0.0
+  description: |
+    Promotion Service manages promotion campaigns, coupon codes, promotion scopes,
+    validation, discount calculation, and usage confirmation for the hotel booking flow.
+
+    This specification is based on the promotion_db ERD and the sequence diagrams in
+    promotion_service.md.
+  x-assumptions:
+    - Admin users can manage system-wide promotions.
+    - Hotel owners can manage promotions scoped to hotels or room types they own.
+    - Booking/place-booking services call validate before payment and confirm usage after booking/payment success.
+    - Usage cancellation is included because promotion_usages.status supports CANCELLED and booking/payment can fail or be cancelled.
+    - Pagination uses page and size query parameters.
+    - JWT claims provide actor id, role, and tenant context; tenantId may also be sent in request bodies for admin/owner workflows.
+
+servers:
+  - url: http://localhost:5007
+    description: Local development
+  - url: http://localhost:8080
+    description: API Gateway local development
+
+tags:
+  - name: Promotions
+    description: Create, update, list, read, status-change, and soft-delete promotions.
+  - name: Promotion Validation
+    description: Validate promotion or coupon applicability and calculate discount.
+  - name: Promotion Usage
+    description: Confirm or cancel promotion usage after booking workflow outcomes.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/promotions:
+    post:
+      tags: [Promotions]
+      summary: Create promotion
+      description: |
+        Creates a promotion campaign with optional scopes, coupons, and conditions.
+        If hotel or room type scopes are provided, the service verifies ownership and existence through Hotel Service before persisting.
+      operationId: createPromotion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromotionRequest'
+            examples:
+              hotelCoupon:
+                summary: Hotel-scoped coupon promotion
+                value:
+                  tenantId: 7f9f6b7a-0d9b-4f03-9c5a-1ce001e19f31
+                  name: Summer Hotel Deal
+                  description: Discount for selected hotel room types in summer.
+                  type: COUPON
+                  discountType: PERCENTAGE
+                  discountValue: 15.00
+                  maxDiscountAmount: 300000.00
+                  minBookingAmount: 1000000.00
+                  minNights: 2
+                  startAt: '2026-07-01T00:00:00Z'
+                  endAt: '2026-08-31T23:59:59Z'
+                  status: DRAFT
+                  totalUsageLimit: 1000
+                  perUserUsageLimit: 1
+                  stackable: false
+                  scopes:
+                    - scopeType: HOTEL
+                      scopeRefId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                  coupons:
+                    - code: SUMMER2026
+                      usageLimit: 1000
+                      status: ACTIVE
+                  conditions:
+                    - conditionType: EARLY_BIRD_DAYS
+                      operator: GTE
+                      conditionValue: '7'
+      responses:
+        '201':
+          description: Promotion created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionResponse'
+              examples:
+                created:
+                  value:
+                    id: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                    tenantId: 7f9f6b7a-0d9b-4f03-9c5a-1ce001e19f31
+                    name: Summer Hotel Deal
+                    description: Discount for selected hotel room types in summer.
+                    type: COUPON
+                    discountType: PERCENTAGE
+                    discountValue: 15.00
+                    maxDiscountAmount: 300000.00
+                    minBookingAmount: 1000000.00
+                    minNights: 2
+                    startAt: '2026-07-01T00:00:00Z'
+                    endAt: '2026-08-31T23:59:59Z'
+                    status: DRAFT
+                    totalUsageLimit: 1000
+                    perUserUsageLimit: 1
+                    currentUsageCount: 0
+                    stackable: false
+                    isDeleted: false
+                    scopes:
+                      - id: 43df9f93-0104-4222-bb1f-1218f212cccb
+                        scopeType: HOTEL
+                        scopeRefId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                    coupons:
+                      - id: 5c787f80-31a6-41b4-b1ef-311995cf43bb
+                        code: SUMMER2026
+                        status: ACTIVE
+                        usageLimit: 1000
+                        currentUsageCount: 0
+                    conditions:
+                      - id: f513ec11-7cb1-4649-89ff-781529520d85
+                        conditionType: EARLY_BIRD_DAYS
+                        operator: GTE
+                        conditionValue: '7'
+                    createdBy: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                    updatedBy: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                    createdAt: '2026-07-01T10:15:30Z'
+                    updatedAt: '2026-07-01T10:15:30Z'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags: [Promotions]
+      summary: List promotions
+      description: Lists promotions for admin or hotel-owner management screens.
+      operationId: listPromotions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TenantIdQuery'
+        - name: hotelId
+          in: query
+          description: Filter promotions scoped to a hotel.
+          schema:
+            type: string
+            format: uuid
+        - name: roomTypeId
+          in: query
+          description: Filter promotions scoped to a room type.
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/PromotionType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PromotionStatus'
+        - name: couponCode
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Promotion page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/promotions/{promotionId}:
+    get:
+      tags: [Promotions]
+      summary: Get promotion detail
+      description: Returns a promotion with scopes, coupons, conditions, and audit-safe metadata.
+      operationId: getPromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromotionIdPath'
+      responses:
+        '200':
+          description: Promotion detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags: [Promotions]
+      summary: Update promotion
+      description: |
+        Updates promotion fields, scopes, coupons, and conditions.
+        If a promotion already has confirmed usages, money-impacting fields such as discountType and discountValue should be rejected with 409.
+      operationId: updatePromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromotionIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePromotionRequest'
+            examples:
+              updateDatesAndLimits:
+                value:
+                  name: Summer Hotel Deal Extended
+                  description: Extended campaign for selected hotel room types.
+                  maxDiscountAmount: 350000.00
+                  minBookingAmount: 1200000.00
+                  minNights: 2
+                  startAt: '2026-07-01T00:00:00Z'
+                  endAt: '2026-09-15T23:59:59Z'
+                  status: ACTIVE
+                  totalUsageLimit: 1200
+                  perUserUsageLimit: 1
+                  stackable: false
+                  scopes:
+                    - scopeType: HOTEL
+                      scopeRefId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                  coupons:
+                    - code: SUMMER2026
+                      usageLimit: 1200
+                      status: ACTIVE
+                  conditions:
+                    - conditionType: EARLY_BIRD_DAYS
+                      operator: GTE
+                      conditionValue: '7'
+      responses:
+        '200':
+          description: Promotion updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags: [Promotions]
+      summary: Soft-delete promotion
+      description: Marks a promotion as deleted and stores deletedAt. Usage and audit records are retained for reconciliation.
+      operationId: deletePromotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromotionIdPath'
+      responses:
+        '204':
+          description: Promotion soft-deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/promotions/{promotionId}/status:
+    patch:
+      tags: [Promotions]
+      summary: Change promotion status
+      description: Changes a promotion status, for example from DRAFT to ACTIVE or ACTIVE to PAUSED.
+      operationId: changePromotionStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PromotionIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePromotionStatusRequest'
+            examples:
+              pause:
+                value:
+                  status: PAUSED
+                  reason: Hotel owner pauses the campaign.
+      responses:
+        '200':
+          description: Promotion status changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/promotions/validate:
+    post:
+      tags: [Promotion Validation]
+      summary: Validate promotion and calculate discount
+      description: |
+        Called by booking-service or place-booking-service before completing a booking.
+        The endpoint checks coupon, promotion status, date window, scope, booking amount, nights,
+        usage limits, and user-related conditions. It returns the calculated discount but does not confirm usage.
+      operationId: validatePromotion
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromotionValidationRequest'
+            examples:
+              validateCoupon:
+                value:
+                  userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                  hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                  roomTypeId: 7c882d07-38a5-4ac8-873a-149bc00231b9
+                  couponCode: SUMMER2026
+                  checkInDate: '2026-07-20'
+                  checkOutDate: '2026-07-23'
+                  bookingAmount: 2400000.00
+                  numberOfGuests: 2
+      responses:
+        '200':
+          description: Validation result and discount calculation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionValidationResponse'
+              examples:
+                applicable:
+                  value:
+                    applicable: true
+                    promotionId: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                    couponId: 5c787f80-31a6-41b4-b1ef-311995cf43bb
+                    couponCode: SUMMER2026
+                    discountAmount: 300000.00
+                    finalAmount: 2100000.00
+                    reasonCode: APPLICABLE
+                    message: Promotion can be applied.
+                notApplicable:
+                  value:
+                    applicable: false
+                    promotionId: null
+                    couponId: null
+                    couponCode: SUMMER2026
+                    discountAmount: 0.00
+                    finalAmount: 2400000.00
+                    reasonCode: MIN_BOOKING_AMOUNT_NOT_MET
+                    message: Booking amount does not meet the promotion minimum.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/promotions/usages/confirm:
+    post:
+      tags: [Promotion Usage]
+      summary: Confirm promotion usage
+      description: |
+        Called after booking and payment success. Creates or confirms a promotion usage record,
+        increments promotion and coupon usage counters, and prevents duplicate confirmation by bookingId/promotionId
+        or Idempotency-Key.
+      operationId: confirmPromotionUsage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPromotionUsageRequest'
+            examples:
+              confirm:
+                value:
+                  promotionId: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                  couponId: 5c787f80-31a6-41b4-b1ef-311995cf43bb
+                  bookingId: 91d5d843-45f3-462e-b3d5-af0e795e5011
+                  userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                  hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                  discountAmount: 300000.00
+                  bookingAmount: 2400000.00
+      responses:
+        '200':
+          description: Usage confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionUsageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/promotions/usages/cancel:
+    post:
+      tags: [Promotion Usage]
+      summary: Cancel promotion usage
+      description: |
+        Cancels a reserved or confirmed promotion usage when booking/payment fails or a booking is cancelled.
+        The service marks usage as CANCELLED and adjusts counters according to the implementation policy.
+      operationId: cancelPromotionUsage
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPromotionUsageRequest'
+            examples:
+              cancel:
+                value:
+                  bookingId: 91d5d843-45f3-462e-b3d5-af0e795e5011
+                  promotionId: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                  reason: Payment failed.
+      responses:
+        '200':
+          description: Usage cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionUsageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token issued by the platform authentication service.
+
+  parameters:
+    PromotionIdPath:
+      name: promotionId
+      in: path
+      required: true
+      description: Promotion identifier.
+      schema:
+        type: string
+        format: uuid
+    TenantIdQuery:
+      name: tenantId
+      in: query
+      description: Tenant or hotel-chain identifier.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional idempotency key used to deduplicate usage confirmation or cancellation requests.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 100
+
+  responses:
+    BadRequest:
+      description: Invalid request syntax, malformed JSON, or invalid parameter format.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 400
+            code: BAD_REQUEST
+            message: Invalid request.
+            path: /api/promotions
+            traceId: 9f4a3310b32c4fd0
+    Unauthorized:
+      description: Missing, expired, or invalid JWT.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 401
+            code: UNAUTHORIZED
+            message: Authentication is required.
+            path: /api/promotions
+            traceId: 9f4a3310b32c4fd0
+    Forbidden:
+      description: Authenticated principal does not have the required role or tenant/hotel permission.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 403
+            code: FORBIDDEN
+            message: You are not allowed to manage this promotion.
+            path: /api/promotions
+            traceId: 9f4a3310b32c4fd0
+    NotFound:
+      description: Requested promotion, coupon, usage, hotel scope, or user context was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 404
+            code: PROMOTION_NOT_FOUND
+            message: Promotion was not found.
+            path: /api/promotions/4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+            traceId: 9f4a3310b32c4fd0
+    Conflict:
+      description: Business conflict, duplicate coupon code, immutable money-impacting update, duplicate usage, or usage limit exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 409
+            code: COUPON_CODE_ALREADY_EXISTS
+            message: Coupon code already exists.
+            path: /api/promotions
+            traceId: 9f4a3310b32c4fd0
+    UnprocessableEntity:
+      description: Request is syntactically valid but violates validation or business rules.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 422
+            code: PROMOTION_NOT_APPLICABLE
+            message: Promotion cannot be applied to this booking.
+            path: /api/promotions/validate
+            traceId: 9f4a3310b32c4fd0
+            details:
+              - field: bookingAmount
+                message: Must be greater than or equal to minBookingAmount.
+    InternalServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 500
+            code: INTERNAL_SERVER_ERROR
+            message: Unexpected server error.
+            path: /api/promotions
+            traceId: 9f4a3310b32c4fd0
+
+  schemas:
+    PromotionType:
+      type: string
+      enum: [SYSTEM, HOTEL, ROOM_TYPE, COUPON]
+
+    DiscountType:
+      type: string
+      enum: [PERCENTAGE, FIXED_AMOUNT]
+
+    PromotionStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, PAUSED, EXPIRED]
+
+    CouponStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, EXPIRED]
+
+    ScopeType:
+      type: string
+      enum: [SYSTEM, HOTEL, ROOM_TYPE, USER_SEGMENT]
+
+    ConditionType:
+      type: string
+      enum: [FIRST_BOOKING, EARLY_BIRD_DAYS, LAST_MINUTE_DAYS, MIN_GUESTS]
+
+    ConditionOperator:
+      type: string
+      enum: [EQ, GTE, LTE]
+
+    PromotionUsageStatus:
+      type: string
+      enum: [RESERVED, CONFIRMED, CANCELLED]
+
+    ValidationReasonCode:
+      type: string
+      enum:
+        - APPLICABLE
+        - PROMOTION_NOT_FOUND
+        - COUPON_NOT_FOUND
+        - PROMOTION_INACTIVE
+        - PROMOTION_EXPIRED
+        - PROMOTION_NOT_STARTED
+        - SCOPE_NOT_MATCHED
+        - MIN_BOOKING_AMOUNT_NOT_MET
+        - MIN_NIGHTS_NOT_MET
+        - USAGE_LIMIT_EXCEEDED
+        - PER_USER_USAGE_LIMIT_EXCEEDED
+        - CONDITION_NOT_MET
+        - PROMOTION_NOT_APPLICABLE
+
+    Money:
+      type: number
+      format: double
+      minimum: 0
+      multipleOf: 0.01
+
+    PromotionScopeInput:
+      type: object
+      additionalProperties: false
+      required: [scopeType]
+      properties:
+        scopeType:
+          $ref: '#/components/schemas/ScopeType'
+        scopeRefId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Required for HOTEL, ROOM_TYPE, and USER_SEGMENT. Must be null for SYSTEM.
+
+    PromotionScopeResponse:
+      allOf:
+        - $ref: '#/components/schemas/PromotionScopeInput'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+
+    CouponInput:
+      type: object
+      additionalProperties: false
+      required: [code, status]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 50
+          pattern: '^[A-Z0-9_-]+$'
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        usageLimit:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+
+    CouponResponse:
+      allOf:
+        - $ref: '#/components/schemas/CouponInput'
+        - type: object
+          required: [id, currentUsageCount]
+          properties:
+            id:
+              type: string
+              format: uuid
+            currentUsageCount:
+              type: integer
+              minimum: 0
+
+    PromotionConditionInput:
+      type: object
+      additionalProperties: false
+      required: [conditionType, operator, conditionValue]
+      properties:
+        conditionType:
+          $ref: '#/components/schemas/ConditionType'
+        operator:
+          $ref: '#/components/schemas/ConditionOperator'
+        conditionValue:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    PromotionConditionResponse:
+      allOf:
+        - $ref: '#/components/schemas/PromotionConditionInput'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+
+    CreatePromotionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - type
+        - discountType
+        - discountValue
+        - startAt
+        - endAt
+        - status
+        - scopes
+      properties:
+        tenantId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+        description:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        type:
+          $ref: '#/components/schemas/PromotionType'
+        discountType:
+          $ref: '#/components/schemas/DiscountType'
+        discountValue:
+          $ref: '#/components/schemas/Money'
+        maxDiscountAmount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        minBookingAmount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        minNights:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/PromotionStatus'
+        totalUsageLimit:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        perUserUsageLimit:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+        stackable:
+          type: boolean
+          default: false
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PromotionScopeInput'
+        coupons:
+          type: array
+          default: []
+          items:
+            $ref: '#/components/schemas/CouponInput'
+        conditions:
+          type: array
+          default: []
+          items:
+            $ref: '#/components/schemas/PromotionConditionInput'
+      allOf:
+        - if:
+            properties:
+              discountType:
+                const: PERCENTAGE
+          then:
+            properties:
+              discountValue:
+                maximum: 100
+        - if:
+            properties:
+              type:
+                const: COUPON
+          then:
+            properties:
+              coupons:
+                minItems: 1
+
+    UpdatePromotionRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreatePromotionRequest'
+
+    PromotionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - type
+        - discountType
+        - discountValue
+        - startAt
+        - endAt
+        - status
+        - currentUsageCount
+        - stackable
+        - isDeleted
+        - scopes
+        - coupons
+        - conditions
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        name:
+          type: string
+        description:
+          type:
+            - string
+            - 'null'
+        type:
+          $ref: '#/components/schemas/PromotionType'
+        discountType:
+          $ref: '#/components/schemas/DiscountType'
+        discountValue:
+          $ref: '#/components/schemas/Money'
+        maxDiscountAmount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        minBookingAmount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        minNights:
+          type:
+            - integer
+            - 'null'
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/PromotionStatus'
+        totalUsageLimit:
+          type:
+            - integer
+            - 'null'
+        perUserUsageLimit:
+          type:
+            - integer
+            - 'null'
+        currentUsageCount:
+          type: integer
+          minimum: 0
+        stackable:
+          type: boolean
+        isDeleted:
+          type: boolean
+          description: Soft-delete flag. Maps to the promotion_db column is_deleted.
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromotionScopeResponse'
+        coupons:
+          type: array
+          items:
+            $ref: '#/components/schemas/CouponResponse'
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromotionConditionResponse'
+        createdBy:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        updatedBy:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+
+    PromotionPageResponse:
+      type: object
+      additionalProperties: false
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromotionResponse'
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+        totalElements:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
+    ChangePromotionStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/PromotionStatus'
+        reason:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+
+    PromotionValidationRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, hotelId, checkInDate, checkOutDate, bookingAmount]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        hotelId:
+          type: string
+          format: uuid
+        roomTypeId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        couponCode:
+          type:
+            - string
+            - 'null'
+          minLength: 1
+          maxLength: 50
+        checkInDate:
+          type: string
+          format: date
+        checkOutDate:
+          type: string
+          format: date
+        bookingAmount:
+          $ref: '#/components/schemas/Money'
+        numberOfGuests:
+          type:
+            - integer
+            - 'null'
+          minimum: 1
+
+    PromotionValidationResponse:
+      type: object
+      additionalProperties: false
+      required: [applicable, discountAmount, finalAmount, reasonCode, message]
+      properties:
+        applicable:
+          type: boolean
+        promotionId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        couponId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        couponCode:
+          type:
+            - string
+            - 'null'
+        discountAmount:
+          $ref: '#/components/schemas/Money'
+        finalAmount:
+          $ref: '#/components/schemas/Money'
+        reasonCode:
+          $ref: '#/components/schemas/ValidationReasonCode'
+        message:
+          type: string
+
+    ConfirmPromotionUsageRequest:
+      type: object
+      additionalProperties: false
+      required: [promotionId, bookingId, userId, hotelId, discountAmount, bookingAmount]
+      properties:
+        promotionId:
+          type: string
+          format: uuid
+        couponId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        bookingId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        hotelId:
+          type: string
+          format: uuid
+        discountAmount:
+          $ref: '#/components/schemas/Money'
+        bookingAmount:
+          $ref: '#/components/schemas/Money'
+
+    CancelPromotionUsageRequest:
+      type: object
+      additionalProperties: false
+      required: [bookingId, promotionId]
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        promotionId:
+          type: string
+          format: uuid
+        reason:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+
+    PromotionUsageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - promotionId
+        - bookingId
+        - userId
+        - hotelId
+        - discountAmount
+        - bookingAmount
+        - usedAt
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        promotionId:
+          type: string
+          format: uuid
+        couponId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        bookingId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        hotelId:
+          type: string
+          format: uuid
+        discountAmount:
+          $ref: '#/components/schemas/Money'
+        bookingAmount:
+          $ref: '#/components/schemas/Money'
+        usedAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/PromotionUsageStatus'
+        idempotencyKey:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [timestamp, status, code, message, path, traceId]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        code:
+          type: string
+          examples: [PROMOTION_NOT_APPLICABLE]
+        message:
+          type: string
+        path:
+          type: string
+        traceId:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string

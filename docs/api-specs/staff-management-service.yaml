@@ -1,0 +1,490 @@
+openapi: 3.0.3
+info:
+  title: Staff Management Service API
+  description: |
+    Staff Management Service — quản lý việc gán nhân viên khách sạn và phân quyền thao tác trong phạm vi khách sạn
+    trên nền tảng HotelHub SaaS.
+
+    Service này sở hữu dữ liệu `staff`, `permissions`, `staff_permissions` trong `staff_db`.
+    Các ID `user_id` và `hotel_id` là tham chiếu logic tới User Service và Hotel Service, không tạo FK vật lý xuyên service.
+
+    Được gọi bởi:
+      - API Gateway (forward request từ Hotel Owner/Admin, đính kèm xác thực JWT).
+      - Các service nghiệp vụ khác khi cần kiểm tra nhân viên có thuộc khách sạn và có quyền thao tác hay không.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5008
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Staff
+    description: Quản lý nhân viên được gán vào khách sạn
+  - name: Permissions
+    description: Quản lý quyền của nhân viên khách sạn
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  # ============================================================
+  # STAFF
+  # ============================================================
+
+  /api/staff:
+    post:
+      tags: [Staff]
+      summary: Owner thêm nhân viên vào khách sạn
+      description: |
+        Tạo bản ghi staff cho một user đã tồn tại hoặc vừa được User Service tạo/gán role HOTEL_STAFF.
+        API Gateway hoặc lớp orchestration phía trên có thể gọi User Service trước để kiểm tra email/userId,
+        sau đó truyền `userId` sang Staff Management Service.
+      operationId: createStaff
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+      responses:
+        '201':
+          description: Thêm nhân viên thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400':
+          description: Dữ liệu không hợp lệ hoặc user đã là staff của khách sạn này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: STAFF_ALREADY_EXISTS
+                message: User đã được gán làm nhân viên của khách sạn này
+        '403':
+          description: Người gọi không có quyền Owner/Admin đối với khách sạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/staff/{id}:
+    get:
+      tags: [Staff]
+      summary: Xem thông tin gán nhân viên
+      operationId: getStaffById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 86b1c236-83c3-4df9-a33a-f81ca5406f7a
+      responses:
+        '200':
+          description: Thông tin nhân viên
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '404':
+          description: Staff không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: STAFF_NOT_FOUND
+                message: Không tìm thấy nhân viên
+
+    put:
+      tags: [Staff]
+      summary: Owner sửa thông tin/vị trí nhân viên
+      description: Cập nhật vị trí hoặc trạng thái gán nhân viên. Không dùng endpoint này để cập nhật permissions.
+      operationId: updateStaff
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffRequest'
+      responses:
+        '200':
+          description: Cập nhật nhân viên thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400':
+          description: Dữ liệu không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Người gọi không có quyền cập nhật nhân viên này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Staff không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [Staff]
+      summary: Owner xóa nhân viên khỏi khách sạn
+      description: Xóa mềm bản ghi staff bằng cách cập nhật `status = REMOVED` và `is_deleted = true`.
+      operationId: deleteStaff
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Xóa nhân viên thành công
+        '403':
+          description: Người gọi không có quyền xóa nhân viên này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Staff không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/staff/{id}/permissions:
+    put:
+      tags: [Permissions]
+      summary: Owner gán lại quyền hạn cho nhân viên
+      description: |
+        Thay thế toàn bộ danh sách permission hiện tại của staff bằng danh sách `permissions` trong request.
+        Các permission code phải tồn tại trong bảng `permissions` và chưa bị xóa mềm.
+      operationId: updateStaffPermissions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStaffPermissionsRequest'
+      responses:
+        '200':
+          description: Gán quyền thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400':
+          description: Permission code không hợp lệ hoặc request body không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_PERMISSION_CODE
+                message: Permission code không tồn tại hoặc đã bị xóa
+        '403':
+          description: Người gọi không có quyền gán quyền cho nhân viên này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Staff không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/staff/by-hotel/{hotelId}:
+    get:
+      tags: [Staff]
+      summary: Danh sách nhân viên theo khách sạn
+      operationId: getStaffByHotel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hotelId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 0e3e93c7-0eb3-4c8a-a048-392e44d272f4
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ACTIVE, REMOVED]
+          description: Lọc theo trạng thái nhân viên
+        - name: position
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [RECEPTIONIST, MANAGER]
+          description: Lọc theo vị trí nhân viên
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Danh sách nhân viên của khách sạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffPageResponse'
+        '403':
+          description: Người gọi không có quyền xem danh sách nhân viên của khách sạn này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/staff/permissions:
+    get:
+      tags: [Permissions]
+      summary: Lấy danh sách permission có thể gán cho nhân viên
+      operationId: getAvailablePermissions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Danh sách permission
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: STAFF_NOT_FOUND
+        message:
+          type: string
+          example: Không tìm thấy nhân viên
+
+    # ---------- Staff ----------
+
+    StaffPosition:
+      type: string
+      enum: [RECEPTIONIST, MANAGER]
+      description: Vị trí nhân viên trong khách sạn
+
+    StaffStatus:
+      type: string
+      enum: [ACTIVE, REMOVED]
+      description: Trạng thái gán nhân viên
+
+    PermissionCode:
+      type: string
+      enum: [MANAGE_ROOM, MANAGE_BOOKING, CHECK_IN_OUT]
+      description: Mã quyền thao tác của nhân viên
+
+    Permission:
+      type: object
+      description: Tương ứng bảng `permissions`.
+      properties:
+        code:
+          $ref: '#/components/schemas/PermissionCode'
+        description:
+          type: string
+          nullable: true
+        isDeleted:
+          type: boolean
+          example: false
+      example:
+        code: MANAGE_BOOKING
+        description: Cho phép quản lý booking của khách sạn
+        isDeleted: false
+
+    Staff:
+      type: object
+      description: Tương ứng bảng `staff`, kèm danh sách quyền lấy từ `staff_permissions`/`permissions`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          description: Tham chiếu logic tới `users.id` ở User Service
+        hotelId:
+          type: string
+          format: uuid
+          description: Tham chiếu logic tới `hotels.id` ở Hotel Service
+        position:
+          allOf:
+            - $ref: '#/components/schemas/StaffPosition'
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StaffStatus'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+        assignedAt:
+          type: string
+          format: date-time
+        isDeleted:
+          type: boolean
+      example:
+        id: 86b1c236-83c3-4df9-a33a-f81ca5406f7a
+        userId: 9c858901-8a57-4791-81fe-4c455b099bc9
+        hotelId: 0e3e93c7-0eb3-4c8a-a048-392e44d272f4
+        position: RECEPTIONIST
+        status: ACTIVE
+        permissions:
+          - code: MANAGE_BOOKING
+            description: Cho phép quản lý booking của khách sạn
+            isDeleted: false
+          - code: CHECK_IN_OUT
+            description: Cho phép check-in/check-out khách
+            isDeleted: false
+        assignedAt: "2026-06-15T08:30:00Z"
+        isDeleted: false
+
+    CreateStaffRequest:
+      type: object
+      required: [userId, hotelId, position]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: ID user đã có role HOTEL_STAFF hoặc sẽ được User Service gán role trước khi gọi API này
+        hotelId:
+          type: string
+          format: uuid
+        position:
+          $ref: '#/components/schemas/StaffPosition'
+      example:
+        userId: 9c858901-8a57-4791-81fe-4c455b099bc9
+        hotelId: 0e3e93c7-0eb3-4c8a-a048-392e44d272f4
+        position: RECEPTIONIST
+
+    UpdateStaffRequest:
+      type: object
+      properties:
+        position:
+          allOf:
+            - $ref: '#/components/schemas/StaffPosition'
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StaffStatus'
+      example:
+        position: MANAGER
+        status: ACTIVE
+
+    UpdateStaffPermissionsRequest:
+      type: object
+      required: [permissions]
+      properties:
+        permissions:
+          type: array
+          minItems: 0
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+      example:
+        permissions: [MANAGE_ROOM, MANAGE_BOOKING, CHECK_IN_OUT]
+
+    StaffPageResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/Staff'
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 3
+        last:
+          type: boolean
+          example: false

@@ -1,153 +1,889 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Notification Service API
-  description: |
-    Utility Service — gửi email thông báo theo template.
-    
-    **Không expose qua API Gateway** — chỉ nhận lệnh qua Kafka (topic: notification-commands).
-    Trả về 202 Accepted ngay lập tức, việc gửi email thực sự diễn ra bất đồng bộ (fire & forget).
-    
-    Nếu gửi email thất bại, service tự retry với exponential backoff.
-    Việc gửi email thất bại KHÔNG gây rollback Saga — đây là side effect, không phải bước quan trọng.
   version: 1.0.0
+  description: |
+    Notification Service manages user notification records, device tokens, read
+    status, and promotion broadcast requests for the Hotel Booking SaaS platform.
+
+    The service sends booking and promotion notifications asynchronously through
+    SMTP and Firebase Cloud Messaging based on Kafka events and broadcast jobs.
+    This OpenAPI specification only exposes REST endpoints required by the ERD
+    and sequence diagrams.
+  x-assumptions:
+    - All client-facing endpoints are routed through API Gateway under /api/notifications.
+    - JWT claims provide userId, role (CUSTOMER|HOTEL_STAFF|HOTEL_OWNER|ADMIN), and optional tenantId/hotelId for owner/staff.
+    - Customers can only read and mark their own notifications as read.
+    - Device tokens are registered for the authenticated user; userId is extracted from JWT, not from request body.
+    - Admin can request platform-wide promotional broadcasts; Hotel Owner can broadcast within owned hotel/tenant scope.
+    - Broadcast creation returns 202 Accepted because actual delivery is performed by Kafka consumers (async processing).
+    - The service stores notification records and delivery logs internally, but does not expose delivery-log management REST endpoints.
+    - Pagination uses zero-based page index with size parameter (page=0, size=20).
+    - FCM tokens are globally unique; a token registered to one user cannot be registered to another (409 Conflict).
+    - Device token update (same user, same token) is idempotent: returns 200 OK instead of 201 Created.
+    - Notification payload is flexible JSONB; can contain bookingId, hotelId, promotionId, couponCode, or custom fields.
+    - Segment resolution (e.g., "RECENT_BOOKERS", "VIP_CUSTOMERS") is delegated to User/Segment Service; Notification Service only acts as dispatcher.
+    - Broadcast segment enum is extensible; new segments added without schema change.
 
 servers:
+  - url: http://localhost:8080
+    description: API Gateway local development
   - url: http://localhost:5006
-    description: Local development (internal only)
+    description: Notification Service local development
 
 tags:
-  - name: Health
-  - name: Notifications
+  - name: Device Tokens
+    description: Register or update FCM device tokens for the authenticated user.
+  - name: My Notifications
+    description: Read and update notification inbox state for the authenticated user.
+  - name: Broadcasts
+    description: Create asynchronous promotion notification broadcasts.
+
+security:
+  - bearerAuth: []
 
 paths:
-  /health:
-    get:
-      tags: [Health]
-      summary: Health check
-      operationId: healthCheck
-      responses:
-        '200':
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-
-  /notifications/email:
+  /api/notifications/device-token:
     post:
-      tags: [Notifications]
-      summary: Gửi email thông báo
+      tags: [Device Tokens]
+      summary: Register or update device token
       description: |
-        Nhận lệnh gửi email và trả về 202 Accepted ngay lập tức.
-        Email được gửi bất đồng bộ ở background.
+        Registers or updates a Firebase Cloud Messaging token for the authenticated user's device.
         
-        Các template hỗ trợ:
-        - **BOOKING_CONFIRMED**: Email xác nhận đặt phòng thành công
-        - **BOOKING_CANCELLED**: Email thông báo đặt phòng bị huỷ (thanh toán thất bại)
-      operationId: sendEmail
+        **Behavior:**
+        - If token does not exist: creates new device_tokens record, returns 201 Created.
+        - If token exists for same user: updates platform, is_active=true, updated_at=now(), returns 200 OK (idempotent).
+        - If token exists for different user: returns 409 Conflict (token already registered to another user).
+        
+        **Use Cases:**
+        1. Fresh device registration: User installs app, generates FCM token, sends request → 201 Created.
+        2. Platform update: User updates app to support new platform (WEB→ANDROID), re-registers token → 200 OK.
+        3. Token refresh: Same device, same token, platform same → 200 OK.
+        4. Token conflict: User A has token, User B somehow sends same token → 409 Conflict (security measure).
+        
+        **Validation:**
+        - fcmToken: Must be 20-500 characters, valid FCM format.
+        - platform: Must be one of WEB, ANDROID, IOS.
+        - Both fields required; missing field returns 400 Bad Request.
+        - Invalid JSON returns 400 Bad Request.
+        
+        **Authorization:**
+        - Any authenticated user (CUSTOMER, HOTEL_STAFF, HOTEL_OWNER, ADMIN).
+        - userId extracted from JWT, not from request body.
+        - 401 Unauthorized: missing or invalid JWT.
+      operationId: upsertDeviceToken
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EmailRequest'
+              $ref: '#/components/schemas/UpsertDeviceTokenRequest'
             examples:
-              bookingConfirmed:
-                summary: Xác nhận đặt phòng thành công
+              webToken:
+                summary: Register a web FCM token
                 value:
-                  to: nguyenvana@email.com
-                  template: BOOKING_CONFIRMED
-                  data:
-                    guestName: Nguyen Van A
-                    bookingId: bk-550e8400-uuid
-                    hotelName: Marriott Hanoi
-                    roomType: Deluxe Room
-                    checkin: "2024-06-01"
-                    checkout: "2024-06-05"
-                    numberOfNights: 4
-                    totalPrice: 4800000
-              bookingCancelled:
-                summary: Thông báo đặt phòng bị huỷ
+                  fcmToken: fcm_web_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20ifQ.signature
+                  platform: WEB
+              iosToken:
+                summary: Register an iOS FCM token
                 value:
-                  to: nguyenvana@email.com
-                  template: BOOKING_CANCELLED
-                  data:
-                    guestName: Nguyen Van A
-                    bookingId: bk-550e8400-uuid
-                    hotelName: Marriott Hanoi
-                    checkin: "2024-06-01"
-                    checkout: "2024-06-05"
-                    reason: Thanh toán không thành công
+                  fcmToken: fcm_ios_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20ifQ.signature
+                  platform: IOS
+      responses:
+        '201':
+          description: Device token created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenResponse'
+              examples:
+                created:
+                  summary: New token created
+                  value:
+                    id: 9d5d3ac9-1a39-4e5e-b7ea-1f5e1d6a78f1
+                    userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                    fcmToken: fcm_web_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20ifQ.signature
+                    platform: WEB
+                    isActive: true
+                    createdAt: '2026-07-01T09:00:00Z'
+                    updatedAt: '2026-07-01T09:00:00Z'
+        '200':
+          description: Existing device token updated (idempotent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenResponse'
+              examples:
+                updated:
+                  summary: Existing token updated for same user
+                  value:
+                    id: 9d5d3ac9-1a39-4e5e-b7ea-1f5e1d6a78f1
+                    userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                    fcmToken: fcm_web_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20ifQ.signature
+                    platform: WEB
+                    isActive: true
+                    createdAt: '2026-07-01T09:00:00Z'
+                    updatedAt: '2026-07-01T10:00:00Z'
+        '400':
+          description: |
+            Bad request: malformed JSON, missing required fields, or invalid parameter format.
+            Common codes: BAD_REQUEST, INVALID_JSON, MISSING_FIELD, INVALID_FCM_TOKEN_FORMAT.
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: |
+            Unauthorized: missing, expired, or invalid JWT.
+            Common codes: UNAUTHORIZED, INVALID_TOKEN, TOKEN_EXPIRED.
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Forbidden (rare for this endpoint; user lacks general access).
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: |
+            Conflict: FCM token is already registered to a different user.
+            Common codes: DEVICE_TOKEN_CONFLICT, TOKEN_ALREADY_REGISTERED.
+            Message: "Device token belongs to another active user."
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: |
+            Unprocessable: request is valid JSON but fails validation rules.
+            Common codes: VALIDATION_ERROR, INVALID_PLATFORM.
+            Details: array of validation errors.
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          description: Unexpected server error; device token not registered.
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/notifications/my:
+    get:
+      tags: [My Notifications]
+      summary: List my notifications
+      description: |
+        Returns a paginated inbox of notification records for the authenticated user.
+        Users can view all their notifications (booking confirmations, cancellations, check-in reminders, promotions)
+        and filter by unread status or event type.
+        
+        **Pagination:**
+        - Uses zero-based page index and size.
+        - Example: page=0&size=20 returns first 20 items; page=1&size=20 returns next 20.
+        - If page exceeds totalPages, returns empty content array.
+        
+        **Filtering:**
+        - unreadOnly=true: returns only notifications where readAt is null (not yet viewed).
+        - unreadOnly=false (default): returns all notifications (read and unread).
+        - eventType: filter by specific event type (BOOKING_CONFIRMED, PROMOTION, etc.).
+        
+        **Sorting:**
+        - Sorted by created_at DESC (newest first).
+        - Within same created_at, order is by id (stable).
+        
+        **Response Fields:**
+        - content: array of Notification objects.
+        - page, size: pagination parameters echoed back.
+        - totalElements: total count of notifications matching filter.
+        - totalPages: ceiling(totalElements / size).
+        - unreadCount: total count of unread notifications for this user (across all filters).
+        
+        **Authorization:**
+        - Any authenticated user.
+        - Results scoped to authenticated user's notifications only (recipient_user_id must match JWT userId).
+        - 401 Unauthorized: missing or invalid JWT.
+        
+        **Performance Considerations:**
+        - Recommended indexes: idx_notifications_recipient_created(recipient_user_id, created_at DESC).
+        - Service may cache results for short TTL (e.g., 5 minutes) to reduce database load.
+      operationId: listMyNotifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unreadOnly
+          in: query
+          description: |
+            If true, return only notifications where readAt is null (unread).
+            If false or omitted, return all notifications (default).
+          schema:
+            type: boolean
+            default: false
+        - name: eventType
+          in: query
+          description: |
+            Filter by notification event type.
+            If provided, only notifications matching this type are returned.
+            If omitted, all event types are included.
+          schema:
+            $ref: '#/components/schemas/NotificationEventType'
+        - name: page
+          in: query
+          description: Zero-based page index for pagination.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Number of items per page (max 100 to prevent abuse).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Notification page for the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPageResponse'
+              examples:
+                inbox:
+                  summary: Mixed inbox with unread notifications
+                  value:
+                    content:
+                      - id: 5b03f9d6-d969-465a-ae5d-d5dc1d7d9f12
+                        recipientUserId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                        eventType: BOOKING_CONFIRMED
+                        title: Booking confirmed
+                        body: Your booking at Sunrise Hotel has been confirmed.
+                        payload:
+                          bookingId: 91d5d843-45f3-462e-b3d5-af0e795e5011
+                          hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                          checkInDate: '2026-07-15'
+                        readAt: null
+                        createdAt: '2026-07-01T10:15:30Z'
+                      - id: 4a7d2c1e-8e92-4b33-9f1a-2b3c4d5e6f7g
+                        recipientUserId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                        eventType: PROMOTION
+                        title: Summer promotion
+                        body: Save 15% on your next booking!
+                        payload:
+                          promotionId: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                          couponCode: SUMMER2026
+                        readAt: '2026-07-01T09:30:00Z'
+                        createdAt: '2026-06-30T14:20:00Z'
+                    page: 0
+                    size: 20
+                    totalElements: 2
+                    totalPages: 1
+                    unreadCount: 1
+        '400':
+          description: |
+            Bad request: invalid parameter format or values.
+            Common codes: BAD_REQUEST, INVALID_PAGE, INVALID_SIZE.
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid JWT.
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Authenticated user lacks permission (rare for listing own notifications).
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: Unexpected server error.
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/notifications/{notificationId}/read:
+    patch:
+      tags: [My Notifications]
+      summary: Mark notification as read
+      description: |
+        Sets readAt timestamp for one notification owned by the authenticated user.
+        
+        **Behavior:**
+        - If notification exists and belongs to user: sets readAt=now(), returns 200 OK.
+        - If notification already marked as read (readAt not null): repeats operation (idempotent), returns 200 OK with same readAt.
+        - If notification does not exist: returns 404 Not Found.
+        - If notification belongs to different user: returns 403 Forbidden (access control).
+        
+        **Use Cases:**
+        1. Mark unread notification as read: readAt null → readAt=<timestamp>.
+        2. Mark already-read notification again (idempotent): readAt=<t1> → readAt unchanged (returns same value).
+        3. Batch mark-as-read: Client calls this endpoint multiple times in sequence.
+        
+        **Idempotency:**
+        - Safe to call multiple times with same notificationId.
+        - Returns 200 OK with existing or new readAt timestamp.
+        
+        **Authorization:**
+        - Any authenticated user.
+        - Must own the notification (recipient_user_id matches JWT userId).
+        - 401 Unauthorized: missing or invalid JWT.
+        - 403 Forbidden: user does not own the notification.
+        
+        **Performance Considerations:**
+        - Updates delivery_logs indirectly via background job (optional).
+        - Main update: 1 row UPDATE on notifications table.
+        - Should invalidate inbox cache for user if caching is in place.
+      operationId: markNotificationRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationIdPath'
+      responses:
+        '200':
+          description: Notification marked as read (or already was read).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+              examples:
+                read:
+                  summary: Notification now marked as read
+                  value:
+                    id: 5b03f9d6-d969-465a-ae5d-d5dc1d7d9f12
+                    recipientUserId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
+                    eventType: BOOKING_CONFIRMED
+                    title: Booking confirmed
+                    body: Your booking at Sunrise Hotel has been confirmed.
+                    payload:
+                      bookingId: 91d5d843-45f3-462e-b3d5-af0e795e5011
+                      hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
+                    readAt: '2026-07-01T11:00:00Z'
+                    createdAt: '2026-07-01T10:15:30Z'
+        '400':
+          description: |
+            Bad request: malformed notificationId or invalid path format.
+            Common codes: BAD_REQUEST, INVALID_UUID_FORMAT.
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing or invalid JWT.
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Forbidden: authenticated user does not own this notification.
+            Common codes: FORBIDDEN, NOTIFICATION_ACCESS_DENIED.
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: |
+            Not found: notification with given ID does not exist.
+            Common codes: NOTIFICATION_NOT_FOUND.
+          $ref: '#/components/responses/NotFound'
+        '500':
+          description: Unexpected server error.
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/notifications/broadcast:
+    post:
+      tags: [Broadcasts]
+      summary: Request promotion notification broadcast
+      description: |
+        Creates an asynchronous promotion broadcast request to be sent to a user segment.
+        
+        **Request Flow:**
+        1. Client (Admin/Owner) validates role and sends request to API Gateway.
+        2. API Gateway routes to Notification Service, extracts JWT (userId, role, tenantId).
+        3. Service validates role (Admin can broadcast to all segments; Owner can broadcast within their tenant).
+        4. Service validates request body (required fields, segment/segmentRefId conditional requirements).
+        5. If valid, service saves broadcast record with status=INITIATED and publishes event to Kafka.
+        6. Service returns 202 Accepted immediately (async).
+        
+        **Async Processing (Kafka Consumer):**
+        1. Consumer pulls broadcast event from Kafka topic.
+        2. Calls User/Segment Service to resolve target users.
+        3. For each user, creates notification and delivery logs (EMAIL/PUSH based on request channels).
+        4. Sends email and push notifications in parallel.
+        5. Updates delivery_logs with status (SENT/RETRYING/FAILED).
+        6. Updates broadcast record with status=COMPLETED and delivered_count.
+        
+        **Authorization:**
+        - Admin (role=ADMIN): can broadcast to any segment, any tenant/hotel.
+        - Hotel Owner (role=HOTEL_OWNER): can broadcast to HOTEL_PAST_GUESTS within owned hotel; must provide hotelId in segmentRefId or payload.
+        - Others (CUSTOMER, HOTEL_STAFF): Forbidden (403).
+        
+        **Error Scenarios:**
+        - 401 Unauthorized: Missing, expired, or invalid JWT.
+        - 403 Forbidden: Authenticated user lacks broadcast permission or attempts to broadcast outside their hotel scope.
+        - 400 Bad Request: Malformed JSON, missing required fields, or invalid field values.
+        - 422 Unprocessable Entity: Validation failed (e.g., segment=USER_SEGMENT but segmentRefId missing, empty channels array).
+        - 500 Internal Server Error: Unexpected service failure; broadcast not initiated.
+        
+        **Idempotency:** Not idempotent. Repeated requests with identical payload create duplicate broadcasts.
+        Consider client-side deduplication or idempotency key in future versions.
+      operationId: createBroadcast
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBroadcastRequest'
+            examples:
+              promotionSegment:
+                summary: Promotion broadcast to recent bookers
+                value:
+                  segment: RECENT_BOOKERS
+                  title: Summer deal
+                  body: Save 15% on selected hotels this summer.
+                  channels: [EMAIL, PUSH]
+                  payload:
+                    promotionId: 4fd7bdf0-69f8-4db7-8353-2f444d543c0a
+                    couponCode: SUMMER2026
       responses:
         '202':
-          description: Yêu cầu gửi email đã được nhận, đang xử lý bất đồng bộ
+          description: Broadcast request accepted for asynchronous processing.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: QUEUED
-                  message:
-                    type: string
-                    example: Email sẽ được gửi đến nguyenvana@email.com
+                $ref: '#/components/schemas/BroadcastAcceptedResponse'
+              examples:
+                accepted:
+                  value:
+                    broadcastId: 22ab62c0-bf3f-43b5-8f6b-1d53cc0f3e01
+                    status: ACCEPTED
+                    message: Broadcast request accepted for asynchronous processing.
+                    acceptedAt: '2026-07-01T10:30:00Z'
         '400':
-          description: Dữ liệu không hợp lệ (thiếu email, template không tồn tại)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: INVALID_TEMPLATE
-                message: Template BOOKING_UNKNOWN không tồn tại
+          description: |
+            Invalid request syntax or malformed JSON.
+            Common codes: BAD_REQUEST, INVALID_JSON, MISSING_FIELD.
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Missing, expired, or invalid JWT token.
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Authenticated user lacks permission to request broadcast or attempts broadcast outside their scope.
+            Common codes: FORBIDDEN, INSUFFICIENT_PERMISSIONS, HOTEL_SCOPE_VIOLATION.
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Requested segment or referenced scope (hotel, segment) not found.
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Request conflicts with current state (e.g., another broadcast in progress for same segment).
+          $ref: '#/components/responses/Conflict'
+        '422':
+          description: |
+            Request is syntactically valid but violates validation or business rules.
+            Common codes: VALIDATION_ERROR, SEGMENT_REF_ID_REQUIRED, EMPTY_CHANNELS, INVALID_SEGMENT.
+            Details field contains array of validation errors with field and message.
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          description: Unexpected server error; broadcast was not initiated.
+          $ref: '#/components/responses/InternalServerError'
 
 components:
-  schemas:
-    EmailRequest:
-      type: object
-      required: [to, template, data]
-      properties:
-        to:
-          type: string
-          format: email
-          description: Email người nhận
-          example: nguyenvana@email.com
-        template:
-          type: string
-          enum: [BOOKING_CONFIRMED, BOOKING_CANCELLED]
-          description: Template email sử dụng
-          example: BOOKING_CONFIRMED
-        data:
-          type: object
-          description: |
-            Dữ liệu điền vào template. Các field bắt buộc tùy theo template:
-            - BOOKING_CONFIRMED: guestName, bookingId, hotelName, roomType, checkin, checkout, numberOfNights, totalPrice
-            - BOOKING_CANCELLED: guestName, bookingId, hotelName, checkin, checkout, reason
-          additionalProperties: true
-          example:
-            guestName: Nguyen Van A
-            bookingId: bk-550e8400-uuid
-            hotelName: Marriott Hanoi
-            roomType: Deluxe Room
-            checkin: "2024-06-01"
-            checkout: "2024-06-05"
-            numberOfNights: 4
-            totalPrice: 4800000
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token issued by the platform authentication service.
 
-    HealthResponse:
+  parameters:
+    NotificationIdPath:
+      name: notificationId
+      in: path
+      required: true
+      description: Notification identifier.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request syntax, malformed JSON, or invalid parameter format.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 400
+            code: BAD_REQUEST
+            message: Invalid request.
+            path: /api/notifications/my
+            traceId: 9f4a3310b32c4fd0
+    Unauthorized:
+      description: Missing, expired, or invalid JWT.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 401
+            code: UNAUTHORIZED
+            message: Authentication is required.
+            path: /api/notifications/my
+            traceId: 9f4a3310b32c4fd0
+    Forbidden:
+      description: Authenticated principal does not have permission for the requested operation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 403
+            code: FORBIDDEN
+            message: You are not allowed to access this notification.
+            path: /api/notifications/5b03f9d6-d969-465a-ae5d-d5dc1d7d9f12/read
+            traceId: 9f4a3310b32c4fd0
+    NotFound:
+      description: Requested notification, broadcast segment, or referenced scope was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 404
+            code: NOTIFICATION_NOT_FOUND
+            message: Notification was not found.
+            path: /api/notifications/5b03f9d6-d969-465a-ae5d-d5dc1d7d9f12/read
+            traceId: 9f4a3310b32c4fd0
+    Conflict:
+      description: Request conflicts with current resource state or duplicate unique value.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 409
+            code: DEVICE_TOKEN_CONFLICT
+            message: Device token belongs to another active user.
+            path: /api/notifications/device-token
+            traceId: 9f4a3310b32c4fd0
+    UnprocessableEntity:
+      description: Request is syntactically valid but violates validation or business rules.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 422
+            code: VALIDATION_ERROR
+            message: Request validation failed.
+            path: /api/notifications/broadcast
+            traceId: 9f4a3310b32c4fd0
+            details:
+              - field: channels
+                message: must contain at least one channel
+    InternalServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: '2026-07-01T10:00:00Z'
+            status: 500
+            code: INTERNAL_SERVER_ERROR
+            message: Unexpected server error.
+            path: /api/notifications/broadcast
+            traceId: 9f4a3310b32c4fd0
+
+  schemas:
+    NotificationEventType:
+      type: string
+      enum:
+        - BOOKING_CONFIRMED
+        - BOOKING_CANCELLED
+        - CHECKIN_REMINDER
+        - PAYMENT_CONFIRMED
+        - PAYMENT_FAILED
+        - PROMOTION
+
+    NotificationChannel:
+      type: string
+      enum: [EMAIL, PUSH]
+
+    DeliveryStatus:
+      type: string
+      enum: [PENDING, SENT, FAILED, RETRYING]
+
+    DevicePlatform:
+      type: string
+      enum: [WEB, ANDROID, IOS]
+
+    BroadcastSegment:
+      type: string
+      enum:
+        - ALL_USERS
+        - RECENT_BOOKERS
+        - INACTIVE_USERS
+        - FIRST_TIME_BOOKERS
+        - VIP_USERS
+        - HOTEL_PAST_GUESTS
+        - USER_SEGMENT
+      description: |
+        Audience segment for broadcast:
+        - ALL_USERS: All active users in the platform.
+        - RECENT_BOOKERS: Users with bookings in the last 30 days.
+        - INACTIVE_USERS: Users with no activity or bookings in the last 90 days.
+        - FIRST_TIME_BOOKERS: Users who have made only one booking.
+        - VIP_USERS: Users flagged as VIP (high LTV).
+        - HOTEL_PAST_GUESTS: Users who have booked at a specific hotel (requires hotelId in payload).
+        - USER_SEGMENT: Custom segment (requires segmentRefId parameter).
+
+    UpsertDeviceTokenRequest:
       type: object
+      additionalProperties: false
+      required: [fcmToken, platform]
       properties:
+        fcmToken:
+          type: string
+          minLength: 20
+          maxLength: 500
+          description: |
+            Firebase Cloud Messaging registration token from the client (WEB, iOS, or Android).
+            Validation:
+            - Must be between 20 and 500 characters.
+            - Must be a valid FCM token format (typically base64url-encoded).
+            - Must be unique across all users; if token already belongs to another user, returns 409 Conflict.
+            - If same user re-registers the same token, updates platform/is_active and returns 200 OK (idempotent).
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+          description: |
+            Device platform where token was generated.
+            - WEB: Browser/web app (Firebase Web SDK).
+            - ANDROID: Native Android app or cross-platform framework.
+            - IOS: Native iOS app or cross-platform framework.
+      examples:
+        - fcmToken: 'fcm_web_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vZmlyZWJhc2UtYWRtaW5zZGsuYXBwc3BvdC5jb20iLCJhY...='
+          platform: WEB
+        - fcmToken: 'fcm_ios_token_eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...'
+          platform: IOS
+
+    DeviceTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [id, userId, fcmToken, platform, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        fcmToken:
+          type: string
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NotificationPayload:
+      type: object
+      description: |
+        Optional flexible JSONB data attached to notification. Can include:
+        - bookingId (UUID): Reference to a booking from booking-service.
+        - hotelId (UUID): Reference to a hotel from hotel-service.
+        - promotionId (UUID): Reference to a promotion from promotion-service.
+        - couponCode (string): Coupon code if promotion includes a coupon.
+        - amount (number): Monetary amount (e.g., payment confirmation amount).
+        - transactionId (string): Payment or booking transaction ID.
+        - reminderType (string): For reminders (e.g., "checkin", "checkout", "pre_booking").
+        - Custom fields as needed per event type.
+        Validation:
+        - Payload is nullable; null is valid (treated as empty object).
+        - Total payload size should not exceed 10 KB.
+      additionalProperties: true
+      examples:
+        - bookingId: '91d5d843-45f3-462e-b3d5-af0e795e5011'
+          hotelId: '8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001'
+          hotelName: 'Sunrise Hotel'
+          checkInDate: '2026-07-15'
+          roomType: 'Deluxe Suite'
+        - promotionId: '4fd7bdf0-69f8-4db7-8353-2f444d543c0a'
+          couponCode: 'SUMMER2026'
+          discountPercent: 15
+          maxDiscount: 300000
+
+    NotificationResponse:
+      type: object
+      additionalProperties: false
+      required: [id, recipientUserId, eventType, title, body, payload, readAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipientUserId:
+          type: string
+          format: uuid
+        eventType:
+          $ref: '#/components/schemas/NotificationEventType'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        body:
+          type: string
+          minLength: 1
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/NotificationPayload'
+            - type: 'null'
+        readAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    NotificationPageResponse:
+      type: object
+      additionalProperties: false
+      required: [content, page, size, totalElements, totalPages, unreadCount]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationResponse'
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+        totalElements:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+        unreadCount:
+          type: integer
+          minimum: 0
+
+    CreateBroadcastRequest:
+      type: object
+      additionalProperties: false
+      required: [segment, title, body, channels]
+      properties:
+        segment:
+          $ref: '#/components/schemas/BroadcastSegment'
+          description: Target audience segment for broadcast.
+        segmentRefId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          nullable: true
+          description: |
+            Reference ID for custom segment resolution.
+            - Required if segment is USER_SEGMENT.
+            - Optional for HOTEL_PAST_GUESTS (specifies hotelId).
+            - Must be a valid UUID if provided.
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: |
+            Notification title displayed to users.
+            Validation: Must be between 1 and 255 characters, non-empty.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: |
+            Notification body/content.
+            Validation: Must be between 1 and 5000 characters, non-empty.
+        channels:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/NotificationChannel'
+          description: |
+            Delivery channels for broadcast.
+            Validation: Must include at least one channel (EMAIL or PUSH), at most both.
+        payload:
+          oneOf:
+            - $ref: '#/components/schemas/NotificationPayload'
+            - type: 'null'
+          nullable: true
+          description: Optional metadata for the broadcast (promotionId, couponCode, etc.).
+      allOf:
+        - if:
+            properties:
+              segment:
+                const: USER_SEGMENT
+          then:
+            required: [segmentRefId]
+            properties:
+              segmentRefId:
+                type: string
+                format: uuid
+                description: Must be provided and must be a valid UUID when segment is USER_SEGMENT.
+      examples:
+        - segment: RECENT_BOOKERS
+          title: 'Summer Promotion: Save 15%'
+          body: 'Book your next stay this summer and save 15% on selected hotels with code SUMMER2026.'
+          channels: [EMAIL, PUSH]
+          payload:
+            promotionId: '4fd7bdf0-69f8-4db7-8353-2f444d543c0a'
+            couponCode: 'SUMMER2026'
+            discountPercent: 15
+        - segment: HOTEL_PAST_GUESTS
+          segmentRefId: '8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001'
+          title: 'Welcome back to Sunrise Hotel'
+          body: 'We have new rooms and special rates for our returning guests!'
+          channels: [PUSH]
+          payload:
+            hotelId: '8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001'
+            hotelName: 'Sunrise Hotel'
+
+    BroadcastAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [broadcastId, status, message, acceptedAt]
+      properties:
+        broadcastId:
+          type: string
+          format: uuid
         status:
           type: string
-          example: ok
+          enum: [ACCEPTED]
+        message:
+          type: string
+        acceptedAt:
+          type: string
+          format: date-time
 
     ErrorResponse:
       type: object
+      additionalProperties: false
+      required: [timestamp, status, code, message, path, traceId]
       properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
         code:
           type: string
-          example: INVALID_TEMPLATE
+          examples: [VALIDATION_ERROR]
         message:
           type: string
-          example: Template không tồn tại
+        path:
+          type: string
+        traceId:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string

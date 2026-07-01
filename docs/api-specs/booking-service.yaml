@@ -1,350 +1,561 @@
 openapi: 3.0.3
+
 info:
   title: Booking Service API
   description: |
-    Entity Service — lưu trữ và quản lý booking records.
-    Có 3 loại consumer:
-    - PlaceBookingService gọi qua Kafka (create, confirm, cancel booking)
-    - hotel-service gọi REST đồng bộ để lấy booking count phục vụ availability check
-    - Client gọi REST để polling trạng thái booking sau khi nhận 202 Accepted
+    API nội bộ của **booking-service** trong hệ thống hotel booking microservices.
+
+    Service này chịu trách nhiệm:
+    - Lưu trữ và truy vấn trạng thái booking
+    - Đếm số lượng booking đang active theo room type (dùng cho availability check)
+    - Cập nhật trạng thái booking thủ công (dùng bởi các service nội bộ)
+
+    > **Lưu ý:** Việc *tạo* booking được thực hiện qua Kafka command (`CreateBookingCommand`),
+    > không qua REST endpoint. Các endpoint dưới đây phục vụ việc đọc và cập nhật trạng thái.
   version: 1.0.0
+  contact:
+    name: Hotel Booking Team
 
 servers:
   - url: http://localhost:5004
     description: Local development
+  - url: http://booking-service:5000
+    description: Docker internal network
 
 tags:
+  - name: Booking
+    description: Quản lý booking
   - name: Health
-  - name: Bookings
+    description: Health check
 
 paths:
+
   /health:
     get:
-      tags: [Health]
+      tags:
+        - Health
       summary: Health check
+      description: Kiểm tra service đang hoạt động.
       operationId: healthCheck
       responses:
-        '200':
-          description: Service is healthy
+        "200":
+          description: Service đang hoạt động bình thường
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
 
-#  /bookings:
-#    post:
-#      tags: [Bookings]
-#      summary: Tạo booking record mới
-#      description: |
-#        Được gọi bởi PlaceBookingService (qua Kafka command "CreateBooking").
-#        Tạo booking với trạng thái PENDING.
-#        Trả về conflict (409) nếu race condition xảy ra — booking-service dùng DB constraint để đảm bảo không oversell.
-#      operationId: createBooking
-#      requestBody:
-#        required: true
-#        content:
-#          application/json:
-#            schema:
-#              $ref: '#/components/schemas/BookingCreate'
-#            example:
-#              user:
-#                userId: US-001
-#                name: Nguyen Van A
-#                email: nva@gmail.com
-#              hotelId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-#              roomTypeList: [
-#                {
-#                  roomTypeId: rt-001-uuid,
-#                  quantity: 1,
-#                  price: 1000000
-#                },
-#                {
-#                  roomTypeId: rt-002-uuid,
-#                  quantity: 1,
-#                  price: 1200000
-#                }
-#              ]
-#              checkin: "2024-06-01"
-#              checkout: "2024-06-05"
-#              guestName: Nguyen Van A
-#              guestEmail: nguyenvana@email.com
-#              totalPrice: 4800000
-#              numberOfNights: 4
-#      responses:
-#        '201':
-#          description: Booking được tạo thành công với trạng thái PENDING
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Booking'
-#        '400':
-#          description: Dữ liệu đầu vào không hợp lệ
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/ErrorResponse'
-#              example:
-#                code: VALIDATION_ERROR
-#                message: Ngày checkout phải sau ngày checkin
-#        '409':
-#          description: Conflict — không còn phòng trống (race condition)
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/ErrorResponse'
-#              example:
-#                code: NO_ROOM_AVAILABLE
-#                message: Không còn phòng loại này trong khoảng thời gian yêu cầu
+  /bookings:
+    get:
+      tags:
+        - Booking
+      summary: Lấy danh sách booking của khách hàng
+      description: |
+        Trả về toàn bộ lịch sử đặt phòng của một khách hàng, sắp xếp theo thời gian tạo gần nhất.
 
-#    get:
-#      tags: [Bookings]
-#      summary: Lấy danh sách booking của user
-#      description: Client dùng để xem lịch sử đặt phòng.
-#      operationId: getBookings
-#      parameters:
-#        - name: userId
-#          in: query
-#          required: false
-#          schema:
-#            type: string
-#            format: uuid
-#          example: 550e8400-e29b-41d4-a716-446655440000
-#        - name: status
-#          in: query
-#          required: false
-#          schema:
-#            $ref: '#/components/schemas/BookingStatus'
-#        - name: page
-#          in: query
-#          required: false
-#          schema:
-#            type: integer
-#            default: 0
-#        - name: size
-#          in: query
-#          required: false
-#          schema:
-#            type: integer
-#            default: 10
-#      responses:
-#        '200':
-#          description: Danh sách booking
-#          content:
-#            application/json:
-#              schema:
-#                type: object
-#                properties:
-#                  data:
-#                    type: array
-#                    items:
-#                      $ref: '#/components/schemas/Booking'
-#                  total:
-#                    type: integer
-#                  page:
-#                    type: integer
-#                  size:
-#                    type: integer
+        Dùng cho màn hình "Lịch sử đặt phòng" của Customer.
+
+        Nếu khách hàng chưa từng đặt phòng nào, trả về mảng rỗng (`[]`) thay vì lỗi 404 —
+        client tự xử lý hiển thị empty state kèm gợi ý tìm khách sạn.
+      operationId: getBookingsByCustomer
+      parameters:
+        - name: customerId
+          in: query
+          required: true
+          description: ID của khách hàng cần lấy danh sách booking.
+          schema:
+            type: string
+          example: US-001
+      responses:
+        "200":
+          description: Danh sách booking của khách hàng (có thể rỗng)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingResponse"
+              examples:
+                has_bookings:
+                  summary: Khách hàng có booking
+                  value:
+                    - bookingId: BK-001
+                      status: CONFIRMED
+                      details:
+                        bookingId: BK-001
+                        customer:
+                          name: Nguyen Van A
+                          email: a@gmail.com
+                        checkin: "2025-08-01"
+                        checkout: "2025-08-05"
+                        numAdults: 2
+                        totalAmount: 6600000
+                        hotel:
+                          name: Marriott Hanoi
+                          address: 85 Lang Ha, Ba Dinh, Hanoi
+                        roomTypeList:
+                          - name: Deluxe Room
+                            bedCount: 2
+                            bookingQuantity: 1
+                            price: 2200000
+                    - bookingId: BK-004
+                      status: PENDING
+                      details: null
+                empty_list:
+                  summary: Khách hàng chưa từng đặt phòng
+                  value: []
+        "400":
+          description: Thiếu tham số bắt buộc
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: VALIDATION_ERROR
+                message: customerId is required
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /bookings/hotel:
+    get:
+      tags:
+        - Booking
+      summary: Lấy danh sách booking của một khách sạn (dành cho nhân viên)
+      description: |
+        Trả về danh sách booking thuộc một khách sạn, có thể lọc theo khoảng ngày
+        checkin/checkout và theo trạng thái.
+
+        Dùng cho màn hình vận hành của **Hotel Staff** (Staff Portal) để theo dõi
+        booking theo ngày/trạng thái — các booking này đã được hệ thống tự động xác nhận
+        qua Saga ở luồng đặt phòng (UC-10), Staff chỉ xem để xử lý vận hành
+        (check-in/check-out), không xác nhận thủ công.
+
+        **Yêu cầu xác thực:** endpoint này yêu cầu JWT hợp lệ với role `HOTEL_STAFF`,
+        được xác thực tại API Gateway trước khi forward request.
+
+        Nếu không có booking nào khớp điều kiện lọc, trả về mảng rỗng (`[]`).
+      operationId: getBookingsByHotel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: hotelId
+          in: query
+          required: true
+          description: ID của khách sạn cần lấy danh sách booking.
+          schema:
+            type: string
+          example: HT-001
+        - name: checkin
+          in: query
+          required: false
+          description: Lọc booking có ngày check-in từ ngày này trở đi (ISO 8601 `YYYY-MM-DD`).
+          schema:
+            type: string
+            format: date
+          example: "2025-08-01"
+        - name: checkout
+          in: query
+          required: false
+          description: Lọc booking có ngày check-out đến ngày này (ISO 8601 `YYYY-MM-DD`).
+          schema:
+            type: string
+            format: date
+          example: "2025-08-31"
+        - name: status
+          in: query
+          required: false
+          description: Lọc theo trạng thái booking. Không truyền thì trả về tất cả trạng thái.
+          schema:
+            $ref: "#/components/schemas/BookingStatus"
+          example: CONFIRMED
+      responses:
+        "200":
+          description: Danh sách booking của khách sạn (có thể rỗng)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BookingResponse"
+              examples:
+                has_bookings:
+                  summary: Có booking khớp điều kiện lọc
+                  value:
+                    - bookingId: BK-001
+                      status: CONFIRMED
+                      details:
+                        bookingId: BK-001
+                        customer:
+                          name: Nguyen Van A
+                          email: a@gmail.com
+                        checkin: "2025-08-01"
+                        checkout: "2025-08-05"
+                        numAdults: 2
+                        totalAmount: 6600000
+                        hotel:
+                          name: Marriott Hanoi
+                          address: 85 Lang Ha, Ba Dinh, Hanoi
+                        roomTypeList:
+                          - name: Deluxe Room
+                            bedCount: 2
+                            bookingQuantity: 1
+                            price: 2200000
+                empty_list:
+                  summary: Không có booking khớp điều kiện lọc
+                  value: []
+        "400":
+          description: Tham số không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missing_hotel_id:
+                  summary: Thiếu hotelId
+                  value:
+                    code: VALIDATION_ERROR
+                    message: hotelId is required
+                invalid_date_range:
+                  summary: checkout trước checkin
+                  value:
+                    code: VALIDATION_ERROR
+                    message: checkout must be after checkin
+        "401":
+          description: Thiếu JWT hoặc JWT không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: UNAUTHORIZED
+                message: Missing or invalid JWT token
+        "403":
+          description: JWT hợp lệ nhưng không có role `HOTEL_STAFF`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: FORBIDDEN
+                message: Requires HOTEL_STAFF role
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /bookings/count:
     get:
-      tags: [Bookings]
-      summary: Đếm số booking đang active trong khoảng thời gian checkin-checkout của hotel nhóm theo roomTypeId để tính availability cho mỗi loại phòng
+      tags:
+        - Booking
+      summary: Đếm booking đang active theo room type
       description: |
-        Internal API — được gọi bởi hotel-service để tính room availability.
-        Đếm số booking có status PENDING hoặc CONFIRMED, có overlap với khoảng checkin–checkout,
-        theo roomTypeId cụ thể.
-        Logic overlap: booking overlap nếu booking.checkin < checkout AND booking.checkout > checkin
+        Trả về số lượng booking đang ở trạng thái `PENDING` hoặc `CONFIRMED`
+        theo từng room type trong khoảng thời gian checkin/checkout.
+
+        Được gọi bởi **hotel-service** để kiểm tra availability trước khi cho phép đặt phòng.
+
+        **Logic overlap ngày:** một booking được tính là overlap nếu:
+        `booking.checkin < checkout_param AND booking.checkout > checkin_param`
+
+        **Ràng buộc:** phải cung cấp ít nhất một trong hai: `hotelId` hoặc `roomTypeList`.
       operationId: countBookings
       parameters:
         - name: hotelId
           in: query
           required: false
+          description: ID của khách sạn. Nếu không truyền thì phải truyền `roomTypeList`.
           schema:
             type: string
-            format: uuid
-          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          example: HT-001
         - name: roomTypeList
           in: query
           required: false
+          description: |
+            Danh sách room type ID cần đếm. Có thể truyền nhiều giá trị.
+            Nếu không truyền thì đếm tất cả room type thuộc `hotelId`.
           schema:
             type: array
             items:
               type: string
-              format: uuid
-            example: [rt-001-uuid, rt-002-uuid]
+          style: form
+          explode: true
+          example:
+            - RT-001
+            - RT-002
         - name: checkin
           in: query
           required: true
+          description: Ngày check-in (ISO 8601 `YYYY-MM-DD`).
           schema:
             type: string
             format: date
-          example: "2024-06-01"
+          example: "2025-08-01"
         - name: checkout
           in: query
           required: true
+          description: Ngày check-out (ISO 8601 `YYYY-MM-DD`). Phải sau `checkin`.
           schema:
             type: string
             format: date
-          example: "2024-06-05"
+          example: "2025-08-05"
       responses:
-        '200':
-          description: Số booking đang active trong khoảng thời gian checkin-checkout nhóm theo roomTypeId
+        "200":
+          description: Danh sách số lượng booking active theo room type
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  hotelId:
-                    type: string
-                    format: uuid
-                    example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-                  checkin:
-                    type: string
-                    format: date
-                    example: "2024-06-01"
-                  checkout:
-                    type: string
-                    format: date
-                    example: "2024-06-05"
-                  activeBookingCount:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        roomTypeId:
-                          type: string
-                          format: uuid
-                          example: rt-001-uuid
-                        count:
-                          type: integer
-                          example: 6
-                    description: Số booking PENDING + CONFIRMED trong khoảng thời gian nhóm theo roomTypeId
-                    example: [
-                      {
-                        roomTypeId: rt-001-uuid,
-                        count: 6
-                      },
-                      {
-                        roomTypeId: rt-002-uuid,
-                        count: 4
-                      }
-                    ]
-        '400':
-          description: Thiếu hoặc sai tham số
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/CountBookingsResponse"
               example:
-                code: VALIDATION_ERROR
-                message: checkin và checkout là bắt buộc, 1 trong 2 tham số hotelId và roomTypeList là bắt buộc
-
+                hotelId: HT-001
+                checkin: "2025-08-01"
+                checkout: "2025-08-05"
+                activeBookingCount:
+                  - roomTypeId: RT-001
+                    bookingCount: 3
+                  - roomTypeId: RT-002
+                    bookingCount: 1
+        "400":
+          description: Tham số không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                missing_dates:
+                  summary: Thiếu checkin/checkout
+                  value:
+                    code: VALIDATION_ERROR
+                    message: checkin and checkout are required
+                invalid_date_range:
+                  summary: checkout trước checkin
+                  value:
+                    code: VALIDATION_ERROR
+                    message: checkout must be after checkin
+                missing_filter:
+                  summary: Thiếu cả hotelId lẫn roomTypeList
+                  value:
+                    code: VALIDATION_ERROR
+                    message: hotelId or roomTypeList is required
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /bookings/{bookingId}:
     get:
-      tags: [Bookings]
+      tags:
+        - Booking
       summary: Lấy thông tin booking theo ID
       description: |
-        Client dùng để polling trạng thái Saga sau khi nhận 202 Accepted từ PlaceBookingService.
-        Trạng thái PENDING = đang xử lý, CONFIRMED = thành công, FAILED = thất bại, CANCELLED = huỷ do payment.
+        Trả về trạng thái hiện tại và chi tiết của một booking.
+
+        Trường `details` chứa snapshot thông tin đặt phòng (khách hàng, khách sạn, danh sách phòng)
+        được lưu dưới dạng JSON tại thời điểm tạo booking. Trường này có thể `null`
+        nếu booking chưa có thông tin chi tiết.
+        
       operationId: getBookingById
       parameters:
         - name: bookingId
           in: path
           required: true
+          description: ID của booking.
           schema:
             type: string
-            format: uuid
-          example: bk-550e8400
+          example: BK-001
       responses:
-        '200':
+        "200":
           description: Thông tin booking
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Booking'
-        '404':
-          description: Booking không tồn tại
+                $ref: "#/components/schemas/BookingResponse"
+              examples:
+                confirmed:
+                  summary: Booking đã xác nhận
+                  value:
+                    bookingId: BK-001
+                    status: CONFIRMED
+                    details:
+                      bookingId: BK-001
+                      customer:
+                        name: Nguyen Van A
+                        email: a@gmail.com
+                      checkin: "2025-08-01"
+                      checkout: "2025-08-05"
+                      numAdults: 2
+                      totalAmount: 6600000
+                      hotel:
+                        name: Marriott Hanoi
+                        address: 85 Lang Ha, Ba Dinh, Hanoi
+                      roomTypeList:
+                        - name: Deluxe Room
+                          bedCount: 2
+                          bookingQuantity: 1
+                          price: 2200000
+                pending_no_detail:
+                  summary: Booking đang pending, chưa có detail
+                  value:
+                    bookingId: BK-002
+                    status: PENDING
+                    details: null
+        "404":
+          description: Không tìm thấy booking
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 code: BOOKING_NOT_FOUND
-                message: Booking không tồn tại
+                message: Booking does not exist
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
   /bookings/{bookingId}/status:
     patch:
-      tags: [Bookings]
+      tags:
+        - Booking
       summary: Cập nhật trạng thái booking
       description: |
-        Được gọi bởi PlaceBookingService (qua Kafka commands):
-        - "ConfirmBooking" → CONFIRMED
-        - "CancelBooking" → CANCELLED
+        Cập nhật trạng thái của một booking theo các transition hợp lệ.
+
+        **State machine:**
+        ```
+        PENDING  → CONFIRMED
+        PENDING  → CANCELLED
+        PENDING  → FAILED
+        CONFIRMED → CANCELLED
+        ```
+        Mọi transition khác sẽ trả về lỗi `400 INVALID_STATUS_TRANSITION`.
+
+        Khi chuyển sang `CONFIRMED` hoặc `CANCELLED`, service sẽ tự động
+        publish event tương ứng (`BookingConfirmed` / `BookingCancelled`) vào Kafka
+        thông qua Outbox Pattern.
+
+        > Endpoint này chủ yếu được dùng bởi các service nội bộ,
+        > không expose trực tiếp cho end-user qua API Gateway.
       operationId: updateBookingStatus
       parameters:
         - name: bookingId
           in: path
           required: true
+          description: ID của booking cần cập nhật trạng thái.
           schema:
             type: string
-            format: uuid
-          example: bk-550e8400
+          example: BK-001
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  $ref: '#/components/schemas/BookingStatus'
+              $ref: "#/components/schemas/UpdateBookingStatusRequest"
             example:
               status: CONFIRMED
       responses:
-        '200':
-          description: Trạng thái booking đã được cập nhật
+        "200":
+          description: Trạng thái đã được cập nhật thành công, trả về booking mới nhất
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Booking'
-        '400':
-          description: Chuyển trạng thái không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/BookingResponse"
               example:
-                code: INVALID_STATUS_TRANSITION
-                message: Không thể chuyển từ CONFIRMED sang PENDING
-        '404':
-          description: Booking không tồn tại
+                bookingId: BK-001
+                status: CONFIRMED
+                details:
+                  bookingId: BK-001
+                  customer:
+                    name: Nguyen Van A
+                    email: a@gmail.com
+                  checkin: "2025-08-01"
+                  checkout: "2025-08-05"
+                  numAdults: 2
+                  totalAmount: 6600000
+                  hotel:
+                    name: Marriott Hanoi
+                    address: 85 Lang Ha, Ba Dinh, Hanoi
+                  roomTypeList:
+                    - name: Deluxe Room
+                      bedCount: 2
+                      bookingQuantity: 1
+                      price: 2200000
+        "400":
+          description: Trạng thái không hợp lệ hoặc transition không được phép
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_transition:
+                  summary: Transition không hợp lệ
+                  value:
+                    code: INVALID_STATUS_TRANSITION
+                    message: Cannot transition from CONFIRMED to PENDING
+                missing_status:
+                  summary: Thiếu field status
+                  value:
+                    code: VALIDATION_ERROR
+                    message: status is required
+        "404":
+          description: Không tìm thấy booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: BOOKING_NOT_FOUND
+                message: Booking does not exist
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
 components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT được xác thực tại API Gateway. Token phải chứa claim `role`
+        để phân quyền các endpoint nội bộ dành cho staff/admin.
+
   schemas:
+
+    HealthResponse:
+      type: object
+      description: Kết quả health check
+      properties:
+        status:
+          type: string
+          example: ok
+      required:
+        - status
+
     BookingStatus:
       type: string
-      enum: [PENDING, CONFIRMED, CANCELLED, FAILED]
       description: |
-        - PENDING: Booking vừa được tạo, Saga đang xử lý
-        - CONFIRMED: Thanh toán thành công, booking xác nhận
-        - CANCELLED: Thanh toán thất bại hoặc Saga rollback
-        - FAILED: Đặt phòng thất bại do lỗi hệ thống (không đủ phòng,...)
+        Trạng thái của một booking:
+        - `PENDING` — Phòng đang được giữ chỗ, chờ thanh toán
+        - `CONFIRMED` — Đã thanh toán, booking được xác nhận
+        - `CANCELLED` — Bị huỷ (hết thời gian thanh toán hoặc chủ động huỷ)
+        - `FAILED` — Không đặt được (không còn phòng trống)
+        - `CHECKEDIN` — Khách đã check-in
+        - `COMPLETED` — Đã check-out, đơn hoàn thành
+      enum:
+        - PENDING
+        - CONFIRMED
+        - CANCELLED
+        - FAILED
+        - CHECKEDIN
+        - COMPLETED
+      example: CONFIRMED
 
-    Booking:
+    BookingDetail:
       type: object
+      description: Snapshot thông tin đầy đủ của booking tại thời điểm tạo
       properties:
         bookingId:
           type: string
-          format: uuid
-          example: bk-550e8400
+          example: BK-001
         customer:
           type: object
+          description: Thông tin khách hàng
           properties:
             name:
               type: string
@@ -352,63 +563,185 @@ components:
             email:
               type: string
               format: email
-              example: nva@gmail.com
-        status:
-          $ref: '#/components/schemas/BookingStatus'
+              example: a@gmail.com
+          required:
+            - name
+            - email
         checkin:
           type: string
           format: date
+          description: Ngày check-in (YYYY-MM-DD)
+          example: "2025-08-01"
         checkout:
           type: string
           format: date
+          description: Ngày check-out (YYYY-MM-DD)
+          example: "2025-08-05"
         numAdults:
           type: integer
+          minimum: 1
           example: 2
         totalAmount:
           type: number
-          format: double
+          format: decimal
+          example: 6600000
         hotel:
           type: object
+          description: Thông tin khách sạn
           properties:
             name:
               type: string
-              example: Hotel ABC
+              example: Marriott Hanoi
             address:
               type: string
-              example: Ha Dong, Ha Noi
+              example: 85 Lang Ha, Ba Dinh, Hanoi
+          required:
+            - name
+            - address
         roomTypeList:
           type: array
+          description: Danh sách loại phòng đã đặt
           items:
             type: object
             properties:
               name:
                 type: string
-                example: Deluxe
+                example: Deluxe Room
               bedCount:
                 type: integer
                 example: 2
               bookingQuantity:
                 type: integer
+                minimum: 1
                 example: 1
               price:
                 type: number
-                format: double
-                example: 1000000
+                format: decimal
+                description: Giá mỗi đêm (VND)
+                example: 2200000
+            required:
+              - name
+              - bedCount
+              - bookingQuantity
+              - price
+      required:
+        - bookingId
+        - customer
+        - checkin
+        - checkout
+        - numAdults
+        - totalAmount
+        - hotel
+        - roomTypeList
 
-    HealthResponse:
+    BookingResponse:
       type: object
+      description: Thông tin trả về của một booking
+      properties:
+        bookingId:
+          type: string
+          description: ID của booking
+          example: BK-001
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+        details:
+          allOf:
+            - $ref: "#/components/schemas/BookingDetail"
+          nullable: true
+          description: |
+            Chi tiết booking. Có thể `null` nếu booking chưa được tạo hoàn chỉnh.
+      required:
+        - bookingId
+        - status
+
+    ActiveBookingRoomType:
+      type: object
+      description: Số lượng booking đang active của một room type
+      properties:
+        roomTypeId:
+          type: string
+          description: ID của loại phòng
+          example: RT-001
+        bookingCount:
+          type: integer
+          format: int64
+          description: Số lượng booking PENDING hoặc CONFIRMED trong khoảng thời gian
+          example: 3
+      required:
+        - roomTypeId
+        - bookingCount
+
+    CountBookingsResponse:
+      type: object
+      description: Kết quả đếm booking active theo room type
+      properties:
+        hotelId:
+          type: string
+          nullable: true
+          description: ID khách sạn được filter (null nếu filter bằng roomTypeList)
+          example: HT-001
+        checkin:
+          type: string
+          format: date
+          description: Ngày check-in được query
+          example: "2025-08-01"
+        checkout:
+          type: string
+          format: date
+          description: Ngày check-out được query
+          example: "2025-08-05"
+        activeBookingCount:
+          type: array
+          description: |
+            Danh sách room type và số lượng booking đang active.
+          items:
+            $ref: "#/components/schemas/ActiveBookingRoomType"
+      required:
+        - checkin
+        - checkout
+        - activeBookingCount
+
+    UpdateBookingStatusRequest:
+      type: object
+      description: Request body để cập nhật trạng thái booking
       properties:
         status:
-          type: string
-          example: ok
+          $ref: "#/components/schemas/BookingStatus"
+      required:
+        - status
 
     ErrorResponse:
       type: object
+      description: Cấu trúc lỗi chuẩn của service
       properties:
         code:
           type: string
+          description: Mã lỗi định danh
           example: BOOKING_NOT_FOUND
+          enum:
+            - BOOKING_NOT_FOUND
+            - BOOKING_DETAIL_NOT_FOUND
+            - INVALID_STATUS_TRANSITION
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - INTERNAL_SERVER_ERROR
         message:
           type: string
-          example: Booking không tồn tại
+          description: Mô tả lỗi chi tiết
+          example: Booking does not exist
+      required:
+        - code
+        - message
 
+  responses:
+
+    InternalServerError:
+      description: Lỗi server không xác định
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: INTERNAL_SERVER_ERROR
+            message: Unexpected server error

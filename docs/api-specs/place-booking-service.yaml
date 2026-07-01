@@ -1,223 +1,623 @@
 openapi: 3.0.3
+
 info:
   title: Place Booking Service API
   description: |
-    Task Service — Saga Orchestrator cho luồng đặt phòng.
+    API của **place-booking-service** — Saga Orchestrator trong hệ thống hotel booking microservices.
 
-    Luồng xử lý:
-    1. [Sync REST] Xác minh user qua user-service
-    2. [Sync REST] Check room availability qua hotel-service
-    2. Trả về 202 Accepted ngay cho client
-    3. [Kafka] Publish "CreateBooking" → booking-service
-    4. [Kafka] Publish "ProcessPayment" → payment-service
-    5. [Kafka] Publish "ConfirmBooking" hoặc "CancelBooking" → booking-service
-    6. [Kafka] Publish "SendNotification" → notification-service
+    Service này là entry point duy nhất cho luồng đặt phòng. Khi nhận request, service thực hiện
+    đồng bộ các bước validate trước, sau đó khởi động Saga bất đồng bộ qua Kafka:
 
-    Client dùng bookingId trả về trong 202 để polling trạng thái tại booking-service.
+    **Luồng xử lý đồng bộ (trong request):**
+    1. Xác minh user tồn tại → gọi `user-service`
+    2. Lấy thông tin hotel & room types → gọi `hotel-service`
+    3. Validate khoảng ngày checkin/checkout
+    4. Kiểm tra availability → gọi `booking-service`
+    5. Đối chiếu số phòng yêu cầu với số phòng còn trống
+    6. Khởi tạo SagaState + ghi `CreateBooking` command vào Outbox
+
+    **Sau khi trả response 202:**
+    - Outbox relay publish `CreateBooking` lên Kafka topic `booking-commands`
+    - Saga tiếp tục bất đồng bộ qua các service khác (booking, payment, notification)
+    - Trạng thái booking cuối cùng (CONFIRMED, FAILED, CANCELLED) được gửi qua FCM và email 
+
+    **Idempotency:** Nếu gửi lại request với cùng `idempotencyKey`, service trả về
+    `bookingId` cũ thay vì tạo saga mới (idempotent by design).
+
+    ---
+
+    Ngoài luồng đặt phòng, service còn đóng vai trò Orchestrator cho luồng **hủy booking**
+    (`POST /cancel-booking`), dùng chung cho cả hai use case:
+    - **UC-11** — Customer tự hủy booking của mình
+    - **UC-19** — Hotel Staff hủy hộ booking thay khách hàng (trong trường hợp đặc biệt)
+
+    Hai use case dùng chung một state machine và luồng Saga refund; điểm khác biệt nằm ở
+    actor thực hiện (`performedBy`) và tập trạng thái booking được phép hủy.
   version: 1.0.0
+  contact:
+    name: Hotel Booking Team
 
 servers:
   - url: http://localhost:5001
     description: Local development
+  - url: http://place-booking-service:5000
+    description: Docker internal network
 
 tags:
+  - name: Place Booking
+    description: Khởi tạo luồng đặt phòng (Saga Orchestrator)
+  - name: Cancel Booking
+    description: Hủy booking và hoàn tiền (Saga Orchestrator) — UC-11, UC-19
   - name: Health
-  - name: PlaceBooking
+    description: Health check
 
 paths:
+
   /health:
     get:
-      tags: [Health]
+      tags:
+        - Health
       summary: Health check
+      description: Kiểm tra service đang hoạt động.
       operationId: healthCheck
       responses:
-        '200':
-          description: Service is healthy
+        "200":
+          description: Service đang hoạt động bình thường
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
 
   /place-booking:
     post:
-      tags: [PlaceBooking]
-      summary: Khởi tạo luồng đặt phòng (Saga)
+      tags:
+        - Place Booking
+      summary: Đặt phòng khách sạn
       description: |
-        Endpoint duy nhất của Task Service.
+        Khởi động luồng đặt phòng end-to-end.
 
-        **Xử lý đồng bộ (trước khi trả 202):**
-        - Validate request body
-        - Gọi user-service (sync REST) để xác minh userId và lấy email, tên
-        - Nếu user không tồn tại → trả 404 ngay, không bắt đầu Saga
+        **Response 202 Accepted** — không có nghĩa là đặt phòng thành công.
+        Chỉ nghĩa là yêu cầu đã được tiếp nhận và đang được xử lý bất đồng bộ. Kết quả cuối cùng sẽ được gửi qua thông báo FCM và email khách hàng. 
 
-        **Sau khi trả 202:**
-        - Tạo Saga state trong DB nội bộ
-        - Publish Kafka commands theo thứ tự và chờ reply events
-        - Thực thi compensating transaction nếu có bước thất bại
+        **Trạng thái cuối cùng có thể là:**
+        - `CONFIRMED` — đặt phòng & thanh toán thành công
+        - `CANCELLED` — thanh toán thất bại, đơn bị huỷ (compensating transaction)
+        - `FAILED` — không còn phòng trống tại thời điểm booking-service xử lý
 
-        **Client polling:** Dùng bookingId trả về để gọi GET /bookings/{bookingId} tại booking-service.
+        **Idempotency:** Truyền cùng `idempotencyKey` cho các retry request.
+        Service sẽ trả về `bookingId` cũ thay vì tạo saga mới, tránh duplicate booking.
+
+        **Validate ngày:**
+        - `checkin` phải trước `checkout`
+        - `checkin` không được là ngày trong quá khứ
+
+        **Availability check (tại thời điểm request):**
+        Service kiểm tra trước khi khởi động Saga. Tuy nhiên đây không phải lock cứng —
+        trong trường hợp race condition, booking-service sẽ xử lý lần cuối và có thể
+        emit `BookingFailed` nếu phòng đã hết khi command được xử lý.
       operationId: placeBooking
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PlaceBookingRequest'
+              $ref: "#/components/schemas/PlaceBookingRequest"
             example:
               userId: US-001
               hotelId: HT-001
-              roomTypeList: [
-                {
-                  roomTypeId: rt-001-uuid,
-                  quantity: 1,
-                  price: 1000000
-                },
-                {
-                  roomTypeId: rt-002-uuid,
-                  quantity: 1,
-                  price: 1500000
-                }
-              ]
-              checkin: "2024-06-01"
-              checkout: "2024-06-05"
+              roomTypeList:
+                - roomTypeId: RT-002
+                  name: Deluxe Room
+                  bedCount: 2
+                  bookingQuantity: 1
+                  totalQuantity: 10
+                  price: 2200000
+              checkin: "2025-08-01"
+              checkout: "2025-08-04"
               numAdults: 2
-              totalAmount: 2500000
+              totalAmount: 6600000
               currency: VND
               paymentMethod: CREDIT_CARD
-              idempotencyKey: "550e8400-e29b-41d4-a716-446655440000"
-              paymentToken: pi_1J2Y3Z4A5B6C7D8E9F0G
+              idempotencyKey: 8f4a7bca-fd31-45d5-9f95-111222333444
+              paymentToken: tok_visa_4242
       responses:
-        '202':
+        "202":
           description: |
-            Saga đã được khởi tạo. Client dùng bookingId để polling trạng thái.
+            Yêu cầu đặt phòng đã được tiếp nhận và đang xử lý bất đồng bộ.
+            
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PlaceBookingAccepted'
-              example:
-                bookingId: BK-550e8400
-                status: PENDING
-                message: Yêu cầu đặt phòng đang được xử lý. Vui lòng kiểm tra trạng thái bằng bookingId.
-                pollingUrl: /bookings/bk-550e8400
-        '400':
-          description: Request không hợp lệ (thiếu field, ngày sai định dạng, checkout trước checkin)
+                $ref: "#/components/schemas/PlaceBookingResponse"
+              examples:
+                new_booking:
+                  summary: Booking mới được tạo
+                  value:
+                    bookingId: BK-3f2a1b4c-d5e6-7890-abcd-ef1234567890
+                    status: PENDING
+                    message: Booking request is being processed. Please check status with bookingId.
+                    
+                idempotent_retry:
+                  summary: Retry với cùng idempotencyKey — trả về bookingId cũ
+                  value:
+                    bookingId: BK-3f2a1b4c-d5e6-7890-abcd-ef1234567890
+                    status: PENDING
+                    message: Booking request is being processed. Please check status with bookingId.
+                    
+
+        "400":
+          description: Request không hợp lệ
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: VALIDATION_ERROR
-                message: checkin phải trước checkout và không được là ngày trong quá khứ
-        '404':
-          description: User không tồn tại
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                validation_error:
+                  summary: Thiếu field bắt buộc
+                  value:
+                    code: VALIDATION_ERROR
+                    message: "userId: must not be blank; checkin: must not be blank"
+                invalid_dates:
+                  summary: Ngày không hợp lệ
+                  value:
+                    code: VALIDATION_ERROR
+                    message: checkin must be before checkout and must not be in the past
+                room_not_available:
+                  summary: Phòng không đủ số lượng
+                  value:
+                    code: ROOM_TYPE_NOT_AVAILABLE
+                    message: Room type RT-002 does not have enough available rooms
+
+        "404":
+          description: Không tìm thấy user, hotel hoặc room type
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                user_not_found:
+                  summary: User không tồn tại
+                  value:
+                    code: USER_NOT_FOUND
+                    message: "User not found: US-999"
+                hotel_not_found:
+                  summary: Hotel không tồn tại
+                  value:
+                    code: HOTEL_NOT_FOUND
+                    message: "Hotel not found: HT-999"
+                room_type_not_found:
+                  summary: Room type không thuộc hotel
+                  value:
+                    code: ROOM_TYPE_NOT_FOUND
+                    message: "Room type not found: RT-999"
+
+        "409":
+          description: |
+            Conflict — `idempotencyKey` đã tồn tại nhưng SagaState bị corrupt
+            (bookingId bị null). Không nên xảy ra trong điều kiện bình thường.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                code: USER_NOT_FOUND
-                message: User không tồn tại trong hệ thống
+                code: SAGA_STATE_CONFLICT
+                message: "Saga state is inconsistent for idempotencyKey: 8f4a7bca-fd31-45d5-9f95-111222333444"
+
+        "502":
+          description: |
+            Một trong các service phụ thuộc (user-service, hotel-service, booking-service)
+            trả về lỗi hoặc không phản hồi.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: EXTERNAL_SERVICE_ERROR
+                message: "hotel-service error: Connection refused"
+
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /cancel-booking:
+    post:
+      tags:
+        - Cancel Booking
+      summary: Hủy booking và hoàn tiền (UC-11, UC-19)
+      description: |
+        Khởi động Saga hủy booking, dùng chung cho 2 use case:
+
+        - **UC-11** — Customer tự hủy booking của chính mình.
+          Chỉ chấp nhận hủy khi booking đang `CONFIRMED`.
+        - **UC-19** — Hotel Staff hủy hộ booking thay khách hàng (qua điện thoại, tại quầy...).
+          Chấp nhận hủy khi booking đang `PENDING` hoặc `CONFIRMED`. Yêu cầu JWT có role
+          `HOTEL_STAFF`; `staffId` được lấy từ JWT claim (không lấy từ request body) để
+          tránh giả mạo người thực hiện.
+
+        Service tự xác định actor thực hiện dựa trên JWT claim `role`:
+        - `role=CUSTOMER` → áp dụng luồng UC-11
+        - `role=HOTEL_STAFF` → áp dụng luồng UC-19, đồng thời ghi `CancellationLog`
+          (staffId, reason, performedBy=STAFF) trước khi khởi động Saga
+
+        **Quy trình xử lý đồng bộ (trong request):**
+        1. Lấy thông tin booking hiện tại → gọi `booking-service` (`GET /bookings/{bookingId}`)
+        2. Kiểm tra trạng thái booking có cho phép hủy theo use case tương ứng
+        3. Tính chính sách hủy (miễn phí/có phí/không hoàn) dựa trên thời điểm hủy so với checkin
+        4. Nếu là UC-19: ghi `CancellationLog`
+        5. Khởi tạo SagaState (`status=IN_PROGRESS`, `currentStep=CANCEL_STARTED`) +
+           publish `CancelBooking` command
+
+        **Sau khi trả response 202:**
+        - `booking-service` consume `CancelBooking`, cập nhật booking sang `CANCELLED`,
+          publish `BookingCancelled`
+        - Nếu đủ điều kiện hoàn tiền theo chính sách hủy: publish `RefundPayment` command
+          tới `payment-service`, được bảo vệ bởi Resilience4j CircuitBreaker (`paymentGateway`)
+        - Refund thành công → `SendBookingCancelled` (kèm xác nhận đã hoàn tiền)
+        - Refund thất bại → `SagaState` chuyển `REFUND_FAILED`, lên lịch retry qua
+          Kafka Retry Queue/Dead Letter Queue, đồng thời gửi `SendRefundFailed` cảnh báo
+          Customer và Admin
+        - Không đủ điều kiện hoàn tiền (chính sách "không hoàn") → chỉ gửi `SendBookingCancelled`,
+          không kích hoạt refund
+
+
+      operationId: cancelBooking
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelBookingRequest"
+            examples:
+              customer_cancel:
+                summary: Customer tự hủy (UC-11)
+                value:
+                  bookingId: BK-001
+                  reason: Đổi lịch trình cá nhân
+              staff_cancel:
+                summary: Staff hủy hộ (UC-19)
+                value:
+                  bookingId: BK-002
+                  reason: Khách yêu cầu hủy qua điện thoại
+      responses:
+        "202":
+          description: |
+            Yêu cầu hủy đã được tiếp nhận và đang xử lý bất đồng bộ (Saga hủy + refund).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelBookingResponse"
+              example:
+                bookingId: BK-001
+                status: PROCESSING
+                message: Cancel request is being processed. Please check status with bookingId.
+
+        "400":
+          description: Request không hợp lệ hoặc trạng thái booking không cho phép hủy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                validation_error:
+                  summary: Thiếu field bắt buộc
+                  value:
+                    code: VALIDATION_ERROR
+                    message: "bookingId: must not be blank"
+                cannot_cancel_checked_in:
+                  summary: "UC-11: booking đã check-in, Customer không thể tự hủy"
+                  value:
+                    code: CANNOT_CANCEL_CHECKED_IN
+                    message: Booking is already checked in. Please contact the hotel directly.
+                cannot_cancel_invalid_state:
+                  summary: "UC-19: booking đã CHECKEDIN hoặc COMPLETED, Staff không thể hủy"
+                  value:
+                    code: CANNOT_CANCEL_INVALID_STATE
+                    message: Cannot cancel booking in CHECKEDIN or COMPLETED state
+
+        "401":
+          description: Thiếu JWT hoặc JWT không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: UNAUTHORIZED
+                message: Missing or invalid JWT token
+
+        "403":
+          description: |
+            Customer cố hủy booking không thuộc về mình, hoặc role trong JWT
+            không khớp với endpoint (ví dụ role khác `CUSTOMER`/`HOTEL_STAFF`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: FORBIDDEN
+                message: You are not allowed to cancel this booking
+
+        "404":
+          description: Không tìm thấy booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: BOOKING_NOT_FOUND
+                message: "Booking not found: BK-999"
+
+        "409":
+          description: |
+            Conflict — đã tồn tại một Saga hủy đang `IN_PROGRESS` cho booking này
+            (ví dụ do double-click hoặc retry trùng).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: SAGA_STATE_CONFLICT
+                message: A cancellation is already in progress for booking BK-001
+
+        "502":
+          description: |
+            `booking-service` trả về lỗi hoặc không phản hồi khi lấy thông tin booking.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: EXTERNAL_SERVICE_ERROR
+                message: "booking-service error: Connection refused"
+
+        "500":
+          $ref: "#/components/responses/InternalServerError"
 
 components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT được xác thực tại API Gateway. Token phải chứa claim `role`
+        (`CUSTOMER` hoặc `HOTEL_STAFF`) và `userId`/`staffId` tương ứng,
+        dùng để xác định actor thực hiện hành động hủy booking
+        (`performedBy`) mà không cần client tự khai báo trong request body.
+
   schemas:
+
+    HealthResponse:
+      type: object
+      description: Kết quả health check
+      properties:
+        status:
+          type: string
+          example: ok
+      required:
+        - status
+
+    RoomTypeRequest:
+      type: object
+      description: Thông tin một loại phòng trong yêu cầu đặt phòng
+      properties:
+        roomTypeId:
+          type: string
+          description: ID của loại phòng
+          example: RT-002
+        name:
+          type: string
+          description: Tên loại phòng
+          example: Deluxe Room
+        bedCount:
+          type: integer
+          description: Số giường trong phòng
+          example: 2
+        bookingQuantity:
+          type: integer
+          minimum: 1
+          description: Số phòng muốn đặt
+          example: 1
+        totalQuantity:
+          type: integer
+          description: Tổng số phòng loại này tại khách sạn (dùng để check availability phía client)
+          example: 10
+        price:
+          type: number
+          format: double
+          description: Giá mỗi phòng mỗi đêm
+          example: 2200000
+      required:
+        - roomTypeId
+        - bookingQuantity
+
     PlaceBookingRequest:
       type: object
-      required: [userId, hotelId, roomTypeList, checkin, checkout, numAdults, totalAmount, currency, paymentMethod, paymentToken, idempotencyKey]
+      description: Request body để khởi động luồng đặt phòng
       properties:
         userId:
           type: string
-          description: ID của user đang đặt phòng
+          description: ID của khách hàng đặt phòng
           example: US-001
         hotelId:
           type: string
-          description: ID của khách sạn mà user muốn đặt phòng
+          description: ID của khách sạn
           example: HT-001
         roomTypeList:
           type: array
+          description: Danh sách loại phòng muốn đặt (tối thiểu 1 phần tử)
+          minItems: 1
           items:
-            type: object
-            properties:
-              roomTypeId:
-                type: string
-                format: uuid
-              quantity:
-                type: integer
-                example: 1
-              price:
-                type: number
-                format: double
-                example: 1000000
+            $ref: "#/components/schemas/RoomTypeRequest"
         checkin:
           type: string
           format: date
-          description: Ngày check-in (không được là ngày trong quá khứ)
-          example: "2024-06-01"
+          description: |
+            Ngày check-in (định dạng `YYYY-MM-DD`).
+            Phải là ngày trong tương lai và trước `checkout`.
+          example: "2025-08-01"
         checkout:
           type: string
           format: date
-          description: Ngày check-out (phải sau checkin ít nhất 1 ngày)
-          example: "2024-06-05"
+          description: Ngày check-out (định dạng `YYYY-MM-DD`). Phải sau `checkin`.
+          example: "2025-08-04"
         numAdults:
           type: integer
-          description: Số lượng người lớn
+          minimum: 1
+          description: Số người lớn
           example: 2
         totalAmount:
           type: number
           format: double
-          description: Tổng số tiền phải thanh toán
-          example: 1000000
+          description: Tổng tiền đặt cọc (tính sẵn từ phía client)
+          example: 6600000
         currency:
           type: string
           description: Đơn vị tiền tệ
           example: VND
         paymentMethod:
           type: string
-          enum: [CREDIT_CARD]
           description: Phương thức thanh toán
           example: CREDIT_CARD
         idempotencyKey:
           type: string
-          description: Chuỗi duy nhất do client tạo ra để đảm bảo idempotency
-          example: 550e8400-e29b-41d4-a716-446
+          description: |
+            Key định danh duy nhất cho request này, dùng để đảm bảo idempotency.
+            Nên là UUID v4. Nếu request bị timeout hoặc lỗi mạng, retry với cùng key
+            sẽ không tạo booking trùng.
+          example: 8f4a7bca-fd31-45d5-9f95-111222333444
         paymentToken:
           type: string
-          description: Token thanh toán đã được tạo ra từ frontend (ví dụ Stripe PaymentIntent ID)
-          example: pi_1J2Y3Z4A5B6C7D8E9F0G
+          description: Token thanh toán từ payment provider (Stripe token, VNPay token, v.v.)
+          example: tok_visa_4242
+      required:
+        - userId
+        - hotelId
+        - roomTypeList
+        - checkin
+        - checkout
+        - numAdults
+        - totalAmount
+        - currency
+        - paymentMethod
+        - idempotencyKey
+        - paymentToken
 
-    PlaceBookingAccepted:
+    PlaceBookingResponse:
       type: object
+      description: |
+        Response khi yêu cầu đặt phòng được tiếp nhận thành công.
       properties:
         bookingId:
           type: string
-          format: uuid
-          description: ID booking vừa được tạo. Dùng để polling trạng thái tại booking-service.
-          example: bk-550e8400
+          description: ID booking được tạo
+          example: BK-3f2a1b4c-d5e6-7890-abcd-ef1234567890
         status:
           type: string
-          enum: [PENDING]
+          description: Trạng thái tại thời điểm trả về (luôn là `PENDING`)
+          enum:
+            - PENDING
           example: PENDING
         message:
           type: string
-          example: Yêu cầu đặt phòng đang được xử lý
-        pollingUrl:
-          type: string
-          description: URL để client polling trạng thái
-          example: /bookings/bk-550e8400
+          description: 
+          example: Booking request is being processed. Please check status with bookingId.
 
-    HealthResponse:
+      required:
+        - bookingId
+        - status
+        - message
+        
+
+    CancelBookingRequest:
       type: object
+      description: |
+        Request body để hủy booking. Dùng chung cho Customer (UC-11) và Hotel Staff (UC-19).
+
+        `bookingId` của khách hàng nào được phép hủy bởi chính khách hàng đó hay
+        bởi staff được xác định qua JWT, không qua field trong body — tránh giả mạo
+        người thực hiện hành động.
       properties:
+        bookingId:
+          type: string
+          description: ID của booking cần hủy
+          example: BK-001
+        reason:
+          type: string
+          description: |
+            Lý do hủy. Bắt buộc với UC-19 (Staff hủy hộ, cần lưu vào `CancellationLog`).
+            Tùy chọn với UC-11 (Customer tự hủy).
+          example: Khách yêu cầu hủy qua điện thoại
+      required:
+        - bookingId
+
+    CancelBookingResponse:
+      type: object
+      description: |
+        Response khi yêu cầu hủy được tiếp nhận thành công.
+        Đây là response trung gian — trạng thái cuối cùng (CANCELLED) và kết quả refund sẽ được gửi qua thông báo FCM và email.
+      properties:
+        bookingId:
+          type: string
+          description: ID của booking đang được hủy
+          example: BK-001
         status:
           type: string
-          example: ok
+          description: Trạng thái xử lý tại thời điểm trả về (luôn là `PROCESSING`)
+          enum:
+            - PROCESSING
+          example: PROCESSING
+        message:
+          type: string
+          description: 
+          example: Cancel request is being processed. Please check status with bookingId.
+        
+      required:
+        - bookingId
+        - status
+        - message
 
     ErrorResponse:
       type: object
+      description: Cấu trúc lỗi chuẩn của service
       properties:
         code:
           type: string
+          description: Mã lỗi định danh
+          enum:
+            - VALIDATION_ERROR
+            - USER_NOT_FOUND
+            - HOTEL_NOT_FOUND
+            - ROOM_TYPE_NOT_FOUND
+            - ROOM_TYPE_NOT_AVAILABLE
+            - BOOKING_NOT_FOUND
+            - CANNOT_CANCEL_CHECKED_IN
+            - CANNOT_CANCEL_INVALID_STATE
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - SAGA_STATE_CONFLICT
+            - EXTERNAL_SERVICE_ERROR
+            - INTERNAL_ERROR
           example: USER_NOT_FOUND
         message:
           type: string
-          example: User không tồn tại trong hệ thống
+          description: Mô tả lỗi chi tiết
+          example: "User not found: US-999"
+      required:
+        - code
+        - message
 
+  responses:
+
+    InternalServerError:
+      description: Lỗi server không xác định
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: INTERNAL_ERROR
+            message: Unexpected server error
