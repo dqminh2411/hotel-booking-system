@@ -2,11 +2,19 @@ package com.hotelbooking.userservice.repository;
 
 import com.hotelbooking.userservice.entity.UserEntity;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface UserRepository extends JpaRepository<UserEntity, String> {
+public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
     @EntityGraph(attributePaths = "roles")
-    Optional<UserEntity> findWithRolesById(String id);
+    Optional<UserEntity> findWithRolesByIdAndDeletedFalse(UUID id);
+
+    @EntityGraph(attributePaths = "roles")
+    Optional<UserEntity> findWithRolesByEmailIgnoreCaseAndDeletedFalse(String email);
+
+    boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByPhone(String phone);
 }

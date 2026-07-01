@@ -1,18 +1,14 @@
 package com.hotelbooking.userservice.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "users")
@@ -21,20 +17,43 @@ import lombok.Setter;
 public class UserEntity {
 
     @Id
-    @Column(name = "id", nullable = false, length = 255)
-    private String id;
+    @Column(name = "id", nullable = false)
+    private UUID id;
 
-    @Column(name = "name", nullable = false)
-    private String name;
-
-    @Column(name = "email", nullable = false, length = 255)
+    @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
     @Column(name = "phone", length = 20)
     private String phone;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
+    @Column(name = "full_name", nullable = false, length = 255)
+    private String fullName;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(name = "address", length = 500)
+    private String address;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false, columnDefinition = "user_status")
+    private UserStatus status;
+
+    @Column(name = "google_id", unique = true, length = 255)
+    private String googleId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private boolean deleted;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -43,5 +62,4 @@ public class UserEntity {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<RoleEntity> roles = new HashSet<>();
-
 }

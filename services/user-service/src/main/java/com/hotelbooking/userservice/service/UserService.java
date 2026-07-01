@@ -1,9 +1,18 @@
 package com.hotelbooking.userservice.service;
 
-import com.hotelbooking.userservice.dto.UserResponse;
+import com.hotelbooking.userservice.dto.*;
+import java.util.UUID;
 
 public interface UserService {
+    UserResponse register(RegisterUserRequest request);
 
-    UserResponse getUserById(String userId);
+    UserResponse verifyEmail(String token);
+
+    AuthResponse login(LoginRequest request);
+
+    AccessTokenResponse refreshAccessToken(String refreshToken);
+
+    UserResponse getCurrentUser(String authorizationHeader);
+
+    UserResponse getUserById(UUID userId);
 }
-

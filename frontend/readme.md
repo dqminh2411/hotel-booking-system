@@ -83,7 +83,7 @@ Frontend expose cổng `3000`.
 
 ```json
 {
-  "userId": "US-001",
+  "userId": "10000000-0000-0000-0000-000000000002",
   "hotelId": "HT-001",
   "roomTypeList": [
     { "roomTypeId": "RT-001", "quantity": 1, "price": 1500000 }
@@ -123,7 +123,7 @@ Trong đó:
 ## Dữ liệu demo cố định
 
 - Khách sạn: `HT-001` - Marriott Hanoi
-- User: `US-001` - Nguyen Duc Lam
+- User: `10000000-0000-0000-0000-000000000002` - Tran Thi Binh
 - 3 room types: `RT-001`, `RT-002`, `RT-003`
 
 ## Ghi chú

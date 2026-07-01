@@ -19,10 +19,10 @@ const HOTEL = {
 };
 
 const USER = {
-  id: 'US-001',
-  name: 'Đoàn Quang Minh',
-  email: 'doanminhyb04@gmail.com',
-  phone: '0901234561'
+  id: '10000000-0000-0000-0000-000000000002',
+  name: 'Tran Thi Binh',
+  email: 'binh.tran@email.com',
+  phone: '0901234562'
 };
 
 const ROOM_TYPES = [

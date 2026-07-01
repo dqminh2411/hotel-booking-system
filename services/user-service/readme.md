@@ -32,7 +32,7 @@
 
 | Field | Datatype | Constraint | Description |
 |-------|----------|------------|----------|
-| `id` | varchar(255) | PRIMARY KEY | id người dùng (ví dụ: `US-001`) |
+| `id` | UUID | PRIMARY KEY | Định danh người dùng |
 | `name` | text | NOT NULL | Tên người dùng |
 | `email` | varchar(255) | NOT NULL, UNIQUE | Địa chỉ email đăng nhập |
 | `phone` | varchar(20) | | Số điện thoại |
@@ -43,7 +43,7 @@
 
 | Field | Datatype | Constraint | Description                          |
 |-------|----------|------------|--------------------------------------|
-| `id` | varchar(255) | PRIMARY KEY | id của role (ví dụ: `RO-001`)        |
+| `id` | UUID | PRIMARY KEY | Định danh vai trò |
 | `name` | varchar(255) | NOT NULL, UNIQUE | Tên role (ví dụ: `CUSTOMER`, `HOST`) |
 | `description` | text | | Mô tả vai trò                        |
 
@@ -51,8 +51,8 @@
 
 | Field | Datatype | Constraint | Description |
 |-------|----------|------------|-------------|
-| `user_id` | varchar(255) | PK, FK → users.id | ID người dùng |
-| `role_id` | varchar(255) | PK, FK → roles.id | ID vai trò |
+| `user_id` | UUID | PK, FK → users.id | ID người dùng |
+| `role_id` | UUID | PK, FK → roles.id | ID vai trò |
 
 > `(user_id, role_id)` là composite primary key.
 
@@ -108,14 +108,14 @@ docker compose up --build user-db user-service
 
 ```bash
 curl http://localhost:5002/health
-curl http://localhost:5002/users/US-001
+curl http://localhost:5002/users/10000000-0000-0000-0000-000000000002
 ```
 
 Response mẫu:
 
 ```json
 {
-  "userId": "US-001",
+  "userId": "10000000-0000-0000-0000-000000000002",
   "name": "Nguyen Van An",
   "email": "an.nguyen@email.com",
   "phone": "0901234561",

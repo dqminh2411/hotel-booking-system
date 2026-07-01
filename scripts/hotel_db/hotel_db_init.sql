@@ -48,7 +48,7 @@ INSERT INTO hotels (id, name, description, host_id, address, image_url, created_
         'HT-001',
         'Marriott Hanoi',
         'Khách sạn 5 sao sang trọng tọa lạc tại trung tâm Hà Nội, cách Hồ Hoàn Kiếm 5 phút đi bộ.',
-        'US-H01',
+        '10000000-0000-0000-0000-000000000101',
         '12 Phan Chu Trinh, Hoan Kiem, Hanoi',
         'https://dynamic-media-cdn.tripadvisor.com/media/photo-o/0e/2d/28/dc/pool.jpg?w=700&h=-1&s=1',
         NOW()
@@ -57,7 +57,7 @@ INSERT INTO hotels (id, name, description, host_id, address, image_url, created_
         'HT-002',
         'Intercontinental Danang Sun Peninsula',
         'Khu nghỉ dưỡng 5 sao đẳng cấp thế giới trên bán đảo Sơn Trà, view biển tuyệt đẹp.',
-        'US-H01',
+        '10000000-0000-0000-0000-000000000101',
         'Bai Bac, Son Tra Peninsula, Da Nang',
         'https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg?cs=srgb&dl=pexels-pixabay-258154.jpg&fm=jpg',
         NOW()
@@ -66,7 +66,7 @@ INSERT INTO hotels (id, name, description, host_id, address, image_url, created_
         'HT-003',
         'Park Hyatt Saigon',
         'Khách sạn boutique 5 sao phong cách Pháp cổ điển tại trung tâm TP. Hồ Chí Minh.',
-        'US-H02',
+        '10000000-0000-0000-0000-000000000101',
         '2 Lam Son Square, District 1, Ho Chi Minh City',
         'https://images.pexels.com/photos/2034335/pexels-photo-2034335.jpeg?cs=srgb&dl=architecture-building-chairs-2034335.jpg&fm=jpg',
         NOW()
@@ -75,7 +75,7 @@ INSERT INTO hotels (id, name, description, host_id, address, image_url, created_
         'HT-004',
         'La Siesta Hoi An Resort',
         'Resort 4 sao yên tĩnh gần phố cổ Hội An, thiết kế kết hợp kiến trúc Việt truyền thống.',
-        'US-H02',
+        '10000000-0000-0000-0000-000000000101',
         'Cam Ha, Hoi An, Quang Nam',
         'https://wallpaperaccess.com/full/3434639.jpg',
         NOW()
