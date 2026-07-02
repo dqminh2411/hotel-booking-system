@@ -8,6 +8,8 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,7 +21,7 @@ public class BookingServiceClient {
 
     private final BookingServiceFeignClient bookingServiceFeignClient;
 
-    public Map<String, Integer> countActiveBookingsByRoomType(String hotelId, List<String> roomTypeIds, LocalDate checkin,
+    public Map<UUID, Integer> countActiveBookingsByRoomType(UUID hotelId, List<UUID> roomTypeIds, LocalDate checkin,
             LocalDate checkout) {
         if (roomTypeIds.isEmpty()) {
             return Map.of();
@@ -37,7 +39,7 @@ public class BookingServiceClient {
                 return Map.of();
             }
 
-            Map<String, Integer> result = new HashMap<>();
+            Map<UUID, Integer> result = new HashMap<>();
             response.activeBookingCount().forEach(item -> result.put(item.roomTypeId(), item.count().intValue()));
             return result;
         } catch (RetryableException ex) {

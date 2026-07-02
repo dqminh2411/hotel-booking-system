@@ -2,6 +2,7 @@ package com.hotelbooking.hotelservice.client;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import com.hotelbooking.hotelservice.dto.BookingCountResponse;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -14,8 +15,8 @@ public interface BookingServiceFeignClient {
 
     @GetMapping("/count")
     BookingCountResponse countBookings(
-            @RequestParam(required = false) String hotelId,
-            @RequestParam(required = false, name = "roomTypeList") List<String> roomTypeList,
+            @RequestParam(required = false) UUID hotelId,
+            @RequestParam(required = false, name = "roomTypeList") List<UUID> roomTypeList,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkin,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkout
     );
