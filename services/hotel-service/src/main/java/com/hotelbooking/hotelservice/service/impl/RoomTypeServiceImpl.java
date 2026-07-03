@@ -10,6 +10,7 @@ import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeImageEntity;
 import com.hotelbooking.hotelservice.exception.RoomTypeNotFoundException;
+import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.RoomTypeAmenityRepository;
 import com.hotelbooking.hotelservice.repository.RoomTypeImageRepository;
 import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
@@ -26,6 +27,7 @@ public class RoomTypeServiceImpl implements RoomTypeService{
     RoomTypeRepository roomTypeRepository;
     RoomTypeAmenityRepository roomTypeAmenityRepository;
     RoomTypeImageRepository roomTypeImageRepository;
+    RoomTypeMapper roomTypeMapper;
 
     @Override
     public RoomTypeDetailResponse getRoomTypeDetail(UUID roomTypeId){
@@ -33,11 +35,9 @@ public class RoomTypeServiceImpl implements RoomTypeService{
         RoomTypeEntity roomType = roomTypeRepository.findByIdAndIsDeletedFalse(roomTypeId)
                             .orElseThrow(() -> new RoomTypeNotFoundException(roomTypeId.toString()));
         
-        List<RoomTypeImageEntity> images = roomTypeImageRepository.findByRoom_Type_IdOrderByIsCoverDescCreatedAtAsc(roomTypeId);
+        List<RoomTypeImageEntity> images = roomTypeImageRepository.findByRoomType_IdOrderByIsCoverDescCreatedAtAsc(roomTypeId);
         List<AmenityEntity> amenities = roomTypeAmenityRepository.findActiveAmenitiesByRoomTypeId(roomTypeId);
 
-
-
-        return new RoomTypeDetailResponse();
+        return roomTypeMapper.toRoomTypeResponse(roomType, images, amenities);
     }
 }

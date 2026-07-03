@@ -8,5 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import com.hotelbooking.hotelservice.entity.RoomTypeImageEntity;
 
 public interface RoomTypeImageRepository extends JpaRepository<RoomTypeImageEntity, UUID>{
-    List<RoomTypeImageEntity> findByRoom_Type_IdOrderByIsCoverDescCreatedAtAsc(UUID roomTypeId);
+    List<RoomTypeImageEntity> findByRoomType_IdOrderByIsCoverDescCreatedAtAsc(UUID roomTypeId);
 }
