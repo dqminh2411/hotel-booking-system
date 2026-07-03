@@ -3,6 +3,7 @@ package com.hotelbooking.hotelservice.service.impl;
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
 import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.HotelImageEntity;
@@ -11,6 +12,7 @@ import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
+import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.HotelAmenityRepository;
 import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
@@ -43,6 +45,7 @@ public class HotelServiceImpl implements HotelService {
     HotelImageRepository hotelImageRepository;
     PolicyRepository policyRepository;
     HotelAmenityRepository hotelAmenityRepository;
+    RoomTypeMapper roomTypeMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -70,6 +73,16 @@ public class HotelServiceImpl implements HotelService {
         return hotelMapper.toHotelDetailsResponse(
                 hotel, images, policies, hotelAmenities, filteredRoomTypes, bookedCountByRoomType
         );
+    }
+
+    @Override
+    public List<RoomTypeResponse> getListRoomTypeByHotelId(UUID hotelId){
+        ensureHotelExists(hotelId);
+
+        List<RoomTypeEntity> roomTypes = roomTypeRepository
+                .findActiveByHotelIdWithCoverImage(hotelId);
+
+        return roomTypeMapper.toListRoomtypeResponse(roomTypes);
     }
 
     private void ensureHotelExists(UUID hotelId) {

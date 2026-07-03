@@ -2,6 +2,9 @@ package com.hotelbooking.hotelservice.entity;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import com.hotelbooking.hotelservice.constant.ScopeType;
 
 import jakarta.persistence.Column;
@@ -42,6 +45,7 @@ public class AmenityEntity {
 
     @Column(name = "scope", nullable = false)
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     ScopeType scope;
 
     @Column(name = "is_deleted", nullable = false)

@@ -15,7 +15,7 @@ public interface RoomTypeRepository extends JpaRepository<RoomTypeEntity, UUID> 
 
     Optional<RoomTypeEntity> findByIdAndIsDeletedFalse(UUID roomTypeId);
 
-    List<RoomTypeEntity> findByHotel_IdAndIdIn(String hotelId, List<String> roomTypeList);
+    List<RoomTypeEntity> findByHotel_IdAndIdIn(UUID hotelId, List<String> roomTypeList);
 
     @Query("""
             SELECT DISTINCT rt FROM RoomTypeEntity rt

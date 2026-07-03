@@ -2,6 +2,9 @@ package com.hotelbooking.hotelservice.entity;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import com.hotelbooking.hotelservice.constant.PolicyType;
 
 import jakarta.persistence.Column;
@@ -45,6 +48,7 @@ public class PolicyEntity {
 
     @Column(name = "type", nullable = false)
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     PolicyType type;
 
     @Column(name = "description", nullable = true)

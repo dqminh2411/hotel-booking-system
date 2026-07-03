@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import com.hotelbooking.hotelservice.constant.AdjustmentType;
 import com.hotelbooking.hotelservice.constant.PricingRuleType;
 
@@ -48,6 +51,7 @@ public class PricingRuleEntity {
 
     @Column(name = "type", nullable = false)
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     PricingRuleType type;
 
     @Column(name = "start_date", nullable = false)

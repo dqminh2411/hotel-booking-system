@@ -2,19 +2,50 @@
   "version": "0.2.0",
   "configurations": [
     {
-        "type": "java",
-        "name": "place booking service",
-        "request": "attach",
-        "projectName": "place-booking-service",
-        "hostName": "localhost",
-        "port": 5011
+      "type": "java",
+      "name": "place booking service",
+      "request": "attach",
+      "projectName": "place-booking-service",
+      "hostName": "localhost",
+      "port": 5011
     },
     {
-        "type": "java",
-        "name": "Attach to Booking Service",
-        "request": "attach",
-        "hostName": "localhost",
-        "port": 5010
+      "type": "java",
+      "name": "Attach to Booking Service",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5010
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot-HotelServiceApplication<hotel-service>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.hotelbooking.hotelservice.HotelServiceApplication",
+      "projectName": "hotel-service",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env",
+      "vmArgs": " -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=60598 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dspring.jmx.enabled=true -Djava.rmi.server.hostname=localhost -Dspring.application.admin.enabled=true -Dspring.boot.project.name=hotel-service"
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot-EurekaServerApplication<eureka-server>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.hotelbooking.eurekaserver.EurekaServerApplication",
+      "projectName": "eureka-server",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot-BookingServiceApplication<booking-service>",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "mainClass": "com.hotelbooking.bookingservice.BookingServiceApplication",
+      "projectName": "booking-service",
+      "args": "",
+      "envFile": "${workspaceFolder}/.env"
     }
-]
+  ]
 }

@@ -9,28 +9,29 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hotelbooking.hotelservice.dto.response.ApiResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeDetailResponse;
+import com.hotelbooking.hotelservice.service.RoomTypeService;
 
-import jakarta.validation.constraints.Pattern;
 import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
 @RestController
 @RequestMapping("/api/room-types")
+@RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class RoomTypeController {
 
-    static final String ID_PATTERN = "^[A-Za-z0-9-]+$";
+    RoomTypeService roomTypeService;
     
     @GetMapping("/{id}")
     public ApiResponse<RoomTypeDetailResponse> getRoomTypeDetail(
-            @PathVariable("id")
-            @Pattern(regexp = ID_PATTERN, message = "hotelId has invalid format")
-            UUID id){
+            @PathVariable("id") UUID id){
         
                 
         return ApiResponse.<RoomTypeDetailResponse>builder()
                             .code(200)
                             .message("Thông tin chi tiết loại phòng: " + id.toString())
+                            .data(roomTypeService.getRoomTypeDetail(id))
                             .build();
     }
 }

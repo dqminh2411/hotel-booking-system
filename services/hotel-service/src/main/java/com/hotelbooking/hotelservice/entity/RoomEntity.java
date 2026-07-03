@@ -2,6 +2,9 @@ package com.hotelbooking.hotelservice.entity;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
 import com.hotelbooking.hotelservice.constant.RoomStatus;
 
 import jakarta.persistence.Column;
@@ -52,6 +55,7 @@ public class RoomEntity {
 
     @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
+    @JdbcType(PostgreSQLEnumJdbcType.class)
     RoomStatus status = RoomStatus.AVAILABLE;
 
     @Column(name = "is_deleted", nullable = false)

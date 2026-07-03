@@ -4,9 +4,7 @@ import com.hotelbooking.hotelservice.dto.response.ApiResponse;
 import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -30,15 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class HotelController {
 
-    static final String ID_PATTERN = "^[A-Za-z0-9-]+$";
-
-    private final HotelService hotelService;
+    HotelService hotelService;
 
     @GetMapping("/{hotelId}")
     public ApiResponse<HotelDetailsResponse> getHotelById(
-            @PathVariable
-            @Pattern(regexp = ID_PATTERN, message = "hotelId has invalid format")
-            UUID hotelId,
+            @PathVariable UUID hotelId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkinDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkoutDate,
             @RequestParam(required = false)
@@ -56,5 +50,15 @@ public class HotelController {
                             .build();
     }
 
+    @GetMapping("/{hotelId}/room-types")
+    public ApiResponse<List<RoomTypeResponse>> getListRoomTypeByHotelId(
+        @PathVariable UUID hotelId
+    ){
+        return ApiResponse.<List<RoomTypeResponse>>builder()
+                .code(200)
+                .message("Lấy thành công danh sách các loại phòng của khách sạn: " + hotelId.toString())
+                .data(hotelService.getListRoomTypeByHotelId(hotelId))
+                .build();
+    }
 }
 

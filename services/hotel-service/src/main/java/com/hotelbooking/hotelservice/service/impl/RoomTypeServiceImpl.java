@@ -38,6 +38,6 @@ public class RoomTypeServiceImpl implements RoomTypeService{
         List<RoomTypeImageEntity> images = roomTypeImageRepository.findByRoomType_IdOrderByIsCoverDescCreatedAtAsc(roomTypeId);
         List<AmenityEntity> amenities = roomTypeAmenityRepository.findActiveAmenitiesByRoomTypeId(roomTypeId);
 
-        return roomTypeMapper.toRoomTypeResponse(roomType, images, amenities);
+        return roomTypeMapper.toRoomTypeDetailResponse(roomType, images, amenities);
     }
 }
