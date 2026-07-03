@@ -23,9 +23,11 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(RoomTypeNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleRoomTypeNotFound(RoomTypeNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse("ROOM_TYPE_NOT_FOUND", ex.getMessage()));
+    public ApiResponse<?> handleRoomTypeNotFound(RoomTypeNotFoundException ex) {
+        return ApiResponse.builder()
+                    .code(HttpStatus.NOT_FOUND.value())
+                    .message("ROOM_TYPE_NOT_FOUND: " + ex.getMessage())
+                    .build();
     }
 
     @ExceptionHandler(InvalidDateRangeException.class)

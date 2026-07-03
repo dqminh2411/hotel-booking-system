@@ -13,7 +13,7 @@ public interface RoomTypeRepository extends JpaRepository<RoomTypeEntity, UUID> 
 
     List<RoomTypeEntity> findByHotel_Id(UUID hotelId);
 
-    Optional<RoomTypeEntity> findById(UUID roomTypeId);
+    Optional<RoomTypeEntity> findByIdAndIsDeletedFalse(UUID roomTypeId);
 
     List<RoomTypeEntity> findByHotel_IdAndIdIn(String hotelId, List<String> roomTypeList);
 
