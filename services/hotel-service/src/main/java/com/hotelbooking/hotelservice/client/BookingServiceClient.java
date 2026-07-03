@@ -39,8 +39,12 @@ public class BookingServiceClient {
                 return Map.of();
             }
 
-            Map<UUID, Integer> result = new HashMap<>();
-            response.activeBookingCount().forEach(item -> result.put(item.roomTypeId(), item.count().intValue()));
+            Map<UUID, Integer> result = new HashMap<>();          
+            response.activeBookingCount().forEach(item -> {
+                int count = (item.bookingCount() != null) ? item.bookingCount().intValue() : 0;
+                result.put(item.roomTypeId(), count);
+            });
+            
             return result;
         } catch (RetryableException ex) {
             log.error("Booking-service is unavailable while counting active bookings", ex);
