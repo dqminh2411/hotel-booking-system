@@ -1,6 +1,8 @@
 package com.hotelbooking.hotelservice.exception;
 
-import com.hotelbooking.hotelservice.dto.ErrorResponse;
+import com.hotelbooking.hotelservice.dto.response.ApiResponse;
+import com.hotelbooking.hotelservice.dto.response.ErrorResponse;
+
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,21 +15,27 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(HotelNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleHotelNotFound(HotelNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse("HOTEL_NOT_FOUND", ex.getMessage()));
+    public ApiResponse<?> handleHotelNotFound(HotelNotFoundException ex) {
+        return ApiResponse.builder()
+                    .code(HttpStatus.NOT_FOUND.value())
+                    .message("HOTEL_NOT_FOUND: " + ex.getMessage())
+                    .build();
     }
 
     @ExceptionHandler(RoomTypeNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleRoomTypeNotFound(RoomTypeNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ErrorResponse("ROOM_TYPE_NOT_FOUND", ex.getMessage()));
+    public ApiResponse<?> handleRoomTypeNotFound(RoomTypeNotFoundException ex) {
+        return ApiResponse.builder()
+                    .code(HttpStatus.NOT_FOUND.value())
+                    .message("ROOM_TYPE_NOT_FOUND: " + ex.getMessage())
+                    .build();
     }
 
     @ExceptionHandler(InvalidDateRangeException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidDateRange(InvalidDateRangeException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("INVALID_DATE_RANGE", ex.getMessage()));
+    public ApiResponse<?> handleInvalidDateRange(InvalidDateRangeException ex) {
+        return ApiResponse.builder()
+                    .code(HttpStatus.BAD_REQUEST.value())
+                    .message("INVALID_DATE_RANGE: " + ex.getMessage())
+                    .build();
     }
 
     @ExceptionHandler({
@@ -49,6 +57,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+        ex.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("INTERNAL_ERROR", "Unexpected server error"));
     }

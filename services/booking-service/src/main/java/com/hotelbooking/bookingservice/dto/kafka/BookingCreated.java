@@ -2,12 +2,13 @@ package com.hotelbooking.bookingservice.dto.kafka;
 
 import com.hotelbooking.bookingservice.enums.PaymentMethod;
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record BookingCreated(
-    String sagaId,
+    UUID sagaId,
     String eventType,
-    String bookingId,
-    String userId,
+    UUID bookingId,
+    UUID userId,
     BigDecimal totalAmount,
     String currency,
     PaymentMethod paymentMethod,

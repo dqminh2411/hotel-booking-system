@@ -40,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BookingService {
     private static final String OUTBOX_TOPIC = "booking-events";
-    private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED);
+    private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CHECKEDIN);
 
     private final BookingRepository bookingRepository;
     private final BookedRoomTypeRepository bookedRoomTypeRepository;
@@ -48,7 +48,7 @@ public class BookingService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
 
-    public BookingResponse getBookingById(String bookingId) {
+    public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
 
@@ -67,20 +67,20 @@ public class BookingService {
         return new BookingResponse(booking.getId(), booking.getStatus(), details);
     }
 
-    public CountBookingsResponse countBookings(String hotelId, List<String> roomTypeList, LocalDate checkin, LocalDate checkout) {
+    public CountBookingsResponse countBookings(UUID hotelId, List<UUID> roomTypeList, LocalDate checkin, LocalDate checkout) {
         if (checkin == null || checkout == null) {
             throw new AppException("VALIDATION_ERROR", "checkin and checkout are required", HttpStatus.BAD_REQUEST);
         }
         if (!checkout.isAfter(checkin)) {
             throw new AppException("VALIDATION_ERROR", "checkout must be after checkin", HttpStatus.BAD_REQUEST);
         }
-        if ((hotelId == null || hotelId.isBlank()) && (roomTypeList == null || roomTypeList.isEmpty())) {
+        if ((hotelId == null || hotelId.toString().isBlank()) && (roomTypeList == null || roomTypeList.isEmpty())) {
             throw new AppException("VALIDATION_ERROR", "hotelId or roomTypeList is required", HttpStatus.BAD_REQUEST);
         }
 
-        List<String> safeRoomTypeList = roomTypeList == null ? List.of() : roomTypeList;
+        List<UUID> safeRoomTypeList = roomTypeList == null ? List.of() : roomTypeList;
         List<ActiveBookingRoomType> activeBookingCount = bookingRepository.countActiveBookingsByRoomType(
-            blankToNull(hotelId),
+            hotelId,
             safeRoomTypeList,
             safeRoomTypeList.isEmpty(),
             checkin,
@@ -92,7 +92,7 @@ public class BookingService {
     }
 
     @Transactional
-    public BookingResponse updateBookingStatus(String bookingId, BookingStatus newStatus) {
+    public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
 
@@ -130,7 +130,7 @@ public class BookingService {
             return;
         }
 
-        Map<String, CreateBookingCommand.RoomTypeItem> roomTypeMap = command.roomTypeList().stream()
+        Map<UUID, CreateBookingCommand.RoomTypeItem> roomTypeMap = command.roomTypeList().stream()
             .collect(Collectors.toMap(CreateBookingCommand.RoomTypeItem::roomTypeId, Function.identity()));
 
         List<ActiveBookingRoomType> activeRows = bookingRepository.countActiveBookingsByRoomType(
@@ -141,7 +141,7 @@ public class BookingService {
             command.checkout(),
             ACTIVE_STATUSES
         );
-        Map<String, Long> activeByRoomType = activeRows.stream()
+        Map<UUID, Long> activeByRoomType = activeRows.stream()
             .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
 
 
@@ -173,7 +173,7 @@ public class BookingService {
                 unavailableRoomTypes.add(item.name());
             }
             BookedRoomTypeEntity entity = new BookedRoomTypeEntity();
-            entity.setId("BR-" + UUID.randomUUID());
+            entity.setId(UUID.randomUUID());
             entity.setBookingId(command.bookingId());
             entity.setRoomTypeId(item.roomTypeId());
             entity.setQuantity(item.bookingQuantity());
@@ -222,16 +222,16 @@ public class BookingService {
     }
 
     @Transactional
-    public void handleConfirmBooking(String sagaId, String bookingId) {
+    public void handleConfirmBooking(UUID sagaId, UUID bookingId) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CONFIRMED, "BookingConfirmed","");
     }
 
     @Transactional
-    public void handleCancelBooking(String sagaId, String bookingId, String reason) {
+    public void handleCancelBooking(UUID sagaId, UUID bookingId, String reason) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CANCELLED, "BookingCancelled", reason);
     }
 
-    private void updateStatusFromCommand(String sagaId, String bookingId, BookingStatus targetStatus, String eventType, String reason) {
+    private void updateStatusFromCommand(UUID sagaId, UUID bookingId, BookingStatus targetStatus, String eventType, String reason) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
         booking.setStatus(targetStatus);
@@ -260,7 +260,7 @@ public class BookingService {
         }
     }
 
-    private BookingDetail getBookingDetailByBookingId(String bookingId) {
+    private BookingDetail getBookingDetailByBookingId(UUID bookingId) {
         BookingInfoEntity bookingInfo = bookingInfoRepository.findById(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_DETAIL_NOT_FOUND", "Booking detail does not exist", HttpStatus.NOT_FOUND));
 
