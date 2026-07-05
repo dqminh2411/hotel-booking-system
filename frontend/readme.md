@@ -2,29 +2,25 @@
 
 ## Tổng quan
 
-Frontend này là ứng dụng React 1 trang (single page) phục vụ demo luồng đặt phòng:
+Frontend này là ứng dụng React 1 trang (single page) phục vụ cho hệ thống đặt phòng khách sạn.
 
-- Hiển thị thông tin cố định của 1 khách sạn (`HT-001`)
-- Hiển thị 3 loại phòng có checkbox/số lượng để người dùng chọn
-- Form đặt phòng với thông tin user cố định, ngày checkin/checkout, số người lớn, thông tin thanh toán demo
-- Tạo `paymentToken` giả và `idempotencyKey` cho mỗi lần submit
-- Gọi API `POST /place-booking`
-- Polling `GET /bookings/{bookingId}` mỗi 2 giây
-- Hiển thị spinner khi `PENDING`, màn hình thành công khi `CONFIRMED`, màn hình lỗi khi `CANCELLED` (hỗ trợ thêm `FAILED`)
 
 ## Công nghệ sử dụng
 
 | Thành phần | Lựa chọn |
 | --- | --- |
-| Framework | React 18 |
+| Language | JavaScript |
+| Framework | React 18, React Router, Axios |
 | Build tool | Vite 5 |
 | Styling | Tailwind CSS |
+| Notification | Firebase Messaging |
 | Đóng gói | npm |
 | Runtime container | Nginx (serve static build) |
 
 ## Cấu trúc thư mục
 
 ```text
+
 frontend/
 ├── Dockerfile
 ├── nginx.conf
@@ -34,10 +30,34 @@ frontend/
 ├── tailwind.config.js
 ├── vite.config.js
 ├── readme.md
-└── src/
-    ├── App.jsx
-    ├── main.jsx
-    └── index.css
+└── src
+    ├── app
+    │   ├── router.jsx
+    │   └── providers.jsx
+    ├── shared
+    │   ├── api
+    │   │   └── axiosClient.js
+    │   ├── components
+    │   ├── hooks
+    │   ├── utils
+    │   └── types
+    ├── features
+    │   ├── auth
+    │   ├── hotel-search
+    │   ├── hotel-detail
+    │   ├── booking
+    │   ├── payment
+    │   ├── notification
+    │   ├── tenant
+    │   ├── staff
+    │   └── admin
+    └── pages
+        ├── HomePage.jsx
+        ├── LoginPage.jsx
+        ├── RegisterPage.jsx
+        ├── SearchPage.jsx
+        ├── HotelDetailPage.jsx
+        └── BookingPage.jsx
 ```
 
 ## Biến môi trường
@@ -46,12 +66,16 @@ Frontend sử dụng biến môi trường Vite:
 
 | Biến | Mô tả | Mặc định |
 | --- | --- | --- |
-| `VITE_API_URL` | Base URL của API Gateway | `http://localhost:8080` |
+| `VITE_API_BASE_URL` | Base URL của API Gateway | `http://localhost:8080` |
+| `VITE_GOOGLE_CLIENT_ID` | Google OAuth Web Client ID | Trống |
+| `VITE_GOOGLE_AUTH_PATH` | Endpoint đăng nhập Google | `/api/users/oauth/google` |
 
 Ví dụ trong `.env` (tại root project):
 
 ```dotenv
-VITE_API_URL=http://localhost:8080
+VITE_API_BASE_URL=http://localhost:8080
+VITE_GOOGLE_CLIENT_ID=your-google-web-client-id
+VITE_GOOGLE_AUTH_PATH=/api/users/oauth/google
 ```
 
 ## Chạy local
@@ -98,18 +122,6 @@ Frontend expose cổng `3000`.
   "idempotencyKey": "uuid-v4"
 }
 ```
-
-### 2) Polling trạng thái
-
-Sau khi nhận `bookingId` từ `POST /place-booking`, frontend gọi:
-
-- `GET /bookings/{bookingId}` mỗi 2 giây
-
-Frontend dừng polling khi trạng thái là một trong các trạng thái kết thúc:
-
-- `CONFIRMED` -> hiện màn hình thành công
-- `CANCELLED` -> hiện màn hình thất bại
-- `FAILED` -> hiện màn hình thất bại
 
 ## Quy tắc tính tổng tiền
 
