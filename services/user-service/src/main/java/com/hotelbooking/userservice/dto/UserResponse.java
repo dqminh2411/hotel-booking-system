@@ -14,7 +14,6 @@ public record UserResponse(
         String avatarUrl,
         String address,
         String status,
-        String googleId,
         List<String> roles,
         Instant createdAt,
         Instant updatedAt

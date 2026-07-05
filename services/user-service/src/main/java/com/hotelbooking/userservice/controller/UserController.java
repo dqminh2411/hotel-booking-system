@@ -24,21 +24,6 @@ public class UserController {
         return userService.register(request);
     }
 
-    @PostMapping({"/verify-email"})
-    public UserResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        return userService.verifyEmail(request.token());
-    }
-
-    @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return userService.login(request);
-    }
-
-    @PostMapping("/refresh-token")
-    public AccessTokenResponse refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
-        return userService.refreshAccessToken(request.refreshToken());
-    }
-
     @GetMapping("/me")
     public UserResponse getCurrentUser(@RequestHeader(value = "Authorization", required = false) String authorization) {
         return userService.getCurrentUser(authorization);
