@@ -48,8 +48,9 @@ Notification Service tiêu thụ các event sau:
 
 | Topic | Event | Nguồn | Mục đích |
 |---|---|---|---|
-| `booking-events` | `booking.confirmed` | booking-service / place-booking-service | Thông báo xác nhận đặt phòng |
-| `booking-events` | `booking.cancelled` | booking-service / place-booking-service | Thông báo hủy đặt phòng |
+| `notification-commands` | `SendBookingConfirmed` | place-booking-service | Thông báo xác nhận đặt phòng |
+| `notification-commands` | `SendBookingCancelled` | place-booking-service | Thông báo hủy đặt phòng |
+| `notification-commands` | `SendBookingFailed` | place-booking-service | Thông báo thanh toán thất bại |
 | `booking-events` | `checkin.reminder` | booking-service / scheduler | Nhắc check-in |
 | `payment-events` | `payment.confirmed` | payment-service | Thông báo thanh toán thành công |
 | `payment-events` | `payment.failed` | payment-service | Thông báo thanh toán thất bại (optional) |
@@ -64,25 +65,24 @@ Hệ thống đang chạy (`docs/architecture.md`, code trong `services/notifica
 
 | | Hiện tại | Mục tiêu (tài liệu này) |
 |---|---|---|
-| Kafka topic | `notification-commands` | `booking-events`, `payment-events`, `notification-internal` (+ giữ legacy trong giai đoạn chuyển) |
-| Event type | `SendBookingConfirmed`, `SendBookingFailed` | `booking.confirmed`, `booking.cancelled`, … |
+| Kafka topic | `notification-commands` | notificaition vẫn consume sự kiện qua topic này |
+| Event type | `SendBookingConfirmed`, `SendBookingFailed` | vẫn giữ nguyên 2 event này, notification sẽ consume và thực hiện gửi email và push notification FCM |
 | Lưu trữ | Không có DB; gửi email trực tiếp | `notification_db` + inbox + delivery log |
 | REST | `POST /notifications/email` (nội bộ) | `/api/notifications/*` qua Gateway + JWT |
 | Push | Chưa có | FCM qua `device_tokens` |
 
-Lộ trình gợi ý:
+Hướng đi gợi ý:
 
-1. **Phase 1 — Tương thích ngược:** Consumer vẫn lắng nghe `notification-commands`, map `SendBookingConfirmed` → `BOOKING_CONFIRMED`, `SendBookingFailed` → `BOOKING_CANCELLED`; đồng thời ghi `notifications` + `notification_delivery_logs`.
-2. **Phase 2 — Inbox API:** Bật REST `/api/notifications/my`, `/read`, `/device-token` qua Gateway.
-3. **Phase 3 — Domain events:** place-booking-service publish `booking.confirmed` / `booking.cancelled` lên `booking-events`; ngừng dùng `SendBookingConfirmed` khi tất cả consumer đã migrate.
-4. **Phase 4 — Broadcast + FCM:** Bật broadcast async và push notification.
+1. Cài đặt `/device-token` để lưu FCM token của thiết bị người dùng sau khi người dùng đăng nhập, cấp quyền thông báo. Token này được dùng để gửi push notification.
+2. Notification Service vẫn consume `notification-commands` để gửi thông báo cho khách hàng (email + push) như hiện tại, nhưng đồng thời ghi nhận vào `notifications` + `notification_delivery_logs` để lưu inbox và trạng thái gửi.
+3. Cài đặt REST `/api/notifications/my` để người dùng xem inbox, `/read` để đánh dấu đã đọc.
 
-Mapping event legacy → domain:
-
-| Legacy (`notification-commands`) | Domain event | `event_type` trong DB |
+Map event từ `notification-commands` sang `notifications`:
+| Event | Mục đích | Ghi nhận vào DB |
 |---|---|---|
-| `SendBookingConfirmed` | `booking.confirmed` | `BOOKING_CONFIRMED` |
-| `SendBookingFailed` | `booking.cancelled` | `BOOKING_CANCELLED` |
+| `SendBookingConfirmed` | Thông báo xác nhận đặt phòng | `notifications.event_type = BOOKING_CONFIRMED` |
+| `SendBookingFailed` | Thông báo thanh toán thất bại | `notifications.event_type = BOOKING_FAILED` |
+| `SendBookingCancelled` | Thông báo hủy đặt phòng | `notifications.event_type = BOOKING_CANCELLED` |
 
 ### 3.3. Gọi service khác
 
@@ -107,7 +107,7 @@ Database `notification_db` gồm các bảng chính sau:
 |---|---|---|---|
 | `id` | `UUID` | PK | Khóa chính |
 | `recipient_user_id` | `UUID` | not null, index | User nhận thông báo, tham chiếu logic tới User Service |
-| `event_type` | `VARCHAR(50)` | not null, index | `BOOKING_CONFIRMED`, `BOOKING_CANCELLED`, `PROMOTION`, `CHECKIN_REMINDER`, `PAYMENT_CONFIRMED`, `PAYMENT_FAILED` |
+| `event_type` | `VARCHAR(50)` | not null, index | `BOOKING_CONFIRMED`, `BOOKING_CANCELLED`, `PROMOTION`, `CHECKIN_REMINDER`, `PAYMENT_CONFIRMED`, `PAYMENT_FAILED`, `BOOKING_FAILED` |
 | `title` | `VARCHAR(255)` | not null | Tiêu đề thông báo |
 | `body` | `TEXT` | not null | Nội dung thông báo |
 | `payload` | `JSONB` | nullable | Dữ liệu bổ sung như `bookingId`, `hotelId`, `promotionId`, `couponCode`, `amount` |
