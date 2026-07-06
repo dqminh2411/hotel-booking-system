@@ -27,10 +27,10 @@ public class KafkaNotificationConsumerService {
         System.out.println(command);
 
         String content = templateService.buildContent(
-            EmailTemplate.valueOf(command.getEventType()),
+            EmailTemplate.valueOf(command.eventType()),
             command
         );
-        emailService.send(command.getTo(),"Notification",content);
+        emailService.send(command.to(),"Notification",content);
 
     }
 }

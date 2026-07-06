@@ -202,6 +202,26 @@ services:
     networks:
       - app-network
 
+  notification-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+      - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
   user-service:
     build: ./services/user-service
     ports:
@@ -387,6 +407,11 @@ services:
       - .env
     environment:
       SERVER_PORT: 5000
+      DB_HOST: notification-db
+      DB_PORT: 5432
+      DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+      DB_USER: ${NOTIFICATION_DB_USER:-postgres}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       KAFKA_CONSUMER_GROUP: notification-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
@@ -396,6 +421,8 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
     depends_on:
+      notification-db:
+        condition: service_healthy
       kafka:
         condition: service_healthy
       eureka-server:
@@ -414,4 +441,5 @@ volumes:
   user-db-data:
   hotel-db-data:
   booking-db-data:
+  notification-db-data:
   maven-cache:

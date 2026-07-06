@@ -2,48 +2,25 @@ package com.notification_service.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.util.List;
-import java.util.Map;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class EmailRequest {
-
-    @Email
-    @NotBlank
-    private String to;
-
-    @NotBlank
-    private String sagaId;
-
-    @NotBlank
-    private String eventType;
-
-    private String bookingId;
-
-    private BookingInfo booking;
-
-    private String reason;
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class BookingInfo {
-        private String bookingId;
-        private User customer;
-        private String checkin;
-        private String checkout;
-        private Integer numAdults;
-        private Double totalAmount;
-        private Hotel hotel;
-        private List<RoomType> roomTypeList;
-
-
+public record EmailRequest(
+    @Email @NotBlank String to,
+    @NotBlank String sagaId,
+    @NotBlank String eventType,
+    String bookingId,
+    BookingInfo booking,
+    String reason
+) {
+    public record BookingInfo(
+        String bookingId,
+        User customer,
+        String checkin,
+        String checkout,
+        Integer numAdults,
+        Double totalAmount,
+        Hotel hotel,
+        List<RoomType> roomTypeList
+    ) {
     }
 }
