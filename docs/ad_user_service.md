@@ -6,20 +6,19 @@
 
 **Bảng `users`**
 
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
-| --- | --- | --- | --- |
-| id | UUID | PK | Định danh người dùng |
-| email | VARCHAR(255) | UNIQUE, NOT NULL | Email đăng nhập |
-| phone | VARCHAR(20) | NULL | Số điện thoại |
-| password_hash | VARCHAR(255) | NULL | NULL nếu chỉ đăng nhập Google |
-| full_name | VARCHAR(255) | NOT NULL | Họ tên |
-| avatar_url | VARCHAR(500) | NULL | Ảnh đại diện |
-| address | VARCHAR(500) | NULL | Địa chỉ |
-| status | ENUM | NOT NULL, DEFAULT 'UNVERIFIED' | UNVERIFIED, ACTIVE, LOCKED |
-| google_id | VARCHAR(255) | UNIQUE, NULL | Định danh OAuth2 Google |
-| created_at | TIMESTAMP | NOT NULL | |
-| updated_at | TIMESTAMP | NOT NULL | |
-| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | Cờ đánh dấu xóa mềm (soft delete) |
+| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả                              |
+| --- | --- | --- |------------------------------------|
+| id | UUID | PK | Định danh người dùng               |
+| email | VARCHAR(255) | UNIQUE, NOT NULL | Email đăng nhập                    |
+| phone | VARCHAR(20) | NULL | Số điện thoại                      |
+| password_hash | VARCHAR(255) | NULL | NULL nếu chỉ đăng nhập bằng social |
+| full_name | VARCHAR(255) | NOT NULL | Họ tên                             |
+| avatar_url | VARCHAR(500) | NULL | Ảnh đại diện                       |
+| address | VARCHAR(500) | NULL | Địa chỉ                            |
+| status | ENUM | NOT NULL, DEFAULT 'UNVERIFIED' | UNVERIFIED, ACTIVE, LOCKED         |
+| created_at | TIMESTAMP | NOT NULL |                                    |
+| updated_at | TIMESTAMP | NOT NULL |                                    |
+| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | Cờ đánh dấu xóa mềm (soft delete)  |
 
 **Bảng `roles`**
 
@@ -39,6 +38,24 @@
 | role_id | UUID | PK, FK → roles.id | Vai trò |
 | created_at | TIMESTAMP | NOT NULL | Thời điểm gán vai trò |
 | is_deleted | BOOLEAN | NOT NULL, DEFAULT false | Cờ đánh dấu xóa mềm (soft delete) |
+
+**Bảng `auth_providers`**
+| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| --- | --- | --- | --- |
+| code | VARCHAR(20) | PK | Định danh nhà cung cấp xác thực |
+| name | VARCHAR(100) | NOT NULL | Tên nhà cung cấp |
+| created_at | TIMESTAMP | NOT NULL | Thời điểm tạo bản ghi |
+| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | Cờ đánh dấu xóa mềm (soft delete) |
+
+**Bảng `user_auth_providers`**
+| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| --- | --- | --- | --- |
+| user_id | UUID | PK, FK → users.id | Người dùng |
+| auth_provider_code | VARCHAR(20) | PK, FK → auth_providers.code |
+| provider_user_id | VARCHAR(255) | NOT NULL, UNIQUE | Định danh người dùng trên nhà cung cấp xác thực |
+| created_at | TIMESTAMP | NOT NULL | Thời điểm gán nhà cung cấp xác thực |
+| is_deleted | BOOLEAN | NOT NULL, DEFAULT false | Cờ đánh dấu xóa mềm (soft delete) |
+
 **Bảng `tenants`**
 
 | Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
@@ -113,6 +130,7 @@
 - `tenant_subscriptions.subscription_plan_id` → `subscription_plans.id` (N–1).
 - `refresh_tokens.user_id` → `users.id` (N–1).
 - `account_lock_history.user_id`, `account_lock_history.locked_by` → `users.id` (N–1, hai quan hệ riêng tới cùng bảng).
+- `user_auth_providers.user_id` → `users.id` (N–1), `user_auth_providers.auth_provider_code` → `auth_providers.code` (N–1). (một user có thể đăng nhập bằng nhiều nhà cung cấp xác thực, ví dụ Google, Facebook, v.v.)
 
 ### 1.3. ERD
 
@@ -138,7 +156,6 @@ erDiagram
         string avatar_url
         string address
         string status
-        string google_id
         timestamp created_at
         timestamp updated_at
         boolean is_deleted
@@ -159,6 +176,21 @@ erDiagram
         boolean is_deleted
     }
 
+    AUTH_PROVIDERS {
+        string code PK
+        string name
+        timestamp created_at
+        boolean is_deleted
+    }
+    
+    USER_AUTH_PROVIDERS {
+        UUID user_id PK, FK
+        string auth_provider_code PK, FK
+        string provider_user_id UNIQUE
+        timestamp created_at
+        boolean is_deleted
+    }
+    
     TENANTS {
         UUID id PK
         UUID owner_user_id FK
@@ -236,7 +268,7 @@ erDiagram
 
 ### 3.1. UC-01 - Đăng ký tài khoản
 
- 
+
 
 ```mermaid
 sequenceDiagram
@@ -277,25 +309,24 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor C as Customer
+    actor U as User
+    participant FE as Frontend
+    participant G as Google Identity Services
     participant GW as API Gateway
     participant US as User Service
-    participant Google as Google OAuth2
+    participant DB as User DB
 
-    C->>Google: Xác thực & cấp quyền
-    Google-->>C: authorization code
+    U->>FE: Click "Login with Google"
+    FE->>G: Open Google Sign-In popup
+    G-->>FE: Return Google ID Token
 
-    C->>GW: POST /api/users/oauth/google {code}
-    GW->>US: POST /api/users/oauth/google {code}
+    FE->>GW: POST /api/auth/google { idToken }
+    GW->>US: Forward request
 
-    US->>Google: Đổi authorization code lấy token
-    Google-->>US: id_token, access_token
+    US->>G: Verify ID Token
+    G-->>US: Token valid + user info
 
-    US->>Google: Lấy thông tin profile nếu cần
-    Google-->>US: google_id, email, name, avatar
-
-    US->>US: Tìm user theo google_id/email
-
+    US->>DB: Find user by email/googleId
     alt User chưa tồn tại
         US->>US: Tạo user mới với google_id, email, profile cơ bản
     else User tồn tại nhưng chưa liên kết Google
@@ -308,14 +339,18 @@ sequenceDiagram
 
     alt User bị khóa
         US-->>GW: 403 Forbidden {message: "Account is locked"}
-        GW-->>C: 403 Forbidden
+        GW-->>FE: 403 Forbidden
     else User hợp lệ
         US->>US: Sinh access token + refresh token
         US->>US: Lưu refresh token hash vào refresh_tokens
         US-->>GW: 200 OK / 201 Created {accessToken, refreshToken, user}
-        GW-->>C: 200 OK / 201 Created {accessToken, refreshToken, user}
+        GW-->>FE: 200 OK / 201 Created {accessToken, refreshToken, user}
+        FE->>FE: Store access token in local storage, refresh token in HttpOnly cookie
+        FE-->>U: Redirect user
     end
+    
 ```
+
 
 ### 3.4. UC-04 - Khôi phục mật khẩu
 

@@ -52,6 +52,23 @@ CREATE TABLE IF NOT EXISTS user_roles (
     PRIMARY KEY (user_id, role_id)
 );
 
+CREATE TABLE IF NOT EXISTS auth_providers (
+    code VARCHAR(20) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS user_auth_providers (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    auth_provider_code VARCHAR(20) NOT NULL REFERENCES auth_providers(code) ON DELETE CASCADE,
+    provider_user_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (user_id, auth_provider_code)
+);
+
+
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_user_id UUID NOT NULL UNIQUE REFERENCES users(id),
@@ -146,3 +163,6 @@ INSERT INTO user_roles (user_id, role_id) VALUES
     ('10000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001'),
     ('10000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000003')
 ON CONFLICT (user_id, role_id) DO NOTHING;
+
+INSERT INTO auth_providers(code,name) VALUES
+    ('GOOGLE','Google');

@@ -1,0 +1,120 @@
+import { useState } from 'react';
+import PublicHeader from '../shared/components/PublicHeader';
+
+function toDateInputValue(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+const today = toDateInputValue(new Date());
+const tomorrow = toDateInputValue(new Date(Date.now() + 86400000));
+
+const features = [
+  {
+    title: 'Giá rõ ràng',
+    description: 'So sánh lựa chọn phù hợp với ngân sách của bạn.',
+    icon: '₫',
+  },
+  {
+    title: 'Đặt phòng đơn giản',
+    description: 'Hoàn thành hành trình chỉ trong vài bước.',
+    icon: '✓',
+  },
+  {
+    title: 'Hỗ trợ hành trình',
+    description: 'Theo dõi trạng thái đặt phòng tại một nơi.',
+    icon: '24',
+  },
+];
+
+export default function HomePage() {
+  const [searchMessage, setSearchMessage] = useState('');
+
+  function handleSearch(event) {
+    event.preventDefault();
+    setSearchMessage('Tính năng tìm kiếm khách sạn sẽ được kết nối ở bước tiếp theo.');
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <PublicHeader />
+      <section className="bg-blue-700 pb-14 text-white">
+        <div className="mx-auto max-w-7xl px-4 pt-10 md:px-6 md:pt-14 lg:px-8">
+          <p className="text-sm font-semibold text-blue-200">Hơn cả một nơi để nghỉ</p>
+          <h1 className="mt-2 max-w-3xl text-3xl font-bold leading-tight md:text-5xl">
+            Tìm chỗ nghỉ phù hợp cho hành trình tiếp theo
+          </h1>
+          <p className="mt-4 max-w-2xl text-base text-blue-100 md:text-lg">
+            Khám phá khách sạn, khu nghỉ dưỡng và những điểm đến đáng nhớ.
+          </p>
+
+          <form
+            id="search"
+            onSubmit={handleSearch}
+            className="mt-8 grid gap-1 rounded-lg bg-amber-400 p-1.5 text-slate-900 shadow-lg md:grid-cols-[2fr_1fr_1fr_1fr_auto]"
+          >
+            <label className="rounded-md bg-white p-2">
+              <span className="block text-xs font-semibold text-slate-600">Điểm đến</span>
+              <input
+                required
+                name="destination"
+                placeholder="Bạn muốn đi đâu?"
+                className="mt-1 w-full border-0 p-0 text-sm outline-none placeholder:text-slate-400"
+              />
+            </label>
+            <label className="rounded-md bg-white p-2">
+              <span className="block text-xs font-semibold text-slate-600">Nhận phòng</span>
+              <input type="date" name="checkin" min={today} defaultValue={today} className="mt-1 w-full text-sm outline-none" />
+            </label>
+            <label className="rounded-md bg-white p-2">
+              <span className="block text-xs font-semibold text-slate-600">Trả phòng</span>
+              <input type="date" name="checkout" min={tomorrow} defaultValue={tomorrow} className="mt-1 w-full text-sm outline-none" />
+            </label>
+            <label className="rounded-md bg-white p-2">
+              <span className="block text-xs font-semibold text-slate-600">Khách</span>
+              <select name="guests" className="mt-1 w-full bg-white text-sm outline-none">
+                <option>2 người lớn</option>
+                <option>1 người lớn</option>
+                <option>3 người lớn</option>
+                <option>4 người lớn</option>
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-md bg-blue-700 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Tìm kiếm
+            </button>
+          </form>
+          {searchMessage && (
+            <p className="mt-3 rounded-md bg-blue-800 px-3 py-2 text-sm text-blue-50" role="status">
+              {searchMessage}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <main className="mx-auto max-w-7xl px-4 py-10 md:px-6 lg:px-8">
+        <section id="benefits">
+          <h2 className="text-xl font-semibold text-slate-900">Vì sao chọn HotelHub?</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {features.map((feature) => (
+              <article key={feature.title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <span className="grid h-10 w-10 place-items-center rounded-md bg-blue-50 text-sm font-bold text-blue-700">
+                  {feature.icon}
+                </span>
+                <h3 className="mt-4 text-lg font-semibold text-slate-900">{feature.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{feature.description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      <footer id="support" className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-6 text-sm text-slate-500 md:px-6 lg:px-8">
+          HotelHub · Nền tảng đặt phòng khách sạn
+        </div>
+      </footer>
+    </div>
+  );
+}

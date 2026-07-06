@@ -1,0 +1,127 @@
+# Docker Compose — Multi-container orchestration
+# Run: docker compose up --build
+# Docs: https://docs.docker.com/compose/
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "${FRONTEND_PORT:-3000}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - gateway
+    environment:
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+    networks:
+      - app-network
+
+  eureka-server:
+    build: ./services/eureka-server
+    ports:
+      - "${EUREKA_SERVER_PORT:-8761}:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health | grep -q UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+    volumes:
+      - ./services/eureka-server:/app
+      - /root/.m2
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8000"
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 8000
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    #      place-booking-service:
+    #        condition: service_healthy
+    #      booking-service:
+    #        condition: service_started
+    networks:
+      - app-network
+    volumes:
+      - ./gateway:/app
+      - maven-cache:/root/.m2
+
+  user-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${DB_EXTERNAL_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+      - ./scripts/user_db/user_db_init.sql:/docker-entrypoint-initdb.d/user_db_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  user-service:
+    build: ./services/user-service
+    ports:
+      - "${USER_SERVICE_PORT:-5002}:5000"
+      - "5012:5012"
+    env_file:
+      - .env
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5012
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SERVER_PORT: 5000
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      EMAIL_VERIFICATION_URL: ${EMAIL_VERIFICATION_URL:-http://localhost:3000/verify-email}
+    depends_on:
+      user-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - app-network
+    volumes:
+      - ./services/user-service:/app
+      - maven-cache:/root/.m2
+
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  user-db-data:
+#  hotel-db-data:
+#  booking-db-data:
+  maven-cache:
