@@ -44,14 +44,8 @@ public class HotelMapper {
     }
 
     private Address toAddress(HotelEntity hotel) {
-        String fullAddress = String.join(", ",
-                hotel.getAddress(),
-                hotel.getWard().getName(),
-                hotel.getDistrict().getName(),
-                hotel.getProvince().getName());
-
         return new Address(
-                fullAddress,
+                hotel.getAddress(),
                 new Province(hotel.getProvince().getCode(), hotel.getProvince().getName()),
                 new District(hotel.getDistrict().getCode(), hotel.getDistrict().getName()),
                 new Ward(hotel.getWard().getCode(), hotel.getWard().getName()));
