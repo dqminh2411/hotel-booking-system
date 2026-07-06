@@ -24,7 +24,6 @@ import java.util.Map;
 @EnableCaching
 public class RedisConfig {
 
-
     @Bean(name = "redisObjectMapper")
     public ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
@@ -32,12 +31,11 @@ public class RedisConfig {
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         mapper.activateDefaultTyping(
                 LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                ObjectMapper.DefaultTyping.EVERYTHING,
                 JsonTypeInfo.As.PROPERTY
         );
         return mapper;
     }
-
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(
@@ -58,7 +56,6 @@ public class RedisConfig {
         return template;
     }
 
-
     @Bean
     public RedisCacheManager cacheManager(
             RedisConnectionFactory connectionFactory,
@@ -74,8 +71,20 @@ public class RedisConfig {
                         RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer))
                 .disableCachingNullValues();
 
+        Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
+        cacheConfigs.put("hotel-detail",
+                defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("hotel-detail-availability",
+                defaultConfig.entryTtl(Duration.ofSeconds(30)));
+        cacheConfigs.put("room-types",
+                defaultConfig.entryTtl(Duration.ofMinutes(30)));
+
+		cacheConfigs.put("room-type-detail",
+                defaultConfig.entryTtl(Duration.ofMinutes(30)));
+
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig.entryTtl(Duration.ofMinutes(10)))
+                .withInitialCacheConfigurations(cacheConfigs)
                 .build();
     }
 }

@@ -31,6 +31,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -47,10 +48,17 @@ public class HotelServiceImpl implements HotelService {
     HotelAmenityRepository hotelAmenityRepository;
     RoomTypeMapper roomTypeMapper;
 
+
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "hotel-detail-availability", 
+                key = "#hotelId + '::' + #checkinDate + '::' + #checkoutDate + '::' + #guestNum + '::' + #roomNum",
+                unless = "#result == null"
+            )
     public HotelDetailsResponse getHotelDetail(UUID hotelId, LocalDate checkinDate, LocalDate checkoutDate, Integer guestNum, Integer roomNum) {
         validateAvailabilityInput(checkinDate, checkoutDate);
+
+        System.out.println("HOTEL-DETAIL - Lấy trong db");
 
         HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
                 .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
@@ -76,8 +84,12 @@ public class HotelServiceImpl implements HotelService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "room-types", key = "#hotelId", unless = "#result == null || #result.isEmpty()")
     public List<RoomTypeResponse> getListRoomTypeByHotelId(UUID hotelId){
         ensureHotelExists(hotelId);
+
+        System.out.println(" LIST ROOMTYPES - Lấy data từ db");
 
         List<RoomTypeEntity> roomTypes = roomTypeRepository
                 .findActiveByHotelIdWithCoverImage(hotelId);
