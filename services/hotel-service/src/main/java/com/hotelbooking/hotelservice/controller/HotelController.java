@@ -1,9 +1,9 @@
 package com.hotelbooking.hotelservice.controller;
 
-import com.hotelbooking.hotelservice.dto.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
-import com.hotelbooking.hotelservice.dto.PagedResponse;
-import com.hotelbooking.hotelservice.dto.RoomTypeResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelSummaryResponse;
+import com.hotelbooking.hotelservice.dto.response.PagedResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelAndRoomTypesResponse;
 
 @RestController
 @RequestMapping("/hotels")

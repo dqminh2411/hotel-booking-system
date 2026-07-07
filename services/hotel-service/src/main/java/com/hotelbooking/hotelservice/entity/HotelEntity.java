@@ -1,10 +1,8 @@
 package com.hotelbooking.hotelservice.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.Table;
+import com.hotelbooking.hotelservice.enums.HotelStatus;
+import jakarta.persistence.*;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +35,25 @@ public class HotelEntity {
     @Column(name = "host_id", nullable = false, length = 255)
     private String hostId;
 
+    @Column(name = "tenant_id", nullable = false, length = 255)
+    private String tenant_id;
+
     @Column(name = "address", nullable = false)
     @ToString.Include
     private String address;
+
+    @Column(name = "province_code", nullable = false, length = 2)
+    private String provinceCode;
+
+    @Column(name = "district_code", nullable = false, length = 3)
+    private  String districtCode;
+
+    @Column(name = "ward_code", nullable = false, length = 5)
+    private String wardCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column (name = "status", nullable = false)
+    private HotelStatus status;
 
     @Column(name = "image_url")
     private String imageUrl;
@@ -50,6 +64,10 @@ public class HotelEntity {
     @OneToMany(mappedBy = "hotel")
     private List<com.hotelbooking.hotelservice.entity.RoomTypeEntity> roomTypes = new ArrayList<>();
 
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted;
 
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 }
 

@@ -1,10 +1,9 @@
 package com.hotelbooking.hotelservice.service;
 
-import com.hotelbooking.hotelservice.dto.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
-import com.hotelbooking.hotelservice.dto.PagedResponse;
-import com.hotelbooking.hotelservice.dto.RoomTypeResponse;
-import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
+import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
+import com.hotelbooking.hotelservice.dto.response.*;
+import jakarta.ws.rs.BadRequestException;
+
 import java.time.LocalDate;
 import java.util.List;
 
@@ -19,5 +18,7 @@ public interface HotelService {
     RoomTypeResponse getRoomTypeById(String hotelId, String roomTypeId, LocalDate checkin, LocalDate checkout);
 
     HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList);
+
+    public PagedResponse<HotelSearchResponse> search(HotelSearchRequest request) ;
 }
 

@@ -6,8 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
-import com.hotelbooking.hotelservice.dto.PagedResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelSummaryResponse;
+import com.hotelbooking.hotelservice.dto.response.PagedResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
