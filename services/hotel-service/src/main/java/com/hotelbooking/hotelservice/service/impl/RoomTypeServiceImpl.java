@@ -3,8 +3,9 @@ package com.hotelbooking.hotelservice.service.impl;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeDetailResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
@@ -30,7 +31,15 @@ public class RoomTypeServiceImpl implements RoomTypeService{
     RoomTypeMapper roomTypeMapper;
 
     @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "room-type-detail", 
+                key = "#roomTypeId",
+                unless = "#result == null")
     public RoomTypeDetailResponse getRoomTypeDetail(UUID roomTypeId){
+        System.out.println("hello");
+        if(roomTypeId == null){
+            throw new RuntimeException("Lỗi dữ liệu đầu vào: " + roomTypeId);
+        }
         
         RoomTypeEntity roomType = roomTypeRepository.findByIdAndIsDeletedFalse(roomTypeId)
                             .orElseThrow(() -> new RoomTypeNotFoundException(roomTypeId.toString()));
