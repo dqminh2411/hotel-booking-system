@@ -7,6 +7,7 @@ import com.notification_service.dto.NotificationPageResponse;
 import com.notification_service.dto.NotificationResponse;
 import com.notification_service.dto.UpsertDeviceTokenRequest;
 import com.notification_service.enums.NotificationEventType;
+import com.notification_service.service.NotificationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,13 +30,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/notifications")
 public class NotificationController {
 
+    private final NotificationService notificationService;
+
+    public NotificationController(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
     @PostMapping("/device-token")
     public ResponseEntity<DeviceTokenResponse> upsertDeviceToken(
         @Valid @RequestBody UpsertDeviceTokenRequest request,
-        @RequestAttribute("userId") UUID userId
+        @RequestHeader("X-User-Id") UUID userId
     ) {
-        // TODO
-        return null;
+        return ResponseEntity.ok(notificationService.upsertDeviceToken(userId, request));
     }
 
     @GetMapping("/my")

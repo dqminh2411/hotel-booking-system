@@ -1,9 +1,10 @@
 package com.notification_service.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import java.util.UUID;
 
 public record Hotel(
-    String hotelId,
+    UUID hotelId,
     @NotBlank String name,
     String address
 ) {
