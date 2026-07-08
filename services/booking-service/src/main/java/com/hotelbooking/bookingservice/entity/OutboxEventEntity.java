@@ -20,7 +20,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 public class OutboxEventEntity {
     @Id
     @Column(name = "id")
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "topic", nullable = false)

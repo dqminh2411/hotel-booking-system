@@ -5,16 +5,18 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class PaymentSucceeded {
     private String eventType; // "PaymentSucceeded"
-    private String sagaId;
-    private String bookingId;
+    private UUID sagaId;
+    private UUID bookingId;
     private String paymentId;
-    private Double amount;
+    private BigDecimal amount;
     private String currency;
     private String transactionRef;
     private String processedAt;

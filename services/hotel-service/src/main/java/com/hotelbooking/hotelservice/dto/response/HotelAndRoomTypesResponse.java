@@ -1,5 +1,4 @@
-package com.place_booking_service.dto;
-
+package com.hotelbooking.hotelservice.dto.response;
 import java.util.List;
 
 public record HotelAndRoomTypesResponse(

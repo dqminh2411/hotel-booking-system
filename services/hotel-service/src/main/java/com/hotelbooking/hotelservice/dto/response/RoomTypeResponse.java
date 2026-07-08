@@ -1,9 +1,10 @@
 package com.hotelbooking.hotelservice.dto.response;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 public record RoomTypeResponse(
-        String roomTypeId,
+        UUID roomTypeId,
         String name,
         BigDecimal basePricePerNight,
         Integer maxGuests,

@@ -1,7 +1,9 @@
 package com.hotelbooking.bookingservice.dto.kafka;
 
+import java.util.UUID;
+
 public record UpdateBookingCommand(
     String eventType,
-    String bookingId
+    UUID bookingId
 ) {
 }

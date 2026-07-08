@@ -3,6 +3,7 @@ package com.place_booking_service.service.kafka;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +34,7 @@ public class KafkaConsumerService {
     public void bookingEventsHandler(String payloadJson) throws JsonProcessingException {
         Map<String, Object> payload = new ObjectMapper().readValue(payloadJson, Map.class);
         String eventType = (String) payload.get("eventType");
-        String sagaId = (String) payload.get("sagaId");
+        UUID sagaId = UUID.fromString((String) payload.get("sagaId"));
         System.out.println(eventType);
         Optional<SagaState> state= sagaStateRepository.findSagaStateById(sagaId);
         if(state.isEmpty()){
@@ -54,7 +55,7 @@ public class KafkaConsumerService {
     public void paymentEventsHandler(String payloadJson) throws JsonProcessingException {
         Map<String, Object> payload = new ObjectMapper().readValue(payloadJson, Map.class);
         String eventType = (String) payload.get("eventType");
-        String sagaId = (String) payload.get("sagaId");
+        UUID sagaId = UUID.fromString((String) payload.get("sagaId"));
         System.out.println(eventType);
         Optional<SagaState> state= sagaStateRepository.findSagaStateById(sagaId);
         if(state.isEmpty()){
@@ -105,7 +106,7 @@ public class KafkaConsumerService {
 
         System.out.println(bookingConfirmed);
 
-        String bookingId = bookingConfirmed.getBooking().getBookingId();
+        UUID bookingId = bookingConfirmed.getBooking().getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
 
         System.out.println(sagaOpt.isPresent());
@@ -137,7 +138,7 @@ public class KafkaConsumerService {
     private void handleBookingFailed(BookingFailed bookingFailed) {
 
         System.out.println(bookingFailed);
-        String bookingId = bookingFailed.getBooking().getBookingId();
+        UUID bookingId = bookingFailed.getBooking().getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
 
         if (sagaOpt.isEmpty()) {
@@ -168,7 +169,7 @@ public class KafkaConsumerService {
 
         System.out.println(bookingCancelled);
 
-        String bookingId = bookingCancelled.getBooking().getBookingId();
+        UUID bookingId = bookingCancelled.getBooking().getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
 
         if (sagaOpt.isEmpty()) {
@@ -197,7 +198,7 @@ public class KafkaConsumerService {
 
     private void handlePaymentSucceeded(PaymentSucceeded paymentSucceeded) {
         System.out.println("payment succeeded "+paymentSucceeded);
-        String bookingId = paymentSucceeded.getBookingId();
+        UUID bookingId = paymentSucceeded.getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
         if (sagaOpt.isEmpty()) {
             return;
@@ -216,7 +217,7 @@ public class KafkaConsumerService {
 
     private void handlePaymentFailed(PaymentFailed paymentFailed) {
         System.out.println("payment failed "+paymentFailed);
-        String bookingId = paymentFailed.getBookingId();
+        UUID bookingId = paymentFailed.getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
         if (sagaOpt.isEmpty()) {
             return;

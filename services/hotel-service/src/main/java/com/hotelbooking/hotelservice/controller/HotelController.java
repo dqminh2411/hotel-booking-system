@@ -1,8 +1,5 @@
 package com.hotelbooking.hotelservice.controller;
 
-import com.hotelbooking.hotelservice.dto.response.ApiResponse;
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDate;
@@ -20,6 +17,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.hotelbooking.hotelservice.dto.response.*;
 
 @RestController
 @RequestMapping("/api/hotels")
@@ -59,6 +58,14 @@ public class HotelController {
                 .message("Lấy thành công danh sách các loại phòng của khách sạn: " + hotelId.toString())
                 .data(hotelService.getListRoomTypeByHotelId(hotelId))
                 .build();
+    }
+
+    @GetMapping("/{hotelId}/requested-room-types")
+    public HotelAndRoomTypesResponse getHotelAndRequestedRoomTypes(
+            @PathVariable UUID hotelId,
+            @RequestParam(required = false, name = "roomTypeList") List<UUID> roomTypeList
+    ) {
+        return hotelService.getRequestedRoomTypesByHotel(hotelId, roomTypeList);
     }
 }
 

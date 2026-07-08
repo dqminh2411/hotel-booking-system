@@ -2,7 +2,10 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
+import com.hotelbooking.hotelservice.dto.response.HotelAndRoomTypesResponse;
 import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelSummaryResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeQuantityResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
@@ -148,6 +151,24 @@ public class HotelServiceImpl implements HotelService {
                 })
                 .collect(Collectors.toList());
     }
+    @Override
+    @Transactional(readOnly = true)
+    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList){
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+        HotelSummaryResponse h = new HotelSummaryResponse(hotel.getId(), hotel.getName(), hotel.getAddress());
+        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
+        if (roomTypes.isEmpty()) {
+            return new HotelAndRoomTypesResponse(h, List.of());
+        }
+
+        List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
+                .map(roomType -> new RoomTypeQuantityResponse(roomType.getId(), roomType.getQuantity()))
+                .toList();
+
+        return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
+    };
+
 }
 
 

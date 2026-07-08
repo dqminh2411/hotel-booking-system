@@ -14,9 +14,9 @@ import java.util.UUID;
 public class SagaState {
 
     @Id
-    private String id;
+    private UUID id;
 
-    private String bookingId;
+    private UUID bookingId;
 
     private String idempotencyKey;
 
