@@ -40,12 +40,18 @@ export default function HotelDetailPage() {
     setSearchParams(nextSearchParams);
   }
 
-  function handleBookRoomType(roomType) {
+  function handleBookRoomType(selections) {
+    if (!selections || selections.length === 0) return;
+
+    const totalSelectedRooms = selections.reduce((sum, selection) => sum + selection.quantity, 0);
+
     const bookingParams = new URLSearchParams({
       hotelId,
-      roomTypeId: roomType.roomTypeId,
-      guestNum: guestNum || String(roomType.maxGuests),
-      roomNum: roomNum || '1',
+      guestNum: guestNum || '2',
+      roomNum: roomNum || String(totalSelectedRooms),
+      rooms: JSON.stringify(
+        selections.map(({ roomTypeId, quantity }) => ({ roomTypeId, quantity })),
+      ),
     });
     if (checkinDate) bookingParams.set('checkinDate', checkinDate);
     if (checkoutDate) bookingParams.set('checkoutDate', checkoutDate);
@@ -72,7 +78,7 @@ export default function HotelDetailPage() {
               <HotelHeader hotel={hotel} />
               <HotelGallery images={hotel.imageUrls} hotelName={hotel.name} />
 
-              <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+              <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div className="space-y-8">
                   <HotelOverview description={hotel.description} />
                   <HotelAmenities amenities={hotel.amenities} />
@@ -93,6 +99,8 @@ export default function HotelDetailPage() {
 
               <RoomTypeList
                 roomTypes={hotel.availableRoomTypes}
+                checkinDate={checkinDate}
+                checkoutDate={checkoutDate}
                 onViewDetail={setSelectedRoomTypeId}
                 onBook={handleBookRoomType}
               />

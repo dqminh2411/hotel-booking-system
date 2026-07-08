@@ -44,3 +44,12 @@ export function formatAddress(address) {
 
   return parts.join(', ');
 }
+
+export function getNightsCount(checkinDate, checkoutDate) {
+  if (!checkinDate || !checkoutDate) return 0;
+
+  const diffMs = new Date(checkoutDate).getTime() - new Date(checkinDate).getTime();
+  const nights = Math.round(diffMs / 86400000);
+
+  return nights > 0 ? nights : 0;
+}
