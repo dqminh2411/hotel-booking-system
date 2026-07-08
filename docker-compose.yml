@@ -10,6 +10,11 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
     ports:
       - "${FRONTEND_PORT:-3000}:5173"
+    env_file:
+      - .env
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -50,6 +55,10 @@ services:
       place-booking-service:
         condition: service_healthy
       booking-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      notification-service:
         condition: service_started
     networks:
       - app-network
@@ -403,6 +412,7 @@ services:
     build: ./services/notification-service
     ports:
       - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
+      - "5013:5013" # debug
     env_file:
       - .env
     environment:
@@ -420,6 +430,7 @@ services:
       MAIL_PORT: ${MAIL_PORT}
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
+      FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
     depends_on:
       notification-db:
         condition: service_healthy
@@ -427,6 +438,10 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
     networks:
       - app-network
     volumes:

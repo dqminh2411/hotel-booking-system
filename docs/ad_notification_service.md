@@ -533,6 +533,28 @@ sequenceDiagram
     end
 ```
 
+### 8.5 Luồng đăng ký FCM token, đặt phòng, gửi push notification
+
+```mermaid
+sequenceDiagram
+    participant FE as React Client
+    participant PBS as Place Booking Service
+    participant BS as Booking Service
+    participant KK as Kafka
+    participant NS as Notification Service
+    participant FCM as Firebase Cloud Messaging
+
+    FE->>FE: Request notification permission
+    FE->>FE: Get FCM token
+    FE->>NS: Save FCM token (POST /api/notifications/device-token)
+
+    FE->>PBS: Create booking request
+    PBS->>BS: Create booking
+    BS-->>KK: SendBookingConfirmed/SendBookingFailed event
+    KK-->>NS: Consume SendBookingConfirmed/SendBookingFailed
+    NS->>FCM: Send push notification
+    FCM-->>FE: Booking success notification
+```
 ## 9. OpenAPI specification
 
 Đặc tả API chi tiết (schema, validation, examples, security) nằm tại [docs/api-specs/notification-service.yaml](docs/api-specs/notification-service.yaml).
