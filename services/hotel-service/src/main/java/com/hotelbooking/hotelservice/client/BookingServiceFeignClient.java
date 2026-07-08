@@ -10,7 +10,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@FeignClient(name = "booking-service", url = "http://localhost:5004", path = "/bookings")
+@FeignClient(name = "booking-service", url = "http://booking-service:5000", path = "/bookings")
 public interface BookingServiceFeignClient {
 
     @GetMapping("/count")
