@@ -12,11 +12,11 @@ import com.hotelbooking.hotelservice.repository.HotelRepository;
 import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
-import jakarta.validation.constraints.Min;
-import org.apache.coyote.BadRequestException;
 import org.springframework.transaction.annotation.Transactional;
+import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
+import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
+import com.hotelbooking.hotelservice.dto.AddressDTO;
 
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -200,7 +200,7 @@ public class HotelServiceImpl implements HotelService {
     // đây là phần Long thêm và sửa
 
     @Override
-    public PagedResponse<HotelSearchResponse> search(HotelSearchRequest request) {
+    public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) {
 
         validateRequest(request);
 
@@ -229,7 +229,12 @@ public class HotelServiceImpl implements HotelService {
 
         Map<String, Integer> bookingCounts = countActiveBooking(roomTypeIds, request.getCheckinDate(), request.getCheckoutDate());
 
-        return buildResponse(hotels, groupedRoomTypes, bookingCounts, request.getRoomNum());
+        return buildResponse(hotels,
+                groupedRoomTypes,
+                bookingCounts,
+                request.getRoomNum(),
+                request.getPage(),
+                request.getSize());
 
     }
 
@@ -271,12 +276,12 @@ public class HotelServiceImpl implements HotelService {
 
     }
 
-    private List<RoomTypeEntity> findRoomTypes(List<String> hotelIds, int guestNum) {
-        return roomTypeRepository.findByHotelIdsAndGuestNum(hotelIds, guestNum);
-    }
-
     private List<String> extractHotelIds(List<HotelEntity> hotels) {
         return hotels.stream().map(HotelEntity::getId).toList();
+    }
+
+    private List<RoomTypeEntity> findRoomTypes(List<String> hotelIds, int guestNum) {
+        return roomTypeRepository.findByHotelIdsAndGuestNum(hotelIds, guestNum);
     }
 
     private List<String> extractRoomTypeIds(List<RoomTypeEntity> roomTypes) {
@@ -303,53 +308,96 @@ public class HotelServiceImpl implements HotelService {
 
 
 
-    private PagedResponse<HotelSearchResponse> buildResponse(List<HotelEntity> hotels,
-                                                             Map<String, List<RoomTypeEntity>> groupedRoomTypes,
-                                                             Map<String, Integer> bookingCounts, int roomNum)  {
+    private PagedResponse<HotelSearchItemDTO> buildResponse(
+            List<HotelEntity> hotels,
+            Map<String, List<RoomTypeEntity>> groupedRoomTypes,
+            Map<String, Integer> bookingCounts,
+            int roomNum,
+            int page,
+            int size) {
 
-        // hotels: danh sách khách sạn
-        // groupedRoomTypes: Danh sách các loại phòng của mỗi khách sạn
-        // bookingCounts : số phòng đang được giữ
-        // int roomNum: soos phòng được yêu cầu đặt chỗ
-
-
-        List<HotelSearchResponse> responses = new ArrayList<>();
+        List<HotelSearchItemDTO> items = new ArrayList<>();
 
         for (HotelEntity hotel : hotels) {
 
-            // lấy danh sách roomType của hotel hiện tại
-            List<RoomTypeEntity> roomTypes = groupedRoomTypes.getOrDefault(
-                    hotel.getId(),
-                    Collections.emptyList()
-            );
+            List<RoomTypeEntity> roomTypes =
+                    groupedRoomTypes.getOrDefault(hotel.getId(), List.of());
 
-            if (roomTypes.isEmpty()) continue;
+            if (roomTypes.isEmpty()) {
+                continue;
+            }
 
             List<RoomTypeEntity> availableRoomTypes = new ArrayList<>();
 
             for (RoomTypeEntity roomType : roomTypes) {
 
-                int bookingCount = bookingCounts.getOrDefault(roomType.getId(), 0);
+                int bookingCount =
+                        bookingCounts.getOrDefault(roomType.getId(), 0);
 
-                int availableRooms = roomType.getQuantity() - bookingCount;
+                int availableRooms =
+                        roomType.getQuantity() - bookingCount;
 
                 if (availableRooms >= roomNum) {
                     availableRoomTypes.add(roomType);
                 }
-
             }
 
             if (availableRoomTypes.isEmpty()) {
                 continue;
             }
 
+            RoomTypeEntity cheapestRoom =
+                    availableRoomTypes.stream()
+                            .min(Comparator.comparing(RoomTypeEntity::getBasePricePerNight))
+                            .orElseThrow();
+
+            int availableRooms =
+                    cheapestRoom.getQuantity()
+                            - bookingCounts.getOrDefault(cheapestRoom.getId(), 0);
+
+            CheapestRoomTypeDTO cheapestRoomDto =
+                    CheapestRoomTypeDTO.builder()
+                            // đổi sang String nếu DTO sửa lại
+                            .roomTypeId(cheapestRoom.getId())
+                            .name(cheapestRoom.getName())
+                            .pricePerNight(cheapestRoom.getBasePricePerNight())
+                            .availableRooms(availableRooms)
+                            .build();
+
+            AddressDTO address =
+                    AddressDTO.builder()
+                            .fullAddress(hotel.getAddress())
+                            .province(null)
+                            .district(null)
+                            .ward(null)
+                            .build();
+
+            HotelSearchItemDTO item =
+                    HotelSearchItemDTO.builder()
+                            .hotelId(hotel.getId())
+                            .name(hotel.getName())
+                            .coverImageUrl(hotel.getImageUrl())
+                            .address(address)
+                            .policies(List.of())
+                            .cheapestRoomType(cheapestRoomDto)
+                            .build();
+
+            items.add(item);
         }
 
-        return null;
+        return new PagedResponse<>(
+                items,
+                items.size(),
+                page,
+                size
+        );
     }
 
 
 }
+
+
+
 
 
 

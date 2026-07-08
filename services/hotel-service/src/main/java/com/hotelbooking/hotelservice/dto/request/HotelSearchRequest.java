@@ -2,8 +2,10 @@ package com.hotelbooking.hotelservice.dto.request;
 
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
+import org.springframework.format.annotation.DateTimeFormat;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,10 +19,14 @@ import java.util.UUID;
 @Builder
 
 public class HotelSearchRequest {
+
+    @Pattern(regexp = "^\\d{2}$|^\\d{3}$|^\\d{5}$")
     private String locationCode;
 
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate checkinDate;
 
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate checkoutDate;
 
     @Min(1)

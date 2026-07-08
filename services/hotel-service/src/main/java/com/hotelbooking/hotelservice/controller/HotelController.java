@@ -1,10 +1,13 @@
 package com.hotelbooking.hotelservice.controller;
 
+import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
+import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.response.HotelSummaryResponse;
 import com.hotelbooking.hotelservice.dto.response.PagedResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -13,15 +16,11 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import com.hotelbooking.hotelservice.dto.response.HotelAndRoomTypesResponse;
 
 @RestController
-@RequestMapping("/hotels")
+@RequestMapping("/api/hotels")
 @Validated
 @RequiredArgsConstructor
 public class HotelController {
@@ -30,6 +29,8 @@ public class HotelController {
 
     private final HotelService hotelService;
 
+    // Comment tạm để phát triển chức năng tìm kiếm
+    /*
     @GetMapping
     public PagedResponse<HotelSummaryResponse> searchHotels(
             @RequestParam(required = false) String name,
@@ -39,6 +40,7 @@ public class HotelController {
     ) {
         return hotelService.searchHotels(name, address, page, size);
     }
+    */
 
     @GetMapping("/{hotelId}")
     public HotelDetailsResponse getHotelById(
@@ -82,5 +84,13 @@ public class HotelController {
     ) {
         return hotelService.getRoomTypeById(hotelId, roomTypeId, checkin, checkout);
     }
+
+    @GetMapping
+    public PagedResponse<HotelSearchItemDTO> searchHotels(
+            @Valid @ModelAttribute HotelSearchRequest request) {
+
+        return hotelService.search(request);
+    }
+
 }
 

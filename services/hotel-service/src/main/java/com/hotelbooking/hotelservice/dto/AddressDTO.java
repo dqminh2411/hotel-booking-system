@@ -14,6 +14,6 @@ public class AddressDTO {
     private String fullAddress;
 
     private LocationRefDTO province;
-    private LocationRefDTO distinct;
+    private LocationRefDTO district;
     private LocationRefDTO ward;
 }

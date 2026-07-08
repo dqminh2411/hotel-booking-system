@@ -13,7 +13,7 @@ import java.util.UUID;
 @Builder
 
 public class CheapestRoomTypeDTO {
-    private UUID roomTypeId;
+    private String roomTypeId;
 
     private String name;
 

@@ -1,5 +1,6 @@
 package com.hotelbooking.hotelservice.service;
 
+import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
 import jakarta.ws.rs.BadRequestException;
@@ -9,6 +10,7 @@ import java.util.List;
 
 public interface HotelService {
 
+    // Comment tạm cho method cũ
     PagedResponse<HotelSummaryResponse> searchHotels(String name, String address, int page, int size);
 
     HotelDetailsResponse getHotelById(String hotelId);
@@ -19,6 +21,6 @@ public interface HotelService {
 
     HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList);
 
-    public PagedResponse<HotelSearchResponse> search(HotelSearchRequest request) ;
+    public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) ;
 }
 
