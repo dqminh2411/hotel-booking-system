@@ -1,6 +1,6 @@
 package com.hotelbooking.hotelservice.client;
 
-import com.hotelbooking.hotelservice.dto.BookingCountResponse;
+import com.hotelbooking.hotelservice.dto.response.BookingCountResponse;
 import com.hotelbooking.hotelservice.exception.ExternalServiceException;
 import feign.FeignException;
 import feign.RetryableException;

@@ -3,6 +3,7 @@ package com.hotelbooking.hotelservice.exception;
 import com.hotelbooking.hotelservice.dto.response.ApiResponse;
 import com.hotelbooking.hotelservice.dto.response.ErrorResponse;
 
+import com.hotelbooking.hotelservice.dto.response.ErrorResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

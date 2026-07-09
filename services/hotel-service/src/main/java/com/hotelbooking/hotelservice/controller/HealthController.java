@@ -1,6 +1,6 @@
 package com.hotelbooking.hotelservice.controller;
 
-import com.hotelbooking.hotelservice.dto.HealthResponse;
+import com.hotelbooking.hotelservice.dto.response.HealthResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
