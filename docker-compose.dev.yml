@@ -33,7 +33,7 @@ services:
       - app-network
     volumes:
       - ./services/eureka-server:/app
-      - /root/.m2
+      - maven-cache:/root/.m2
 
   gateway:
     build: ./gateway
@@ -48,15 +48,34 @@ services:
     depends_on:
       eureka-server:
         condition: service_healthy
-    #      place-booking-service:
-    #        condition: service_healthy
-    #      booking-service:
-    #        condition: service_started
+      booking-service:
+        condition: service_healthy
+      hotel-service:
+        condition: service_healthy
+      user-service:
+        condition: service_started
     networks:
       - app-network
     volumes:
       - ./gateway:/app
       - maven-cache:/root/.m2
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - app-network
 
   user-db:
     image: postgres:16-alpine
@@ -77,12 +96,52 @@ services:
       retries: 10
     networks:
       - app-network
+  
+  hotel-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${HOTEL_DB_EXTERNAL_PORT:-5433}:5432"
+    environment:
+      POSTGRES_DB: ${HOTEL_DB_NAME}
+      POSTGRES_USER: ${HOTEL_DB_USER}
+      POSTGRES_PASSWORD: ${HOTEL_DB_PASSWORD}
+    volumes:
+      - hotel-db-data:/var/lib/postgresql/data
+      - ./scripts/hotel_db/hotel_db_init.sql:/docker-entrypoint-initdb.d/hotel_db_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HOTEL_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  booking-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${BOOKING_DB_EXTERNAL_PORT:-5434}:5432"
+    environment:
+      POSTGRES_DB: ${BOOKING_DB_NAME}
+      POSTGRES_USER: ${BOOKING_DB_USER}
+      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD}
+    volumes:
+      - booking-db-data:/var/lib/postgresql/data
+      - ./scripts/booking_db/booking_db_init.sql:/docker-entrypoint-initdb.d/booking_db_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BOOKING_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
 
   user-service:
     build: ./services/user-service
     ports:
       - "${USER_SERVICE_PORT:-5002}:5000"
-      - "5012:5012"
+      - "5012:5012" # debug port
     env_file:
       - .env
     command:
@@ -109,19 +168,97 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    # healthcheck:
+    #   test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 12
+    #   start_period: 30s
     networks:
       - app-network
     volumes:
       - ./services/user-service:/app
       - maven-cache:/root/.m2
 
+  hotel-service:
+    build: ./services/hotel-service
+    ports:
+      - "${HOTEL_SERVICE_PORT:-5003}:5000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${HOTEL_DB_HOST}
+      DB_PORT: ${HOTEL_DB_PORT}
+      DB_NAME: ${HOTEL_DB_NAME}
+      DB_USER: ${HOTEL_DB_USER}
+      DB_PASSWORD: ${HOTEL_DB_PASSWORD}
+      SERVER_PORT: 5000
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      hotel-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    volumes:
+      - ./services/hotel-service:/app
+      - maven-cache:/root/.m2
 
+  booking-service:
+    build: ./services/booking-service
+    ports:
+      - "${BOOKING_SERVICE_PORT:-5004}:5000"
+      - "5010:5010" # debug
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${BOOKING_DB_HOST}
+      DB_PORT: ${BOOKING_DB_PORT}
+      DB_NAME: ${BOOKING_DB_NAME}
+      DB_USER: ${BOOKING_DB_USER}
+      DB_PASSWORD: ${BOOKING_DB_PASSWORD}
+      SERVER_PORT: 5000
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010
+    depends_on:
+      booking-db:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    volumes:
+      - ./services/booking-service:/app
+      - maven-cache:/root/.m2
 networks:
   app-network:
     driver: bridge
 
 volumes:
   user-db-data:
-#  hotel-db-data:
-#  booking-db-data:
+  hotel-db-data:
+  booking-db-data:
   maven-cache:
+  redis-data:
