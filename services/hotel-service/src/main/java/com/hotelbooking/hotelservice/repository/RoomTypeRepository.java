@@ -25,6 +25,19 @@ public interface RoomTypeRepository extends JpaRepository<RoomTypeEntity, UUID> 
               AND (img.isCover = true OR img IS NULL)
             """)
     List<RoomTypeEntity> findActiveByHotelIdWithCoverImage(@Param("hotelId") UUID hotelId);
+    List<RoomTypeEntity> findByHotel_IdAndIdIn(String hotelId, List<String> roomTypeList);
+
+    @Query(value = """
+        SELECT * 
+        FROM room_types 
+        WHERE hotel_id IN (:hotelIds)
+          AND max_guests >= :guestNum
+          AND is_deleted = false 
+        ORDER BY hotel_id ASC,
+                 base_price_per_night ASC
+""", nativeQuery = true)
+    List<RoomTypeEntity> findByHotelIdsAndGuestNum(@Param("hotelIds") List<String> hotelIds,
+                                                   @Param("guestNum") int guestNum);
 }
 
 

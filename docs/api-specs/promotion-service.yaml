@@ -34,7 +34,6 @@ security:
   - bearerAuth: []
 
 paths:
-  /api/promotions:
     post:
       tags: [Promotions]
       summary: Create promotion
@@ -203,7 +202,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/promotions/{promotionId}:
     get:
       tags: [Promotions]
       summary: Get promotion detail
@@ -314,7 +312,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/promotions/{promotionId}/status:
     patch:
       tags: [Promotions]
       summary: Change promotion status
@@ -357,7 +354,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/promotions/validate:
     post:
       tags: [Promotion Validation]
       summary: Validate promotion and calculate discount
@@ -428,7 +424,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/promotions/usages/confirm:
     post:
       tags: [Promotion Usage]
       summary: Confirm promotion usage
@@ -479,7 +474,6 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /api/promotions/usages/cancel:
     post:
       tags: [Promotion Usage]
       summary: Cancel promotion usage
@@ -571,7 +565,6 @@ components:
             status: 400
             code: BAD_REQUEST
             message: Invalid request.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     Unauthorized:
       description: Missing, expired, or invalid JWT.
@@ -584,7 +577,6 @@ components:
             status: 401
             code: UNAUTHORIZED
             message: Authentication is required.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     Forbidden:
       description: Authenticated principal does not have the required role or tenant/hotel permission.
@@ -597,7 +589,6 @@ components:
             status: 403
             code: FORBIDDEN
             message: You are not allowed to manage this promotion.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     NotFound:
       description: Requested promotion, coupon, usage, hotel scope, or user context was not found.
@@ -610,7 +601,6 @@ components:
             status: 404
             code: PROMOTION_NOT_FOUND
             message: Promotion was not found.
-            path: /api/promotions/4fd7bdf0-69f8-4db7-8353-2f444d543c0a
             traceId: 9f4a3310b32c4fd0
     Conflict:
       description: Business conflict, duplicate coupon code, immutable money-impacting update, duplicate usage, or usage limit exceeded.
@@ -623,7 +613,6 @@ components:
             status: 409
             code: COUPON_CODE_ALREADY_EXISTS
             message: Coupon code already exists.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     UnprocessableEntity:
       description: Request is syntactically valid but violates validation or business rules.
@@ -636,7 +625,6 @@ components:
             status: 422
             code: PROMOTION_NOT_APPLICABLE
             message: Promotion cannot be applied to this booking.
-            path: /api/promotions/validate
             traceId: 9f4a3310b32c4fd0
             details:
               - field: bookingAmount
@@ -652,7 +640,6 @@ components:
             status: 500
             code: INTERNAL_SERVER_ERROR
             message: Unexpected server error.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
 
   schemas:

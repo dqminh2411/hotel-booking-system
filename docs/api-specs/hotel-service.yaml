@@ -436,7 +436,7 @@ components:
           format: uuid
         type:
           type: string
-          enum: [CANCELATION, CHECKIN, CHECKOUT, SMOKING, PAYMENT, PETS, CHILDREN]
+          enum: [CANCELLATION, CHECKIN, CHECKOUT, SMOKING, PAYMENT, PETS, CHILDREN]
         description:
           type: string
           nullable: true
