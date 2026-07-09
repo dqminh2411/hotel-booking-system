@@ -1,6 +1,6 @@
 package com.hotelbooking.hotelservice.dto;
 
-import com.hotelbooking.hotelservice.enums.PolicyType;
+import com.hotelbooking.hotelservice.constant.PolicyType;
 import lombok.*;
 
 import java.util.UUID;

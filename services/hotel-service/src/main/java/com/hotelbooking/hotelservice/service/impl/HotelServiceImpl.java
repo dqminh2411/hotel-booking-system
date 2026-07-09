@@ -2,8 +2,6 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
@@ -27,23 +25,18 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
+import java.rmi.server.UID;
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import com.hotelbooking.hotelservice.dto.Hotel;
 
 @Service
 @RequiredArgsConstructor
@@ -107,26 +100,25 @@ public class HotelServiceImpl implements HotelService {
         return roomTypeMapper.toListRoomtypeResponse(roomTypes);
     }
 
+    // @Override
+    // @Transactional(readOnly = true)
+    // public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList) {
+    //     HotelDetailsResponse hotelDetails = getHotelById(hotelId);
+    //     Hotel h = new Hotel(hotelDetails.hotelId().toString(), hotelDetails.name(), hotelDetails.address().fullAddress());
+    //     List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
+    //     if (roomTypes.isEmpty()) {
+    //         return new HotelAndRoomTypesResponse(h, List.of());
+    //     }
+
+    //     List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
+    //             .map(roomType -> new RoomTypeQuantityResponse(roomType.getId().toString(), roomType.getQuantity()))
+    //             .toList();
+
+    //     return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
+    // }
+
+
     private void ensureHotelExists(UUID hotelId) {
-    @Override
-    @Transactional(readOnly = true)
-    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList) {
-        HotelDetailsResponse hotelDetails = getHotelById(hotelId);
-        Hotel h = new Hotel(hotelDetails.hotelId(), hotelDetails.name(), hotelDetails.address());
-        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
-        if (roomTypes.isEmpty()) {
-            return new HotelAndRoomTypesResponse(h, List.of());
-        }
-
-        List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
-                .map(roomType -> new RoomTypeQuantityResponse(roomType.getId(), roomType.getQuantity()))
-                .toList();
-
-        return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
-    }
-
-
-    private void ensureHotelExists(String hotelId) {
         if (!hotelRepository.existsById(hotelId)) {
             throw new HotelNotFoundException(hotelId.toString());
         }
@@ -203,7 +195,7 @@ public class HotelServiceImpl implements HotelService {
             return new PagedResponse<>(List.of(), 0, request.getPage(), request.getSize());
         }
 
-        List<String> hotelIds = extractHotelIds(hotels);
+        List<UUID> hotelIds = extractHotelIds(hotels);
 
         List<RoomTypeEntity> roomTypes = findRoomTypes(hotelIds, request.getGuestNum());
 
@@ -216,11 +208,11 @@ public class HotelServiceImpl implements HotelService {
             );
         }
 
-        List<String> roomTypeIds = extractRoomTypeIds(roomTypes);
+        List<UUID> roomTypeIds = extractRoomTypeIds(roomTypes);
 
-        Map<String, List<RoomTypeEntity>> groupedRoomTypes = groupRoomTypeByHotel(roomTypes);
+        Map<UUID, List<RoomTypeEntity>> groupedRoomTypes = groupRoomTypeByHotel(roomTypes);
 
-        Map<String, Integer> bookingCounts = countActiveBooking(roomTypeIds, request.getCheckinDate(), request.getCheckoutDate());
+        Map<UUID, Integer> bookingCounts = countActiveBooking(roomTypeIds, request.getCheckinDate(), request.getCheckoutDate());
 
         return buildResponse(hotels,
                 groupedRoomTypes,
@@ -269,19 +261,19 @@ public class HotelServiceImpl implements HotelService {
 
     }
 
-    private List<String> extractHotelIds(List<HotelEntity> hotels) {
+    private List<UUID> extractHotelIds(List<HotelEntity> hotels) {
         return hotels.stream().map(HotelEntity::getId).toList();
     }
 
-    private List<RoomTypeEntity> findRoomTypes(List<String> hotelIds, int guestNum) {
+    private List<RoomTypeEntity> findRoomTypes(List<UUID> hotelIds, int guestNum) {
         return roomTypeRepository.findByHotelIdsAndGuestNum(hotelIds, guestNum);
     }
 
-    private List<String> extractRoomTypeIds(List<RoomTypeEntity> roomTypes) {
+    private List<UUID> extractRoomTypeIds(List<RoomTypeEntity> roomTypes) {
         return roomTypes.stream().map(RoomTypeEntity::getId).toList();
     }
 
-    private Map<String, List<RoomTypeEntity>> groupRoomTypeByHotel(List<RoomTypeEntity> roomTypes) {
+    private Map<UUID, List<RoomTypeEntity>> groupRoomTypeByHotel(List<RoomTypeEntity> roomTypes) {
         return roomTypes.stream()
                 .collect(Collectors.groupingBy(
                         room -> room.getHotel().getId()
@@ -290,7 +282,7 @@ public class HotelServiceImpl implements HotelService {
 
 
 
-    private Map<String, Integer> countActiveBooking(List<String> roomTypeIds, LocalDate checkin, LocalDate checkout) {
+    private Map<UUID, Integer> countActiveBooking(List<UUID> roomTypeIds, LocalDate checkin, LocalDate checkout) {
         return bookingServiceClient.countActiveBookingsByRoomType(
                 null,
                 roomTypeIds,
@@ -301,8 +293,8 @@ public class HotelServiceImpl implements HotelService {
 
     private PagedResponse<HotelSearchItemDTO> buildResponse(
             List<HotelEntity> hotels,
-            Map<String, List<RoomTypeEntity>> groupedRoomTypes,
-            Map<String, Integer> bookingCounts,
+            Map<UUID, List<RoomTypeEntity>> groupedRoomTypes,
+            Map<UUID, Integer> bookingCounts,
             int roomNum,
             int page,
             int size) {
@@ -349,7 +341,7 @@ public class HotelServiceImpl implements HotelService {
             CheapestRoomTypeDTO cheapestRoomDto =
                     CheapestRoomTypeDTO.builder()
                             // đổi sang String nếu DTO sửa lại
-                            .roomTypeId(cheapestRoom.getId())
+                            .roomTypeId(cheapestRoom.getId().toString())
                             .name(cheapestRoom.getName())
                             .pricePerNight(cheapestRoom.getBasePricePerNight())
                             .availableRooms(availableRooms)
@@ -365,9 +357,10 @@ public class HotelServiceImpl implements HotelService {
 
             HotelSearchItemDTO item =
                     HotelSearchItemDTO.builder()
-                            .hotelId(hotel.getId())
+                            .hotelId(hotel.getId().toString())
                             .name(hotel.getName())
-                            .coverImageUrl(hotel.getImageUrl())
+                            // .coverImageUrl(hotel.getImageUrl())
+                            .coverImageUrl(hotel.getHotelImages().get(0).getUrl()) // đang 0 biết nên sửa kiểu gì vì entity đnag 0 có imageURL nên lấy tạm cái ảnh đầu
                             .address(address)
                             .policies(List.of())
                             .cheapestRoomType(cheapestRoomDto)
