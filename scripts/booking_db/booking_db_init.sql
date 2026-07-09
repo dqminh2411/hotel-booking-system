@@ -17,14 +17,19 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- hỗ trợ gen_random_uuid()
 -- ────────────────────────────────────────────────────────────
 -- ENUM TYPES
 -- ────────────────────────────────────────────────────────────
+
 CREATE TYPE booking_status_enum AS ENUM (
-    'FAILED', 'PENDING', 'CONFIRMED', 'CANCELLED', 'CHECKEDIN', 'COMPLETED'
+    'FAILED',       -- Không đặt phòng thành công, diễn ra ở bước check availability ở booking service để tránh race-condition
+    'PENDING',      -- Phòng đang được giữ chỗ, chờ thanh toán tiền cọc
+    'CONFIRMED',    -- Đã thanh toán tiền cọc, booking được xác nhận
+    'CANCELLED',    -- Không thanh toán được trong thời hạn, đơn bị huỷ
+    'CHECKEDIN',    -- Khách hàng đã check-in
+    'COMPLETED'     -- Khách đã thanh toán đầy đủ, check-out, đơn hoàn thành
 );
 
 CREATE TYPE payment_method_enum AS ENUM (
-    'CREDIT_CARD'
+    'CREDIT_CARD'       -- Thanh toán qua thẻ tín dụng
 );
-
 
 -- ────────────────────────────────────────────────────────────
 -- BẢNG bookings
@@ -93,6 +98,10 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 -- ────────────────────────────────────────────────────────────
 -- INDEXES
 -- ────────────────────────────────────────────────────────────
+
+-- Dùng cho availability check (hotel-service gọi GET /bookings/count)
+-- Query: WHERE room_type_id = ? AND status IN ('PENDING','CONFIRMED')
+--        AND checkin_date < :checkout AND checkout_date > :checkin
 CREATE INDEX IF NOT EXISTS idx_bookings_availability
     ON bookings (checkin_date, checkout_date, status);
 
@@ -108,6 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_bookings_customer
 CREATE INDEX IF NOT EXISTS idx_bookings_status
     ON bookings (status);
 
+-- Index quan trọng cho OutboxRelay: chỉ scan các event chưa publish
 CREATE INDEX IF NOT EXISTS idx_outbox_unpublished
     ON outbox_events (published, created_at)
     WHERE published = false;

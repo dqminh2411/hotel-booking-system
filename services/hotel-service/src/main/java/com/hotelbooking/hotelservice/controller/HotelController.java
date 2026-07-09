@@ -1,6 +1,13 @@
 package com.hotelbooking.hotelservice.controller;
 
+import com.hotelbooking.hotelservice.dto.response.ApiResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
+import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
+import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
+import com.hotelbooking.hotelservice.dto.response.PagedResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDate;
 import java.util.List;
@@ -17,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.hotelbooking.hotelservice.dto.response.*;
 
@@ -59,6 +67,14 @@ public class HotelController {
                 .data(hotelService.getListRoomTypeByHotelId(hotelId))
                 .build();
     }
+
+    @GetMapping
+    public PagedResponse<HotelSearchItemDTO> searchHotels(
+            @Valid @ModelAttribute HotelSearchRequest request) {
+
+        return hotelService.search(request);
+    }
+
 
     @GetMapping("/{hotelId}/requested-room-types")
     public HotelAndRoomTypesResponse getHotelAndRequestedRoomTypes(

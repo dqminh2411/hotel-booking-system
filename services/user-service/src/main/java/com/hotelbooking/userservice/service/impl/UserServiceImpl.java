@@ -172,13 +172,13 @@ public class UserServiceImpl implements UserService {
                 "Refresh token is invalid, revoked or expired");
     }
 
-    private UserResponse toResponse(UserEntity user) {
+    public UserResponse toResponse(UserEntity user) {
         List<String> roles = user.getRoles().stream()
                 .map(RoleEntity::getName).distinct().sorted().toList();
         return new UserResponse(
                 user.getId(), user.getId(), user.getEmail(), user.getPhone(),
                 user.getFullName(), user.getFullName(), user.getAvatarUrl(), user.getAddress(),
-                user.getStatus().name(), user.getGoogleId(), roles, user.getCreatedAt(), user.getUpdatedAt()
+                user.getStatus().name(), roles, user.getCreatedAt(), user.getUpdatedAt()
         );
     }
 }

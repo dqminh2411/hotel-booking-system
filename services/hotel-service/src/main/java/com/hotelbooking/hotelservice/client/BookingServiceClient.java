@@ -1,6 +1,6 @@
 package com.hotelbooking.hotelservice.client;
 
-import com.hotelbooking.hotelservice.dto.BookingCountResponse;
+import com.hotelbooking.hotelservice.dto.response.BookingCountResponse;
 import com.hotelbooking.hotelservice.exception.ExternalServiceException;
 import feign.FeignException;
 import feign.RetryableException;
@@ -47,7 +47,7 @@ public class BookingServiceClient {
             
             return result;
         } catch (RetryableException ex) {
-            log.error("Booking-service is unavailable while counting active bookings", ex);
+            log.error("Booking-service timeout or connection issue: {}", ex.getMessage(), ex);
             throw new ExternalServiceException("BOOKING_SERVICE_UNAVAILABLE", "Booking service is unavailable");
         } catch (FeignException ex) {
             log.warn("Booking-service returned error status {} while counting active bookings", ex.status());

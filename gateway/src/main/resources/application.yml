@@ -4,6 +4,7 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
             allowedOrigins:
@@ -32,7 +33,11 @@ spring:
         - id: user-service-route
           uri: lb://user-service
           predicates:
-            - Path=/api/users,/api/users/**
+            - Path=/api/auth/**,/api/users,/api/users/**
+        - id: hotel-service-route
+          uri: lb://hotel-service
+          predicates:
+            - Path=/api/hotels/**,/api/room-types/**
         - id: notification-service-route
           uri: lb://notification-service
           predicates:

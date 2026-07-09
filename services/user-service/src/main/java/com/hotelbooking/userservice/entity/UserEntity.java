@@ -43,8 +43,6 @@ public class UserEntity {
     @Column(name = "status", nullable = false, columnDefinition = "user_status")
     private UserStatus status;
 
-    @Column(name = "google_id", unique = true, length = 255)
-    private String googleId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -62,4 +60,7 @@ public class UserEntity {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<RoleEntity> roles = new HashSet<>();
+
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<UserAuthProvider> authProviders = new HashSet<>();
 }
