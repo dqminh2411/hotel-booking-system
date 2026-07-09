@@ -2,9 +2,15 @@ package com.hotelbooking.bookingservice.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.util.UUID;
+
+import org.apache.kafka.common.protocol.types.Field.Bool;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -15,13 +21,14 @@ import lombok.Setter;
 public class BookedRoomTypeEntity {
     @Id
     @Column(name = "id")
-    private String id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
     @Column(name = "booking_id", nullable = false)
-    private String bookingId;
+    private UUID bookingId;
 
     @Column(name = "room_type_id", nullable = false)
-    private String roomTypeId;
+    private UUID roomTypeId;
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
@@ -34,4 +41,7 @@ public class BookedRoomTypeEntity {
 
     @Column(name = "subtotal", nullable = false)
     private BigDecimal subtotal;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 }

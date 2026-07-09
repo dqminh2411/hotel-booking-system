@@ -1,11 +1,6 @@
-package com.hotelbooking.hotelservice.dto.response;
+package com.hotelbooking.hotelservice.dto;
+import java.util.UUID;
 
-public record HotelSummaryResponse(
-        String hotelId,
-        String name,
-        String address,
-        Double starRating,
-        String thumbnailUrl
-) {
+public record HotelSummaryResponse(UUID hotelId, String name, String address) {
 }
 

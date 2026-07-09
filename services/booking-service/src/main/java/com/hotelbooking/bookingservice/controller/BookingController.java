@@ -8,6 +8,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,8 +30,8 @@ public class BookingController {
 
     @GetMapping("/count")
     public CountBookingsResponse countBookings(
-        @RequestParam(required = false) String hotelId,
-        @RequestParam(required = false) List<String> roomTypeList,
+        @RequestParam(required = false) UUID hotelId,
+        @RequestParam(required = false) List<UUID> roomTypeList,
         @RequestParam @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkin,
         @RequestParam @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkout
     ) {
@@ -37,12 +39,12 @@ public class BookingController {
     }
 
     @GetMapping("/{bookingId}")
-    public BookingResponse getBookingById(@PathVariable String bookingId) {
+    public BookingResponse getBookingById(@PathVariable UUID bookingId) {
         return bookingService.getBookingById(bookingId);
     }
 
     @PatchMapping("/{bookingId}/status")
-    public BookingResponse updateBookingStatus(@PathVariable String bookingId, @Valid @RequestBody UpdateBookingStatusRequest request) {
+    public BookingResponse updateBookingStatus(@PathVariable UUID bookingId, @Valid @RequestBody UpdateBookingStatusRequest request) {
         return bookingService.updateBookingStatus(bookingId, request.status());
     }
 }

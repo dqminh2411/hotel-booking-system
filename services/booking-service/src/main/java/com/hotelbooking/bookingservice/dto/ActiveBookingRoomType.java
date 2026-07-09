@@ -1,4 +1,6 @@
 package com.hotelbooking.bookingservice.dto;
 
-public record ActiveBookingRoomType(String roomTypeId, long bookingCount) {
+import java.util.UUID;
+
+public record ActiveBookingRoomType(UUID roomTypeId, long bookingCount) {
 }

@@ -1,73 +1,110 @@
 package com.hotelbooking.hotelservice.entity;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 import com.hotelbooking.hotelservice.enums.HotelStatus;
 import jakarta.persistence.*;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.dialect.PostgreSQLEnumJdbcType;
+
+import com.hotelbooking.hotelservice.constant.HotelStatus;
+
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.NoArgsConstructor;
 import lombok.ToString;
+import lombok.experimental.FieldDefaults;
 
 @Entity
 @Table(name = "hotels")
-@Getter
-@Setter
+@Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
+@FieldDefaults(level = AccessLevel.PRIVATE)
+@NoArgsConstructor
+@AllArgsConstructor
 public class HotelEntity {
 
     @Id
     @Column(name = "id", nullable = false, length = 255)
     @EqualsAndHashCode.Include
     @ToString.Include
-    private String id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    UUID id;
+
+    @Column(name = "tenant_id", nullable = false)
+    UUID tenantId;
 
     @Column(name = "name", nullable = false)
     @ToString.Include
-    private String name;
+    String name;
 
     @Column(name = "description")
-    private String description;
-
-    @Column(name = "host_id", nullable = false, length = 255)
-    private String hostId;
-
-    @Column(name = "tenant_id", nullable = false, length = 255)
-    private String tenant_id;
+    String description;
 
     @Column(name = "address", nullable = false)
     @ToString.Include
-    private String address;
+    String address;
 
-    @Column(name = "province_code", nullable = false, length = 2)
-    private String provinceCode;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "province_code", nullable = false)
+    ProvinceEntity province;
 
-    @Column(name = "district_code", nullable = false, length = 3)
-    private  String districtCode;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "district_code", nullable = false)
+    DistrictEntity district;
 
-    @Column(name = "ward_code", nullable = false, length = 5)
-    private String wardCode;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "ward_code", nullable = false)
+    WardEntity ward;
 
+    @Column(name = "status", nullable = false)
     @Enumerated(EnumType.STRING)
-    @Column (name = "status", nullable = false)
-    private HotelStatus status;
-
-    @Column(name = "image_url")
-    private String imageUrl;
-
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
-
-    @OneToMany(mappedBy = "hotel")
-    private List<com.hotelbooking.hotelservice.entity.RoomTypeEntity> roomTypes = new ArrayList<>();
+    @JdbcType(PostgreSQLEnumJdbcType.class)
+    HotelStatus status = HotelStatus.PENDING;
 
     @Column(name = "is_deleted", nullable = false)
-    private boolean isDeleted;
+    Boolean isDeleted = false;
+
+    @Column(name = "created_at", nullable = false)
+    Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
+    Instant updatedAt;
+
+    @OneToMany(mappedBy = "hotel")
+    @BatchSize(size = 30)
+    List<RoomTypeEntity> roomTypes = new ArrayList<>();
+
+    @OneToMany(mappedBy = "hotel")
+    @BatchSize(size = 30)
+    List<HotelImageEntity> hotelImages = new ArrayList<>();
+
+    @OneToMany(mappedBy = "hotel")
+    @BatchSize(size = 30)
+    List<PolicyEntity> policies = new ArrayList<>();
+
+    @OneToMany(mappedBy = "hotel")
+    @BatchSize(size = 30)
+    List<HotelAmenityEntity> hotelAmenities = new ArrayList<>();
 }
 
