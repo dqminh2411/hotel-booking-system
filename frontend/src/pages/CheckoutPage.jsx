@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useAuth from '../features/auth/hooks/useAuth';
 import { createBooking } from '../features/booking/api/bookingApi';
@@ -61,6 +61,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const checkoutDraft = useMemo(() => normalizeCheckoutDraft(location.state), [location.state]);
+  const idempotencyKeyRef = useRef(createIdempotencyKey());
   const [customer, setCustomer] = useState(() => ({
     fullName: user?.fullName || user?.name || '',
     email: user?.email || '',
@@ -75,6 +76,18 @@ export default function CheckoutPage() {
   const [bookingStatus, setBookingStatus] = useState('IDLE');
   const [activeBookingId, setActiveBookingId] = useState('');
   const [createdBooking, setCreatedBooking] = useState(null);
+
+  useEffect(() => {
+    if (!checkoutDraft || bookingStatus === 'CONFIRMED') return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [bookingStatus, checkoutDraft]);
 
   useEffect(() => {
     if (isAuthenticated || !checkoutDraft) return;
@@ -168,7 +181,7 @@ export default function CheckoutPage() {
       currency: 'VND',
       paymentMethod: 'CREDIT_CARD',
       paymentToken: createPaymentToken(),
-      idempotencyKey: createIdempotencyKey(),
+      idempotencyKey: idempotencyKeyRef.current,
     };
 
     try {
@@ -240,6 +253,14 @@ export default function CheckoutPage() {
             ← Quay lại khách sạn
           </Link>
         </div>
+
+        <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold">Lưu ý về phiên thanh toán</p>
+          <p className="mt-1">
+            Mỗi lần mở trang checkout được tính là một checkout attempt riêng. Nếu bạn tải lại trang rồi xác nhận lại,
+            hệ thống có thể tạo một yêu cầu đặt phòng mới với cùng thông tin.
+          </p>
+        </section>
 
         <section className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

@@ -75,6 +75,7 @@ public class FcmPushService {
 
         try {
             // get batch response of each message sent
+            // POST https://fcm.googleapis.com/v1/projects/<PROJECT_ID>/messages:send
             BatchResponse response = messaging.sendEachForMulticast(message);
             log.info(
                 "FCM notification sent to user {}: {} succeeded, {} failed",
