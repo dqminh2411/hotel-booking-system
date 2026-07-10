@@ -7,16 +7,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import com.place_booking_service.dto.HotelAndRoomTypesResponse;
 import org.springframework.web.bind.annotation.RequestParam;
 import java.util.List;
+import java.util.UUID;
 
 @FeignClient(name = "hotel-service")
 public interface HotelServiceClient {
 
-    @GetMapping("/hotels/{id}")
-    public Hotel getHotelById(@PathVariable("id") String id);
+    @GetMapping("/api/hotels/{id}")
+    public Hotel getHotelById(@PathVariable("id") UUID id);
 
-    @GetMapping("/hotels/{hotelId}/requested-room-types")
+    @GetMapping("/api/hotels/{hotelId}/requested-room-types")
     public HotelAndRoomTypesResponse getHotelAndRequestedRoomTypes(
-            @PathVariable("hotelId") String hotelId,
-            @RequestParam(required = false, name = "roomTypeList") List<String> roomTypeList
+            @PathVariable("hotelId") UUID hotelId,
+            @RequestParam(required = false, name = "roomTypeList") List<UUID> roomTypeList
     );
 }

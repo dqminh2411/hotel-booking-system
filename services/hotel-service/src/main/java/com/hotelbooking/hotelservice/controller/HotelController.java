@@ -26,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
 
+import com.hotelbooking.hotelservice.dto.response.*;
+
 @RestController
 @RequestMapping("/api/hotels")
 @Validated
@@ -73,5 +75,13 @@ public class HotelController {
         return hotelService.search(request);
     }
 
+
+    @GetMapping("/{hotelId}/requested-room-types")
+    public HotelAndRoomTypesResponse getHotelAndRequestedRoomTypes(
+            @PathVariable UUID hotelId,
+            @RequestParam(required = false, name = "roomTypeList") List<UUID> roomTypeList
+    ) {
+        return hotelService.getRequestedRoomTypesByHotel(hotelId, roomTypeList);
+    }
 }
 

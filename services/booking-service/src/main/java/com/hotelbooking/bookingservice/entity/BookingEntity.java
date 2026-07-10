@@ -27,7 +27,6 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 public class BookingEntity {
     @Id
     @Column(name = "id")
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "customer_id", nullable = false)

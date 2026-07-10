@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import PublicHeader from '../shared/components/PublicHeader';
 
 function toDateInputValue(date) {
@@ -7,6 +8,7 @@ function toDateInputValue(date) {
 
 const today = toDateInputValue(new Date());
 const tomorrow = toDateInputValue(new Date(Date.now() + 86400000));
+const DEMO_HOTEL_ID = 'b0000000-0000-0000-0000-000000000001';
 
 const features = [
   {
@@ -37,7 +39,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <PublicHeader />
-      <section className="bg-blue-700 pb-14 text-white">
+      <section className="bg-gradient-to-br from-slate-800 via-blue-800 to-sky-700 pb-14 text-white">
         <div className="mx-auto max-w-7xl px-4 pt-10 md:px-6 md:pt-14 lg:px-8">
           <p className="text-sm font-semibold text-blue-200">Hơn cả một nơi để nghỉ</p>
           <h1 className="mt-2 max-w-3xl text-3xl font-bold leading-tight md:text-5xl">
@@ -80,16 +82,25 @@ export default function HomePage() {
             </label>
             <button
               type="submit"
-              className="rounded-md bg-blue-700 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-800"
+              className="rounded-md bg-sky-700 px-6 py-3 text-sm font-semibold text-white hover:bg-sky-800"
             >
               Tìm kiếm
             </button>
           </form>
           {searchMessage && (
-            <p className="mt-3 rounded-md bg-blue-800 px-3 py-2 text-sm text-blue-50" role="status">
+            <p className="mt-3 rounded-md bg-white/10 px-3 py-2 text-sm text-blue-50 ring-1 ring-white/15" role="status">
               {searchMessage}
             </p>
           )}
+
+          <div className="mt-5">
+            <Link
+              to={`/hotels/${DEMO_HOTEL_ID}?checkinDate=${today}&checkoutDate=${tomorrow}&guestNum=2&roomNum=1`}
+              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+            >
+              Xem chi tiết khách sạn demo
+            </Link>
+          </div>
         </div>
       </section>
 

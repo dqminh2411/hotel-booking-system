@@ -1,4 +1,4 @@
-import { ACCESS_TOKEN_KEY, AUTH_USER_KEY } from '../../../shared/constants/storageKeys';
+import { ACCESS_TOKEN_KEY, AUTH_USER_KEY, FCM_TOKEN_KEY } from '../../../shared/constants/storageKeys';
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -22,7 +22,18 @@ export function setStoredUser(user) {
   }
 }
 
+export function getStoredFcmToken() {
+  return localStorage.getItem(FCM_TOKEN_KEY);
+}
+
+export function setStoredFcmToken(fcmToken) {
+  if (fcmToken) {
+    localStorage.setItem(FCM_TOKEN_KEY, fcmToken);
+  }
+}
+
 export function clearAuthStorage() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+  localStorage.removeItem(FCM_TOKEN_KEY);
 }

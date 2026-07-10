@@ -3,21 +3,23 @@ package com.place_booking_service.dto;
 
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class ConfirmBooking {
 
-    @NotBlank
-    private String sagaId;
+    @NotNull
+    private UUID sagaId;
     @NotBlank
     private String eventType;
-    @NotBlank
-    private String bookingId;
+    @NotNull
+    private UUID bookingId;
 
 
 

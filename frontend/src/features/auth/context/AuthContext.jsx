@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loginUser, loginWithGoogle } from '../services/authService';
+import { loginUser, loginWithGoogle, logoutUser } from '../services/authService';
 import {
   clearAuthStorage,
   getAccessToken,
+  getStoredFcmToken,
   getStoredUser,
   setAccessToken,
   setStoredUser,
@@ -29,9 +30,14 @@ export function AuthProvider({ children }) {
     [applyAuthResponse],
   );
 
-  const logout = useCallback(() => {
-    clearAuthStorage();
-    setUser(null);
+  const logout = useCallback(async () => {
+    const fcmToken = getStoredFcmToken();
+    try {
+      await logoutUser(fcmToken);
+    } finally {
+      clearAuthStorage();
+      setUser(null);
+    }
   }, []);
 
   useEffect(() => {

@@ -23,7 +23,6 @@ import lombok.Setter;
 public class BookingInfoEntity {
     @Id
     @Column(name = "booking_id")
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID bookingId;
 
     @JdbcTypeCode(SqlTypes.JSON)

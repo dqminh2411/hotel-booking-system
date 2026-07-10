@@ -12,7 +12,7 @@ public interface SagaStateRepository extends JpaRepository<SagaState, UUID> {
 
     SagaState findSagaStateByIdempotencyKey(String idempotencyKey);
 
-    Optional<SagaState> findByBookingId(String bookingId);
+    Optional<SagaState> findByBookingId(UUID bookingId);
 
-    Optional<SagaState> findSagaStateById(String id);
+    Optional<SagaState> findSagaStateById(UUID id);
 }

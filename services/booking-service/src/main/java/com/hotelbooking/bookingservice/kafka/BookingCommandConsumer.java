@@ -18,7 +18,7 @@ public class BookingCommandConsumer {
     private final ObjectMapper objectMapper;
     private final BookingService bookingService;
 
-    // @KafkaListener(topics = "booking-commands")
+    @KafkaListener(topics = "booking-commands")
     public void consume(String message) {
         try {
             JsonNode node = objectMapper.readTree(message);

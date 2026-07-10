@@ -10,14 +10,16 @@
     "preview": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
+    "firebase": "11.10.0",
     "axios": "^1.7.9",
-    "firebase": "^12.15.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
+    "@types/react": "^18.3.9",
+    "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.15.0",
     "eslint-plugin-react-hooks": "^5.0.0",
@@ -28,3 +30,5 @@
     "vite": "^5.4.10"
   }
 }
+
+

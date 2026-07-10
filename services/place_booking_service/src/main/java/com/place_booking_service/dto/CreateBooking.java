@@ -8,21 +8,22 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.*;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateBooking {
-    @NotBlank
-    private String sagaId;
+    @NotNull
+    private UUID sagaId;
     @NotBlank
     private String eventType;
     @NotNull
     private User user;
     @NotNull
-    private Hotel hotel;
-    @NotBlank
-    private String bookingId;
+    private HotelSummaryResponse hotel;
+    @NotNull
+    private UUID bookingId;
     @NotNull
     private List<RoomType> roomTypeList;
     @NotBlank
@@ -32,7 +33,7 @@ public class CreateBooking {
     @Min(1)
     private int numAdults;
     @NotNull
-    private Double totalAmount;
+    private BigDecimal totalAmount;
     @NotBlank
     private String currency;
     @NotBlank

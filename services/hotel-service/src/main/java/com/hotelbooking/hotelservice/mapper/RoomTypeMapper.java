@@ -51,7 +51,7 @@ public class RoomTypeMapper {
                 .orElse(null);
 
         return new RoomTypeResponse(
-                rt.getId().toString(),
+                rt.getId(),
                 rt.getName(),
                 rt.getBasePricePerNight(),
                 rt.getMaxGuests(),

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.dto.Hotel;
+import com.place_booking_service.dto.HotelSummaryResponse;
 import com.place_booking_service.dto.PlaceBookingRequest;
 import com.place_booking_service.dto.User;
 import com.place_booking_service.entity.SagaState;
@@ -30,7 +31,7 @@ public class PlaceBookingService {
 
 
     @Transactional
-    public String startSaga(PlaceBookingRequest placeBookingRequest, User user, Hotel hotel) {
+    public UUID startSaga(PlaceBookingRequest placeBookingRequest, User user, HotelSummaryResponse hotel) {
 
         if(sagaStateRepository.existsSagaStateByIdempotencyKey(placeBookingRequest.getIdempotencyKey())){
             SagaState sagaState = sagaStateRepository.findSagaStateByIdempotencyKey(placeBookingRequest.getIdempotencyKey());
@@ -43,9 +44,9 @@ public class PlaceBookingService {
         CreateBooking createBooking = new CreateBooking(placeBookingRequest);
         createBooking.setUser(user);
         createBooking.setHotel(hotel);
-        String bookingId = "BK-" + UUID.randomUUID().toString();
+        UUID bookingId = UUID.randomUUID();
         createBooking.setBookingId(bookingId);
-        String sagaId = UUID.randomUUID().toString();
+        UUID sagaId = UUID.randomUUID();
         createBooking.setSagaId(sagaId);
         createBooking.setEventType("CreateBooking");
 

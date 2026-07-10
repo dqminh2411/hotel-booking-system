@@ -5,6 +5,7 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.hotelbooking.userservice.dto.AuthResponse;
 import com.hotelbooking.userservice.dto.GoogleLoginRequest;
+import com.hotelbooking.userservice.dto.LogoutResponse;
 import com.hotelbooking.userservice.entity.*;
 import com.hotelbooking.userservice.repository.AuthProviderRepository;
 import com.hotelbooking.userservice.repository.RoleRepository;
@@ -12,6 +13,7 @@ import com.hotelbooking.userservice.repository.UserAuthProviderRepository;
 import com.hotelbooking.userservice.repository.UserRepository;
 import com.hotelbooking.userservice.service.AuthService;
 import com.hotelbooking.userservice.service.JwtService;
+import com.hotelbooking.userservice.service.NotificationDeviceTokenClient;
 import com.hotelbooking.userservice.service.TokenHashService;
 import com.hotelbooking.userservice.service.UserService;
 import jakarta.ws.rs.BadRequestException;
@@ -36,12 +38,13 @@ public class AuthServiceImpl implements AuthService {
     private String googleClientId;
 
     private final UserRepository userRepository;
-    private final JwtService jwtService;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthProviderRepository authProviderRepository;
     private final UserAuthProviderRepository userAuthProviderRepository;
     private final TokenHashService tokenHashService;
+    private final JwtService jwtService;
+    private final NotificationDeviceTokenClient notificationDeviceTokenClient;
 
     @Override
     @Transactional
@@ -135,5 +138,15 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             throw new BadRequestException("Failed to verify Google ID token: " + e.getMessage());
         }
+    }
+
+    public LogoutResponse logout(String authorization, String fcmToken) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new BadRequestException("Invalid Authorization header");
+        }
+        UUID userId = jwtService.parseUserId(authorization);
+        // revoke fcm token from logged out user
+        notificationDeviceTokenClient.revokeDeviceToken(userId, fcmToken);
+        return new LogoutResponse("OK", "Logged out successfully.");
     }
 }
