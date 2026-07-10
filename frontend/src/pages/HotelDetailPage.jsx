@@ -52,7 +52,7 @@ export default function HotelDetailPage() {
         hotelId,
         name: hotel.name,
         address: typeof hotel.address === 'string' ? hotel.address : formatAddress(hotel.address),
-        coverImageUrl: hotel.coverImageUrl || hotel.imageUrls?.[0],
+        coverImageUrl: hotel.coverImageUrl || hotel.imageUrls?.[0]?.url,
       },
       booking: {
         checkinDate,
