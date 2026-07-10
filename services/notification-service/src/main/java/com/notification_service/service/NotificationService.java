@@ -5,6 +5,7 @@ import com.notification_service.dto.CreateBroadcastRequest;
 import com.notification_service.dto.DeviceTokenResponse;
 import com.notification_service.dto.NotificationPageResponse;
 import com.notification_service.dto.NotificationResponse;
+import com.notification_service.dto.RevokeDeviceTokenRequest;
 import com.notification_service.dto.UpsertDeviceTokenRequest;
 import com.notification_service.entity.DeviceTokenEntity;
 import com.notification_service.enums.NotificationEventType;
@@ -31,28 +32,29 @@ public class NotificationService {
         UpsertDeviceTokenRequest request
     ) {
         Instant now = Instant.now();
-        DeviceTokenEntity token = deviceTokenRepository.findByFcmToken(request.fcmToken())
-            .map(existingToken -> {
-                if (!existingToken.getUserId().equals(userId)) {
+
+        deviceTokenRepository.findByFcmTokenAndActiveTrue(request.fcmToken())
+            .ifPresent(activeToken -> {
+                if (!activeToken.getUserId().equals(userId)) {
                     throw new ResponseStatusException(
                         HttpStatus.CONFLICT,
-                        "FCM token đã thuộc về người dùng khác."
+                        "FCM token đang thuộc về một người dùng khác."
                     );
                 }
-                existingToken.setPlatform(request.platform());
-                existingToken.setActive(true);
-                existingToken.setInvalidatedAt(null);
-                existingToken.setUpdatedAt(now);
-                return existingToken;
-            })
+            });
+
+        DeviceTokenEntity token = deviceTokenRepository
+            .findFirstByFcmTokenAndUserIdOrderByUpdatedAtDesc(request.fcmToken(), userId)
             .orElseGet(() -> DeviceTokenEntity.builder()
                 .userId(userId)
                 .fcmToken(request.fcmToken())
-                .platform(request.platform())
-                .active(true)
                 .createdAt(now)
-                .updatedAt(now)
                 .build());
+
+        token.setPlatform(request.platform());
+        token.setActive(true);
+        token.setInvalidatedAt(null);
+        token.setUpdatedAt(now);
 
         DeviceTokenEntity savedToken = deviceTokenRepository.save(token);
         return new DeviceTokenResponse(
@@ -64,6 +66,18 @@ public class NotificationService {
             savedToken.getCreatedAt(),
             savedToken.getUpdatedAt()
         );
+    }
+
+    @Transactional
+    public void revokeDeviceToken(UUID userId, RevokeDeviceTokenRequest request) {
+        Instant now = Instant.now();
+        deviceTokenRepository.findByUserIdAndFcmTokenAndActiveTrue(userId, request.fcmToken())
+            .ifPresent(token -> {
+                token.setActive(false);
+                token.setInvalidatedAt(now);
+                token.setUpdatedAt(now);
+                deviceTokenRepository.save(token);
+            });
     }
 
     public NotificationPageResponse listNotifications(

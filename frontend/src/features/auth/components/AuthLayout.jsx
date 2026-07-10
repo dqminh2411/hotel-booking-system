@@ -9,7 +9,7 @@ const benefits = [
 export default function AuthLayout({ eyebrow, title, description, children }) {
   return (
     <div className="min-h-screen bg-slate-50 lg:grid lg:grid-cols-[minmax(360px,0.85fr)_1.15fr]">
-      <aside className="relative hidden overflow-hidden bg-blue-700 px-10 py-12 text-white lg:flex lg:flex-col">
+      <aside className="relative hidden overflow-hidden bg-gradient-to-br from-slate-800 via-blue-800 to-sky-700 px-10 py-12 text-white lg:flex lg:flex-col">
         <BrandLogo inverse />
         <div className="my-auto max-w-md">
           <p className="text-sm font-semibold uppercase tracking-wider text-blue-200">Du lịch theo cách của bạn</p>
@@ -20,7 +20,7 @@ export default function AuthLayout({ eyebrow, title, description, children }) {
           <ul className="mt-8 space-y-4">
             {benefits.map((benefit) => (
               <li key={benefit} className="flex items-center gap-3 text-sm text-blue-50">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-blue-600" aria-hidden="true">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/15" aria-hidden="true">
                   ✓
                 </span>
                 {benefit}
@@ -28,7 +28,7 @@ export default function AuthLayout({ eyebrow, title, description, children }) {
             ))}
           </ul>
         </div>
-        <div className="absolute -bottom-24 -right-20 h-72 w-72 rounded-full border-[48px] border-blue-600 opacity-60" />
+        <div className="absolute -bottom-24 -right-20 h-72 w-72 rounded-full border-[48px] border-white/10" />
         <p className="relative text-xs text-blue-200">© 2026 HotelHub. Travel made simple.</p>
       </aside>
 
@@ -38,7 +38,7 @@ export default function AuthLayout({ eyebrow, title, description, children }) {
             <BrandLogo />
           </div>
           <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">{eyebrow}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">{eyebrow}</p>
             <h1 className="mt-2 text-2xl font-bold text-slate-900 md:text-3xl">{title}</h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
             <div className="mt-7">{children}</div>

@@ -45,19 +45,21 @@ public class FcmPushService {
         String body,
         Map<String, String> data
     ) {
+        // get FCM tokens
         List<String> tokens = deviceTokenRepository.findByUserIdAndActiveTrue(userId)
             .stream()
             .map(DeviceTokenEntity::getFcmToken)
             .toList();
 
         if (tokens.isEmpty()) {
-            log.info("No active FCM token found for user {}", userId);
+            log.info("No active FCM tokens for user {}", userId);
             return;
         }
 
+        // get Firebase messaging
         FirebaseMessaging messaging = getFirebaseMessaging();
         if (messaging == null) {
-            log.warn("FCM is disabled because FIREBASE_SERVICE_ACCOUNT_JSON_PATH is not configured");
+            log.warn("Fail to get FirebaseMessaging ");
             return;
         }
 
@@ -65,15 +67,17 @@ public class FcmPushService {
         pushData.put("title", title);
         pushData.put("body", body);
 
+        // create multicast messages (to multiple devices - each device is identified by its token)
         MulticastMessage message = MulticastMessage.builder()
             .putAllData(pushData)
             .addAllTokens(tokens)
             .build();
 
         try {
+            // get batch response of each message sent
             BatchResponse response = messaging.sendEachForMulticast(message);
             log.info(
-                "FCM booking update sent to user {}: {} succeeded, {} failed",
+                "FCM notification sent to user {}: {} succeeded, {} failed",
                 userId,
                 response.getSuccessCount(),
                 response.getFailureCount()
@@ -83,11 +87,13 @@ public class FcmPushService {
 
             if (!sendResponse.isSuccessful()) {
                 FirebaseMessagingException ex = sendResponse.getException();
-                log.warn("FCM token failed. userId={}, tokenIndex={}, errorCode={}, message={}",
+                log.warn("FCM token failed. userId={}, tokenIndex={}, errorCode={}, message={}, token={}",
                         userId,
                         i,
                         ex.getMessagingErrorCode(),
-                        ex.getMessage());
+                        ex.getMessage(),
+                        tokens.get(i)
+                );
             }
         }
         } catch (Exception error) {

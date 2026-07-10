@@ -16,12 +16,10 @@ public interface HotelService {
 
     HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList);
 
-    // List<RoomTypeResponse> getListRoomTypeByHotelId(UUID hotelId);
     // List<RoomTypeResponse> getRoomTypesByHotel(UUID hotelId, LocalDate checkin, LocalDate checkout);
 
     // RoomTypeResponse getRoomTypeById(UUID hotelId, UUID roomTypeId, LocalDate checkin, LocalDate checkout);
 
-    // HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList); // cho method đang bị cmt ở Impl
 
     public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) ;
 }

@@ -10,5 +10,11 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceTokenEntity, 
 
     Optional<DeviceTokenEntity> findByFcmToken(String fcmToken);
 
+    Optional<DeviceTokenEntity> findByFcmTokenAndActiveTrue(String fcmToken);
+
+    Optional<DeviceTokenEntity> findFirstByFcmTokenAndUserIdOrderByUpdatedAtDesc(String fcmToken, UUID userId);
+
+    Optional<DeviceTokenEntity> findByUserIdAndFcmTokenAndActiveTrue(UUID userId, String fcmToken);
+
     List<DeviceTokenEntity> findByUserIdAndActiveTrue(UUID userId);
 }

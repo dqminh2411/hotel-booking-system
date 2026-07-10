@@ -80,7 +80,6 @@ CREATE TABLE device_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     invalidated_at TIMESTAMPTZ,
-    CONSTRAINT uq_device_tokens_fcm_token UNIQUE (fcm_token),
     CONSTRAINT chk_device_tokens_platform CHECK (
         platform IN ('WEB', 'ANDROID', 'IOS')
     ),
@@ -91,6 +90,9 @@ CREATE TABLE device_tokens (
 
 CREATE INDEX idx_device_tokens_user_active
     ON device_tokens (user_id, is_active);
+CREATE UNIQUE INDEX uq_device_tokens_active_fcm_token
+    ON device_tokens (fcm_token)
+    WHERE is_active = TRUE;
 CREATE INDEX idx_device_tokens_user_platform
     ON device_tokens (user_id, platform);
 CREATE INDEX idx_device_tokens_updated_at

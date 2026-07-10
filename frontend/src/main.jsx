@@ -5,10 +5,10 @@ import AppProviders from './app/providers.jsx';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <AppProviders>
       <App />
     </AppProviders>
-  </React.StrictMode>
+  // </React.StrictMode>
 );
 

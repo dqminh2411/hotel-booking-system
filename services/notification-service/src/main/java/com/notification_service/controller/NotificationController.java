@@ -5,6 +5,7 @@ import com.notification_service.dto.CreateBroadcastRequest;
 import com.notification_service.dto.DeviceTokenResponse;
 import com.notification_service.dto.NotificationPageResponse;
 import com.notification_service.dto.NotificationResponse;
+import com.notification_service.dto.RevokeDeviceTokenRequest;
 import com.notification_service.dto.UpsertDeviceTokenRequest;
 import com.notification_service.enums.NotificationEventType;
 import com.notification_service.service.NotificationService;
@@ -42,6 +43,15 @@ public class NotificationController {
         @RequestHeader("X-User-Id") UUID userId
     ) {
         return ResponseEntity.ok(notificationService.upsertDeviceToken(userId, request));
+    }
+
+    @PostMapping("/device-token/revoke")
+    public ResponseEntity<Void> revokeDeviceToken(
+        @Valid @RequestBody RevokeDeviceTokenRequest request,
+        @RequestHeader("X-User-Id") UUID userId
+    ) {
+        notificationService.revokeDeviceToken(userId, request);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/my")

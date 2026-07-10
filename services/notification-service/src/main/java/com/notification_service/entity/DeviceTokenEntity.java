@@ -25,7 +25,7 @@ public class DeviceTokenEntity {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "fcm_token", nullable = false, unique = true, length = 500)
+    @Column(name = "fcm_token", nullable = false, length = 500)
     private String fcmToken;
 
     @Enumerated(EnumType.STRING)

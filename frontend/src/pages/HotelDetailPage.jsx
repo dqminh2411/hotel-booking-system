@@ -12,6 +12,7 @@ import HotelBookingPanel from '../features/hotel/components/HotelBookingPanel';
 import HotelDetailSkeleton from '../features/hotel/components/HotelDetailSkeleton';
 import RoomTypeList from '../features/hotel/components/RoomTypeList';
 import RoomTypeDetailModal from '../features/hotel/components/RoomTypeDetailModal';
+import { formatAddress, getNightsCount } from '../features/hotel/utils/hotelFormatters';
 
 export default function HotelDetailPage() {
   const { hotelId } = useParams();
@@ -44,19 +45,31 @@ export default function HotelDetailPage() {
     if (!selections || selections.length === 0) return;
 
     const totalSelectedRooms = selections.reduce((sum, selection) => sum + selection.quantity, 0);
+    const nights = getNightsCount(checkinDate, checkoutDate);
+    const totalPrice = selections.reduce((sum, selection) => sum + selection.subtotal, 0);
+    const checkoutDraft = {
+      hotel: {
+        hotelId,
+        name: hotel.name,
+        address: typeof hotel.address === 'string' ? hotel.address : formatAddress(hotel.address),
+        coverImageUrl: hotel.coverImageUrl || hotel.imageUrls?.[0],
+      },
+      booking: {
+        checkinDate,
+        checkoutDate,
+        guestNum: Number(guestNum) || 2,
+        roomNum: Number(roomNum) || totalSelectedRooms,
+        nights,
+      },
+      roomTypes: selections,
+      price: {
+        totalPrice,
+        discount: 0,
+        finalPrice: totalPrice,
+      },
+    };
 
-    const bookingParams = new URLSearchParams({
-      hotelId,
-      guestNum: guestNum || '2',
-      roomNum: roomNum || String(totalSelectedRooms),
-      rooms: JSON.stringify(
-        selections.map(({ roomTypeId, quantity }) => ({ roomTypeId, quantity })),
-      ),
-    });
-    if (checkinDate) bookingParams.set('checkinDate', checkinDate);
-    if (checkoutDate) bookingParams.set('checkoutDate', checkoutDate);
-
-    navigate(`/booking/checkout?${bookingParams.toString()}`);
+    navigate('/checkout', { state: { checkoutDraft } });
   }
 
   return (

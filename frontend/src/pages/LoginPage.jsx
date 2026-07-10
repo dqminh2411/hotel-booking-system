@@ -19,6 +19,10 @@ export default function LoginPage() {
   const location = useLocation();
   const validationErrors = useMemo(() => validateLogin(values), [values]);
   const redirectTo = location.state?.from || '/';
+  const redirectState = useMemo(
+    () => (location.state?.checkoutDraft ? { checkoutDraft: location.state.checkoutDraft } : undefined),
+    [location.state?.checkoutDraft],
+  );
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -35,7 +39,7 @@ export default function LoginPage() {
     setSubmitError('');
     try {
       await login(values);
-      navigate(redirectTo, { replace: true });
+      navigate(redirectTo, { replace: true, state: redirectState });
     } catch (error) {
       setSubmitError(
         error.response?.status === 401
@@ -53,14 +57,14 @@ export default function LoginPage() {
       setSubmitError('');
       try {
         await googleLogin(idToken);
-        navigate(redirectTo, { replace: true });
+        navigate(redirectTo, { replace: true, state: redirectState });
       } catch (error) {
         setSubmitError(getApiErrorMessage(error, 'Đăng nhập Google không thành công.'));
       } finally {
         setIsSubmitting(false);
       }
     },
-    [googleLogin, navigate, redirectTo],
+    [googleLogin, navigate, redirectState, redirectTo],
   );
 
   return (

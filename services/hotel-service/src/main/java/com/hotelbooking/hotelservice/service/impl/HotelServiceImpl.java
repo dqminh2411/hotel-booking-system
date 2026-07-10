@@ -2,11 +2,6 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.dto.response.HotelAndRoomTypesResponse;
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.HotelSummaryResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeQuantityResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
@@ -104,25 +99,6 @@ public class HotelServiceImpl implements HotelService {
 
         return roomTypeMapper.toListRoomtypeResponse(roomTypes);
     }
-
-    // @Override
-    // @Transactional(readOnly = true)
-    // public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList) {
-    //     HotelDetailsResponse hotelDetails = getHotelById(hotelId);
-    //     Hotel h = new Hotel(hotelDetails.hotelId().toString(), hotelDetails.name(), hotelDetails.address().fullAddress());
-    //     List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
-    //     if (roomTypes.isEmpty()) {
-    //         return new HotelAndRoomTypesResponse(h, List.of());
-    //     }
-
-    //     List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
-    //             .map(roomType -> new RoomTypeQuantityResponse(roomType.getId().toString(), roomType.getQuantity()))
-    //             .toList();
-
-    //     return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
-    // }
-
-
     private void ensureHotelExists(UUID hotelId) {
         if (!hotelRepository.existsById(hotelId)) {
             throw new HotelNotFoundException(hotelId.toString());
@@ -209,8 +185,12 @@ public class HotelServiceImpl implements HotelService {
     // đây là phần Long thêm và sửa
 
     @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "hotel-search", 
+    key = "#locationCode + '::' + #checkinDate + '::' + #checkoutDate + '::' + #guestNum + '::' + #roomNum", 
+    unless = "#result == null || #result.data.isEmpty()")
     public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) {
-
+        System.out.println("HOTEL-SEARCH - Lấy trong db");
         validateRequest(request);
 
         List<HotelEntity> hotels = findHotelByLocation(request);

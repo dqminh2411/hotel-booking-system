@@ -18,8 +18,13 @@ export default function RoomTypeList({ roomTypes, checkinDate, checkoutDate, onV
         .map((roomType) => ({
           roomTypeId: roomType.roomTypeId,
           name: roomType.name,
+          bedCount: roomType.bedCounts,
+          totalQuantity: roomType.totalRooms,
+          availableRooms: roomType.availableRooms,
           basePricePerNight: roomType.basePricePerNight,
+          pricePerNight: roomType.basePricePerNight,
           quantity: quantities[roomType.roomTypeId] || 0,
+          subtotal: roomType.basePricePerNight * (quantities[roomType.roomTypeId] || 0) * nights,
         }))
         .filter((selection) => selection.quantity > 0),
     [roomTypes, quantities],
@@ -32,7 +37,7 @@ export default function RoomTypeList({ roomTypes, checkinDate, checkoutDate, onV
   );
 
   function handleBookClick() {
-    if (totalRoomCount === 0) return;
+    if (totalRoomCount === 0 || nights <= 0) return;
     onBook(selections);
   }
 
@@ -80,7 +85,7 @@ export default function RoomTypeList({ roomTypes, checkinDate, checkoutDate, onV
 
             <button
               type="button"
-              disabled={totalRoomCount === 0}
+              disabled={totalRoomCount === 0 || nights <= 0}
               onClick={handleBookClick}
               className="accent-button mt-4 w-full"
             >

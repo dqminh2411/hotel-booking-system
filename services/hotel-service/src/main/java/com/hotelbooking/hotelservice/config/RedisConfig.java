@@ -69,6 +69,7 @@ public class RedisConfig {
         cacheConfigs.put("hotel-detail-availability", defaultConfig.entryTtl(Duration.ofSeconds(30)));
         cacheConfigs.put("room-types", defaultConfig.entryTtl(Duration.ofMinutes(30)));
         cacheConfigs.put("room-type-detail", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("hotel-search", defaultConfig.entryTtl(Duration.ofMinutes(30)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig.entryTtl(Duration.ofMinutes(10)))
