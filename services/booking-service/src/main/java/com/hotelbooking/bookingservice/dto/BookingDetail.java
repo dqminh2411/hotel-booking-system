@@ -6,10 +6,11 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 public class BookingDetail {
-    private String bookingId;
+    private UUID bookingId;
     private Customer customer;
     private String checkin;
     private String checkout;

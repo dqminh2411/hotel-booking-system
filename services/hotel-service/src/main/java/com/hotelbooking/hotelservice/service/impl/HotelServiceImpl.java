@@ -1,15 +1,17 @@
 package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
+import com.hotelbooking.hotelservice.constant.HotelStatus;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
+import com.hotelbooking.hotelservice.entity.*;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
-import com.hotelbooking.hotelservice.entity.HotelEntity;
-import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
-import com.hotelbooking.hotelservice.exception.RoomTypeNotFoundException;
-import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
+import com.hotelbooking.hotelservice.mapper.HotelMapper;
+import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
+import com.hotelbooking.hotelservice.repository.*;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,87 +19,97 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import lombok.AccessLevel;
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
+import lombok.experimental.FieldDefaults;
+
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-import com.hotelbooking.hotelservice.dto.Hotel;
+
 
 @Service
 @RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class HotelServiceImpl implements HotelService {
 
-    private final HotelRepository hotelRepository;
-    private final RoomTypeRepository roomTypeRepository;
-    private final BookingServiceClient bookingServiceClient;
+    HotelRepository hotelRepository;
+    RoomTypeRepository roomTypeRepository;
+    BookingServiceClient bookingServiceClient;
+    HotelMapper hotelMapper;
+    HotelImageRepository hotelImageRepository;
+    PolicyRepository policyRepository;
+    HotelAmenityRepository hotelAmenityRepository;
+    RoomTypeAmenityRepository roomTypeAmenityRepository;
+    RoomTypeMapper roomTypeMapper;
+    AmenityRepository amenityRepository;
+
 
     @Override
     @Transactional(readOnly = true)
-    public PagedResponse<HotelSummaryResponse> searchHotels(String name, String address, int page, int size) {
-        String normalizedName = name == null ? "" : name.trim();
-        String normalizedAddress = address == null ? "" : address.trim();
+    @Cacheable(cacheNames = "hotel-detail-availability",
+                key = "#hotelId + '::' + #checkinDate + '::' + #checkoutDate + '::' + #guestNum + '::' + #roomNum",
+                unless = "#result == null"
+            )
+    public HotelDetailsResponse getHotelDetail(UUID hotelId, LocalDate checkinDate, LocalDate checkoutDate, Integer guestNum, Integer roomNum) {
+        validateAvailabilityInput(checkinDate, checkoutDate);
 
-        Page<HotelEntity> hotels = hotelRepository.findByNameContainingIgnoreCaseAndAddressContainingIgnoreCase(
-                normalizedName,
-                normalizedAddress,
-                PageRequest.of(page, size)
+        System.out.println("HOTEL-DETAIL - Lấy trong db");
+
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
+        List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
+
+        List<RoomTypeEntity> roomTypes = roomTypeRepository
+                .findActiveByHotelIdWithCoverImage(hotelId);
+
+        Map<UUID, Integer> bookedCountByRoomType =
+                getBookedCountByRoomType(hotelId, checkinDate, checkoutDate, roomTypes);
+
+
+        List<RoomTypeEntity> filteredRoomTypes = filterAvailableRoomTypes(
+                roomTypes, bookedCountByRoomType, guestNum, roomNum, checkinDate
         );
 
-        List<HotelSummaryResponse> data = hotels.getContent().stream()
-                .map(this::toHotelSummary)
-                .toList();
-
-        return new PagedResponse<>(data, hotels.getTotalElements(), hotels.getNumber(), hotels.getSize());
+        return hotelMapper.toHotelDetailsResponse(
+                hotel, images, policies, hotelAmenities, filteredRoomTypes, bookedCountByRoomType
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public HotelDetailsResponse getHotelById(String hotelId) {
-        HotelEntity hotel = hotelRepository.findById(hotelId)
-                .orElseThrow(() -> new HotelNotFoundException(hotelId));
+    @Cacheable(cacheNames = "room-types", key = "#hotelId", unless = "#result == null || #result.isEmpty()")
+    public List<RoomTypeResponse> getListRoomTypeByHotelId(UUID hotelId){
+        ensureHotelExists(hotelId);
 
-        return toHotelDetails(hotel);
+        System.out.println(" LIST ROOMTYPES - Lấy data từ db");
+
+        List<RoomTypeEntity> roomTypes = roomTypeRepository
+                .findActiveByHotelIdWithCoverImage(hotelId);
+
+        return roomTypeMapper.toListRoomtypeResponse(roomTypes);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<RoomTypeResponse> getRoomTypesByHotel(String hotelId, LocalDate checkin, LocalDate checkout) {
-        validateAvailabilityInput(checkin, checkout);
-        ensureHotelExists(hotelId);
-
-        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_Id(hotelId);
-        if (roomTypes.isEmpty()) {
-            return List.of();
-        }
-
-        Map<String, Integer> bookedCountByRoomType = getBookedCountByRoomType(hotelId, checkin, checkout, roomTypes);
-
-        return roomTypes.stream()
-                .map(roomType -> toRoomTypeResponse(roomType, bookedCountByRoomType.get(roomType.getId())))
-                .toList();
+        return List.of();
     }
 
     @Override
-    @Transactional(readOnly = true)
     public RoomTypeResponse getRoomTypeById(String hotelId, String roomTypeId, LocalDate checkin, LocalDate checkout) {
-        validateAvailabilityInput(checkin, checkout);
-        ensureHotelExists(hotelId);
-
-        RoomTypeEntity roomType = roomTypeRepository.findById(roomTypeId)
-                .orElseThrow(() -> new RoomTypeNotFoundException(hotelId, roomTypeId));
-
-        Integer bookedCount = getBookedCountByRoomType(
-                hotelId,
-                checkin,
-                checkout,
-                List.of(roomType)
-        ).get(roomType.getId());
-
-        return toRoomTypeResponse(roomType, bookedCount);
+        return null;
     }
 
     @Override
@@ -117,10 +129,10 @@ public class HotelServiceImpl implements HotelService {
         return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
     }
 
-    
-    private void ensureHotelExists(String hotelId) {
+
+    private void ensureHotelExists(UUID hotelId) {
         if (!hotelRepository.existsById(hotelId)) {
-            throw new HotelNotFoundException(hotelId);
+            throw new HotelNotFoundException(hotelId.toString());
         }
     }
 
@@ -130,71 +142,56 @@ public class HotelServiceImpl implements HotelService {
         }
 
         if (checkin == null || checkout == null) {
-            throw new InvalidDateRangeException("checkin and checkout must be provided together");
+            throw new InvalidDateRangeException("Checkin và Checkout phải được cung cấp cùng nhau");
         }
 
         if (checkin.isBefore(LocalDate.now())) {
-            throw new InvalidDateRangeException("checkin cannot be in the past");
+            throw new InvalidDateRangeException("Checkin không thể là ngày trong quá khứ");
         }
 
         if (!checkout.isAfter(checkin)) {
-            throw new InvalidDateRangeException("checkout must be after checkin");
+            throw new InvalidDateRangeException("Ngày checkoutDate phải sau ngày checkinDate");
         }
     }
 
-    private Map<String, Integer> getBookedCountByRoomType(String hotelId, LocalDate checkin, LocalDate checkout,
+    private Map<UUID, Integer> getBookedCountByRoomType(UUID hotelId, LocalDate checkin, LocalDate checkout,
             List<RoomTypeEntity> roomTypes) {
         if (checkin == null || checkout == null) {
             return Collections.emptyMap();
         }
 
-        List<String> roomTypeIds = roomTypes.stream().map(RoomTypeEntity::getId).toList();
+        List<UUID> roomTypeIds = roomTypes.stream()
+                                        .map(RoomTypeEntity::getId)
+                                        .toList();
+
         return bookingServiceClient.countActiveBookingsByRoomType(hotelId, roomTypeIds, checkin, checkout);
     }
 
-    
+    private List<RoomTypeEntity> filterAvailableRoomTypes(
+            List<RoomTypeEntity> roomTypes,
+            Map<UUID, Integer> bookedCountByRoomType,
+            Integer guestNum,
+            Integer roomNum,
+            LocalDate checkin
+    ) {
+        if (checkin == null) {
+            return roomTypes;
+        }
 
-    private HotelSummaryResponse toHotelSummary(HotelEntity entity) {
-        return new HotelSummaryResponse(
-                entity.getId(),
-                entity.getName(),
-                entity.getAddress(),
-                null,
-                entity.getImageUrl()
-        );
-    }
 
-    private HotelDetailsResponse toHotelDetails(HotelEntity entity) {
-        List<String> imageUrls = entity.getImageUrl() == null ? List.of() : List.of(entity.getImageUrl());
+        int requiredRooms = (roomNum != null && roomNum > 0) ? roomNum : 1;
+        int requiredGuests = (guestNum != null && guestNum > 0) ? guestNum : 0;
 
-        return new HotelDetailsResponse(
-                entity.getId(),
-                entity.getName(),
-                entity.getAddress(),
-                null,
-                entity.getImageUrl(),
-                entity.getDescription(),
-                null,
-                null,
-                imageUrls
-        );
-    }
-
-    private RoomTypeResponse toRoomTypeResponse(RoomTypeEntity entity, Integer bookedCount) {
-        Integer availableRooms = bookedCount == null ? null : Math.max(entity.getQuantity() - bookedCount, 0);
-        List<String> imageUrls = entity.getImageUrl() == null ? List.of() : List.of(entity.getImageUrl());
-
-        return new RoomTypeResponse(
-                entity.getId(),
-                entity.getHotel().getId(),
-                entity.getName(),
-                entity.getDescription(),
-                entity.getQuantity(),
-                entity.getMaxGuests(),
-                entity.getBasePricePerNight(),
-                imageUrls,
-                availableRooms
-        );
+        return roomTypes.stream()
+                .filter(rt -> {
+                    int booked = bookedCountByRoomType.getOrDefault(rt.getId(), 0);
+                    int available = rt.getQuantity() - booked;
+                    boolean hasEnoughRooms = available >= requiredRooms; // availableRoom >= roomNum
+                    boolean hasEnoughCapacity = requiredGuests == 0
+                            || rt.getMaxGuests() >= Math.ceil(1.0 * requiredGuests/requiredRooms); //maxGuest >= ceiling(guestNum/roomNum)
+                    return hasEnoughRooms && hasEnoughCapacity;
+                })
+                .collect(Collectors.toList());
     }
 
     // đây là phần Long thêm và sửa
@@ -210,9 +207,31 @@ public class HotelServiceImpl implements HotelService {
             return new PagedResponse<>(List.of(), 0, request.getPage(), request.getSize());
         }
 
-        List<String> hotelIds = extractHotelIds(hotels);
+        List<UUID> hotelIdsByAmenities = filterAmenities(hotels, request.getAmenities());
 
-        List<RoomTypeEntity> roomTypes = findRoomTypes(hotelIds, request.getGuestNum());
+        //        List<UUID> hotelIds = extractHotelIds(hotels);
+
+        Set<UUID> hotelIdSet = new HashSet<>(hotelIdsByAmenities);
+
+        hotels = hotels.stream()
+                .filter(h -> hotelIdSet.contains(h.getId()))
+                .toList();
+
+        if (hotelIdsByAmenities.isEmpty()) {
+            return new PagedResponse<>(
+                    List.of(),
+                    0,
+                    request.getPage(),
+                    request.getSize()
+            );
+        } // nếu không có hotel thoả mãn thì trả ve page rỗng
+
+        List<RoomTypeEntity> roomTypes =
+                searchRoomTypes(
+                        hotelIdsByAmenities,
+                        request.getGuestNum(),
+                        request.getMinPrice(),
+                        request.getMaxPrice());
 
         if (roomTypes.isEmpty()) {
             return new PagedResponse<>(
@@ -223,18 +242,26 @@ public class HotelServiceImpl implements HotelService {
             );
         }
 
-        List<String> roomTypeIds = extractRoomTypeIds(roomTypes);
+        List<UUID> roomTypeIds = extractRoomTypeIds(roomTypes);
 
-        Map<String, List<RoomTypeEntity>> groupedRoomTypes = groupRoomTypeByHotel(roomTypes);
+        Map<UUID, List<RoomTypeEntity>> groupedRoomTypes = groupRoomTypeByHotel(roomTypes);
 
-        Map<String, Integer> bookingCounts = countActiveBooking(roomTypeIds, request.getCheckinDate(), request.getCheckoutDate());
+        Map<UUID, Integer> bookingCounts = countActiveBooking(roomTypeIds, request.getCheckinDate(), request.getCheckoutDate());
 
-        return buildResponse(hotels,
+        List<HotelSearchItemDTO> items = buildResponse(
+                hotels,
                 groupedRoomTypes,
                 bookingCounts,
-                request.getRoomNum(),
+                request.getRoomNum()
+                );
+
+        sortItems(items, request.getSortBy()); // sắp xếp theo sortBy
+
+        return paginate(
+                items,
                 request.getPage(),
-                request.getSize());
+                request.getSize()
+        );   // phân trang
 
     }
 
@@ -256,6 +283,9 @@ public class HotelServiceImpl implements HotelService {
             throw new ValidationException();
         }
 
+        if (request.getMinPrice() != null && request.getMaxPrice() != null &&
+                request.getMinPrice().compareTo(request.getMaxPrice()) > 0 ) throw new ValidationException();
+
         if (request.getGuestNum() <= 0) throw new ValidationException();
 
         if (request.getRoomNum() <= 0) throw new ValidationException();
@@ -276,19 +306,19 @@ public class HotelServiceImpl implements HotelService {
 
     }
 
-    private List<String> extractHotelIds(List<HotelEntity> hotels) {
+    private List<UUID> extractHotelIds(List<HotelEntity> hotels) {
         return hotels.stream().map(HotelEntity::getId).toList();
     }
 
-    private List<RoomTypeEntity> findRoomTypes(List<String> hotelIds, int guestNum) {
-        return roomTypeRepository.findByHotelIdsAndGuestNum(hotelIds, guestNum);
+    private List<RoomTypeEntity> searchRoomTypes(List<UUID> hotelIds, int guestNum, BigDecimal minPrice, BigDecimal maxPrice) {
+        return roomTypeRepository.searchRoomTypes(hotelIds, guestNum, minPrice, maxPrice);
     }
 
-    private List<String> extractRoomTypeIds(List<RoomTypeEntity> roomTypes) {
+    private List<UUID> extractRoomTypeIds(List<RoomTypeEntity> roomTypes) {
         return roomTypes.stream().map(RoomTypeEntity::getId).toList();
     }
 
-    private Map<String, List<RoomTypeEntity>> groupRoomTypeByHotel(List<RoomTypeEntity> roomTypes) {
+    private Map<UUID, List<RoomTypeEntity>> groupRoomTypeByHotel(List<RoomTypeEntity> roomTypes) {
         return roomTypes.stream()
                 .collect(Collectors.groupingBy(
                         room -> room.getHotel().getId()
@@ -297,7 +327,7 @@ public class HotelServiceImpl implements HotelService {
 
 
 
-    private Map<String, Integer> countActiveBooking(List<String> roomTypeIds, LocalDate checkin, LocalDate checkout) {
+    private Map<UUID, Integer> countActiveBooking(List<UUID> roomTypeIds, LocalDate checkin, LocalDate checkout) {
         return bookingServiceClient.countActiveBookingsByRoomType(
                 null,
                 roomTypeIds,
@@ -308,13 +338,12 @@ public class HotelServiceImpl implements HotelService {
 
 
 
-    private PagedResponse<HotelSearchItemDTO> buildResponse(
+    private List<HotelSearchItemDTO> buildResponse(
             List<HotelEntity> hotels,
-            Map<String, List<RoomTypeEntity>> groupedRoomTypes,
-            Map<String, Integer> bookingCounts,
-            int roomNum,
-            int page,
-            int size) {
+            Map<UUID, List<RoomTypeEntity>> groupedRoomTypes,
+            Map<UUID, Integer> bookingCounts,
+            int roomNum
+            ) {
 
         List<HotelSearchItemDTO> items = new ArrayList<>();
 
@@ -385,15 +414,123 @@ public class HotelServiceImpl implements HotelService {
             items.add(item);
         }
 
+        return items;
+    }
+
+    // trả về list hotelIds hợp lệ
+    private List<UUID> filterAmenities(
+            List<HotelEntity> hotels, // danh sách hotels đã lọc theo location
+            List<UUID> amenityIds // danh sách các amenity theo id từ request
+    ) {
+        List<UUID> hotelIds = extractHotelIds(hotels);
+
+        if (amenityIds == null || amenityIds.isEmpty()) {
+            return extractHotelIds(hotels);
+        }
+        // lấy danh sách amenity theo danh sách id
+        List<AmenityEntity> amenities =
+                amenityRepository.findAllById(amenityIds);
+
+        if (amenities.size() != amenityIds.size()) {
+            throw new ValidationException();
+        }
+
+        List<UUID> currentHotelIds = new ArrayList<>();
+
+        List<UUID> resultHotelIds = null;
+
+
+        // chia amenities theo scope
+        for (AmenityEntity amenity : amenities) {
+
+            switch (amenity.getScope()) {
+                case HOTEL -> currentHotelIds = hotelAmenityRepository.findHotelIdsByAmenityIds(hotelIds, List.of(amenity.getId()), 1);
+                case ROOM_TYPE -> {
+                    List<UUID> roomTypeIds = roomTypeAmenityRepository.findRoomTypeIdsByAmenityIds(hotelIds,List.of(amenity.getId()), 1 );
+                    currentHotelIds = roomTypeRepository.findHotelIdsByRoomTypeIds(roomTypeIds);
+                }
+                case BOTH ->{
+                             List<UUID> hotelIdsFromHotel =
+                    hotelAmenityRepository.findHotelIdsByAmenityIds(hotelIds, List.of(amenity.getId()), 1);
+
+                    List<UUID> roomTypeIds =
+                            roomTypeAmenityRepository.findRoomTypeIdsByAmenityIds(hotelIds, List.of(amenity.getId()), 1);
+
+                    List<UUID> hotelIdsFromRoomType =
+                            roomTypeRepository.findHotelIdsByRoomTypeIds(roomTypeIds);
+
+                    Set<UUID> union = new HashSet<>(hotelIdsFromHotel);
+                    union.addAll(hotelIdsFromRoomType);
+
+                    currentHotelIds = new ArrayList<>(union);
+
+                }
+            }
+
+            if (resultHotelIds == null){
+                resultHotelIds = new ArrayList<>(currentHotelIds);
+            } else {
+                resultHotelIds.retainAll(currentHotelIds);
+            }
+
+        }
+        return resultHotelIds;
+    }
+
+    // sắp xếp kết quả tìm kiếm
+
+    private void sortItems(List<HotelSearchItemDTO> items, String sortBy) {
+        if (sortBy == null) {
+            return;
+        }
+
+        switch (sortBy) {
+
+            case "priceAsc" -> items.sort(
+                    Comparator.comparing(
+                            item -> item.getCheapestRoomType()
+                                            .getPricePerNight()));
+
+            case "priceDesc" -> items.sort(
+                    Comparator.comparing((HotelSearchItemDTO item)
+                            -> item.getCheapestRoomType().getPricePerNight()).reversed()
+            );
+
+            default -> {}
+
+        }
+    }
+
+    private PagedResponse<HotelSearchItemDTO> paginate (
+            List<HotelSearchItemDTO> items,
+            int page,
+            int size
+    ) {
+
+        int totalElements = items.size();
+
+        int fromIndex = page * size;
+
+        if (fromIndex >= totalElements) {
+            return new PagedResponse<>(
+                    List.of(),
+                    totalElements,
+                    page,
+                    size
+            );
+        }
+
+        int toIndex = Math.min(fromIndex + size, totalElements);
+
+        List<HotelSearchItemDTO> pageItems = items.subList(fromIndex, toIndex);
+
         return new PagedResponse<>(
-                items,
-                items.size(),
+                pageItems,
+                totalElements,
                 page,
                 size
         );
     }
-
-
 }
 
 

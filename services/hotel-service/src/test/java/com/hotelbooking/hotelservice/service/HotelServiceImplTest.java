@@ -6,8 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
-import com.hotelbooking.hotelservice.dto.response.PagedResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
+import com.hotelbooking.hotelservice.dto.PagedResponse;
+import com.hotelbooking.hotelservice.dto.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;

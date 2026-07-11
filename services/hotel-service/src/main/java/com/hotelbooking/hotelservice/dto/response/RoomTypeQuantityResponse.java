@@ -1,5 +1,5 @@
 package com.hotelbooking.hotelservice.dto.response;
-
-public record RoomTypeQuantityResponse(String roomTypeId, long totalQuantity) {
+import java.util.UUID;
+public record RoomTypeQuantityResponse(UUID roomTypeId, long totalQuantity) {
     
 }

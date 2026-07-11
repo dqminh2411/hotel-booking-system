@@ -202,6 +202,22 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - app-network
   user-service:
     build: ./services/user-service
     ports:
@@ -249,10 +265,14 @@ services:
       SERVER_PORT: 5000
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       hotel-db:
         condition: service_healthy
       eureka-server:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - app-network
@@ -415,3 +435,4 @@ volumes:
   hotel-db-data:
   booking-db-data:
   maven-cache:
+  redis-data:

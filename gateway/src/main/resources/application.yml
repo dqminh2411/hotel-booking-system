@@ -25,6 +25,10 @@ spring:
           uri: lb://booking-service
           predicates:
             - Path=/bookings,/bookings/**
+        - id: user-service-route
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/**, /api/users, /api/users/**
 
 server:
   port: ${SERVER_PORT:8000}

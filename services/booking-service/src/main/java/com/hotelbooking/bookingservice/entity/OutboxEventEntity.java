@@ -2,6 +2,8 @@ package com.hotelbooking.bookingservice.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 public class OutboxEventEntity {
     @Id
     @Column(name = "id")
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "topic", nullable = false)
@@ -35,4 +38,7 @@ public class OutboxEventEntity {
 
     @Column(name = "published_at")
     private Instant publishedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 }
