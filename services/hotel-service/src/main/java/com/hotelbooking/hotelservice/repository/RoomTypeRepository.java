@@ -18,7 +18,7 @@ public interface RoomTypeRepository extends JpaRepository<RoomTypeEntity, UUID> 
 
     Optional<RoomTypeEntity> findByIdAndIsDeletedFalse(UUID roomTypeId);
 
-    List<RoomTypeEntity> findByHotel_IdAndIdIn(UUID hotelId, List<String> roomTypeList);
+    List<RoomTypeEntity> findByHotel_IdAndIdIn(UUID hotelId, List<UUID> roomTypeList);
 
     @Query("""
             SELECT DISTINCT rt FROM RoomTypeEntity rt
@@ -28,7 +28,7 @@ public interface RoomTypeRepository extends JpaRepository<RoomTypeEntity, UUID> 
               AND (img.isCover = true OR img IS NULL)
             """)
     List<RoomTypeEntity> findActiveByHotelIdWithCoverImage(@Param("hotelId") UUID hotelId);
-    List<RoomTypeEntity> findByHotel_IdAndIdIn(String hotelId, List<String> roomTypeList);
+//    List<RoomTypeEntity> findByHotel_IdAndIdIn(String hotelId, List<String> roomTypeList);
 
     @Query(value = """
         SELECT * 

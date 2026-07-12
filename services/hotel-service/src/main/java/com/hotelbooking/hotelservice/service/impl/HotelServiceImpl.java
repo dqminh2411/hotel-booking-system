@@ -2,11 +2,13 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
-import com.hotelbooking.hotelservice.entity.*;
+import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
+import com.hotelbooking.hotelservice.entity.HotelEntity;
+import com.hotelbooking.hotelservice.entity.HotelImageEntity;
+import com.hotelbooking.hotelservice.entity.PolicyEntity;
+import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
@@ -112,11 +114,12 @@ public class HotelServiceImpl implements HotelService {
         return null;
     }
 
-    @Override
     @Transactional(readOnly = true)
-    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList) {
-        HotelDetailsResponse hotelDetails = getHotelById(hotelId);
-        Hotel h = new Hotel(hotelDetails.hotelId(), hotelDetails.name(), hotelDetails.address());
+    @Override
+    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList){
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+        HotelSummaryResponse h = new HotelSummaryResponse(hotel.getId(), hotel.getName(), hotel.getAddress());
         List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
         if (roomTypes.isEmpty()) {
             return new HotelAndRoomTypesResponse(h, List.of());
@@ -127,7 +130,7 @@ public class HotelServiceImpl implements HotelService {
                 .toList();
 
         return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
-    }
+    };
 
 
     private void ensureHotelExists(UUID hotelId) {
@@ -405,7 +408,8 @@ public class HotelServiceImpl implements HotelService {
                     HotelSearchItemDTO.builder()
                             .hotelId(hotel.getId())
                             .name(hotel.getName())
-                            .coverImageUrl(hotel.getImageUrl())
+//                            .coverImageUrl(hotel.getImageUrl())
+                            .coverImageUrl(hotel.getHotelImages().getFirst().getUrl())
                             .address(address)
                             .policies(List.of())
                             .cheapestRoomType(cheapestRoomDto)
