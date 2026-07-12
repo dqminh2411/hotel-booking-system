@@ -1,0 +1,68 @@
+.wrapper {
+  width: 100%;
+}
+
+.track {
+  position: relative;
+  height: 4px;
+  background: #e0e0e0;
+  border-radius: 2px;
+  margin: 20px 0 12px;
+}
+
+.trackRange {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #0071c2;
+  border-radius: 2px;
+}
+
+.rangeInput {
+  position: absolute;
+  top: -8px;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+}
+
+.rangeInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0071c2;
+  border: 2px solid #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.rangeInput::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0071c2;
+  border: 2px solid #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.rangeInput::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #262626;
+  font-weight: 600;
+}

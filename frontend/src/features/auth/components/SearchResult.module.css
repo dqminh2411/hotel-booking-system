@@ -1,0 +1,41 @@
+.resultLayout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.resultCount {
+  font-size: 14px;
+  font-weight: 600;
+  color: #262626;
+  margin: 0 0 4px;
+}
+
+.error {
+  color: #c0392b;
+  font-size: 14px;
+}
+
+.empty {
+  color: #6b6b6b;
+  font-size: 14px;
+  background: #fff;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .resultLayout {
+    flex-direction: column;
+  }
+}

@@ -4,6 +4,7 @@ import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import RegisterPage from '../pages/RegisterPage';
 import VerifyEmailPage from '../pages/VerifyEmailPage';
+import HotelSearchPage from "../pages/HotelSearchPage";
 
 export default function AppRouter() {
   return (
@@ -14,6 +15,7 @@ export default function AppRouter() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/login" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
+      <Route path="/hotels" element={<HotelSearchPage />} />
     </Routes>
   );
 }
