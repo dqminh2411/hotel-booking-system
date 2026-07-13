@@ -183,8 +183,6 @@ public class BookingService {
             bookedRoomTypeRepository.save(entity);
         }
 
-        
-
         try {
             BookingInfoEntity info = new BookingInfoEntity();
 
@@ -196,6 +194,8 @@ public class BookingService {
         }
 
         if(isBookingFailed){
+            booking.setStatus(BookingStatus.FAILED);
+            bookingRepository.save(booking);
             saveOutboxEvent(
                     new BookingFailed(
                         command.sagaId(),
@@ -278,11 +278,26 @@ public class BookingService {
         bookingDetail.setCheckout(command.checkout().toString());
         bookingDetail.setNumAdults(command.numAdults());
         bookingDetail.setTotalAmount(command.totalAmount());
-        bookingDetail.setHotel(new BookingDetail.Hotel(command.hotel().name(), command.hotel().address()));
-        bookingDetail.setCustomer(new BookingDetail.Customer(command.user().name(), command.user().email()));
+        bookingDetail.setHotel(new BookingDetail.Hotel(
+            command.hotel().hotelId(),
+            command.hotel().name(),
+            command.hotel().address()
+        ));
+        bookingDetail.setCustomer(new BookingDetail.Customer(
+            command.user().userId(),
+            command.user().name(),
+            command.user().email()
+        ));
         bookingDetail.setRoomTypeList(
             command.roomTypeList().stream()
-                .map(item -> new BookingDetail.RoomType(item.name(), item.bedCount(), item.bookingQuantity(), item.price()))
+                .map(item -> new BookingDetail.RoomType(
+                    item.roomTypeId(),
+                    item.name(),
+                    item.bedCount(),
+                    item.bookingQuantity(),
+                    item.totalQuantity(),
+                    item.price()
+                ))
                 .toList()
         );
         return bookingDetail;

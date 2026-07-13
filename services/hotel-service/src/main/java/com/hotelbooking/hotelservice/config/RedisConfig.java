@@ -24,8 +24,7 @@ import java.util.Map;
 @EnableCaching
 public class RedisConfig {
 
-    @Bean(name = "redisObjectMapper")
-    public ObjectMapper redisObjectMapper() {
+    private ObjectMapper buildRedisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -38,15 +37,12 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisTemplate<String, Object> redisTemplate(
-            RedisConnectionFactory connectionFactory,
-            ObjectMapper redisObjectMapper
-    ) {
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
-                new GenericJackson2JsonRedisSerializer(redisObjectMapper);
+                new GenericJackson2JsonRedisSerializer(buildRedisObjectMapper());
 
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
@@ -57,12 +53,9 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisCacheManager cacheManager(
-            RedisConnectionFactory connectionFactory,
-            ObjectMapper redisObjectMapper
-    ) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         GenericJackson2JsonRedisSerializer jsonSerializer =
-                new GenericJackson2JsonRedisSerializer(redisObjectMapper);
+                new GenericJackson2JsonRedisSerializer(buildRedisObjectMapper());
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .serializeKeysWith(
@@ -72,15 +65,11 @@ public class RedisConfig {
                 .disableCachingNullValues();
 
         Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
-        cacheConfigs.put("hotel-detail",
-                defaultConfig.entryTtl(Duration.ofMinutes(30)));
-        cacheConfigs.put("hotel-detail-availability",
-                defaultConfig.entryTtl(Duration.ofSeconds(30)));
-        cacheConfigs.put("room-types",
-                defaultConfig.entryTtl(Duration.ofMinutes(30)));
-
-		cacheConfigs.put("room-type-detail",
-                defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("hotel-detail", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("hotel-detail-availability", defaultConfig.entryTtl(Duration.ofSeconds(30)));
+        cacheConfigs.put("room-types", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("room-type-detail", defaultConfig.entryTtl(Duration.ofMinutes(30)));
+        cacheConfigs.put("hotel-search", defaultConfig.entryTtl(Duration.ofMinutes(30)));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig.entryTtl(Duration.ofMinutes(10)))

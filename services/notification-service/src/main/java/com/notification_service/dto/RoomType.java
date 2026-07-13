@@ -1,18 +1,14 @@
 package com.notification_service.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.math.BigDecimal;
+import java.util.UUID;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class RoomType {
-    private String roomTypeId;
-    private String name;
-    private int bedCount;
-    private int bookingQuantity;
-    private int totalQuantity;
-    private double price;
-
+public record RoomType(
+    UUID roomTypeId,
+    String name,
+    int bedCount,
+    int bookingQuantity,
+    int totalQuantity,
+    BigDecimal price
+) {
 }

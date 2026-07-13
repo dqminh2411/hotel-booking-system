@@ -4,13 +4,18 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
             allowedOrigins:
               - "http://localhost:3000"
+              - "http://localhost:5173"
+              - "http://127.0.0.1:3000"
+              - "http://127.0.0.1:5173"
             allowedMethods:
               - GET
               - POST
+              - PATCH
               - PUT
               - DELETE
               - OPTIONS
@@ -28,7 +33,15 @@ spring:
         - id: user-service-route
           uri: lb://user-service
           predicates:
-            - Path=/api/auth/**, /api/users, /api/users/**
+            - Path=/api/auth/**,/api/users,/api/users/**
+        - id: hotel-service-route
+          uri: lb://hotel-service
+          predicates:
+            - Path=/api/hotels/**,/api/room-types/**
+        - id: notification-service-route
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications,/api/notifications/**
 
 server:
   port: ${SERVER_PORT:8000}

@@ -30,6 +30,7 @@ import com.place_booking_service.exception.UserNotFoundException;
 import com.place_booking_service.service.PlaceBookingService;
 
 import jakarta.validation.Valid;
+import java.util.UUID;
 
 @RestController
 @RequestMapping({"/place-booking", ""})
@@ -52,7 +53,7 @@ public class PlaceBookingController {
         // Bước 1: Kiểm tra người dùng đặt phòng có tồn tại trong user-service.
         User user = userServiceClient.getUserById(placeBookingRequest.getUserId());
         if (user == null) {
-            throw new UserNotFoundException(placeBookingRequest.getUserId());
+            throw new UserNotFoundException(placeBookingRequest.getUserId().toString());
         }
 
         // Bước 2: Lấy thông tin khách sạn và các loại phòng được yêu cầu từ hotel-service.
@@ -62,8 +63,14 @@ public class PlaceBookingController {
                 .map(roomType -> roomType.getRoomTypeId())
                 .toList()
         );
+        // mock data để test
+        // Hotel h = new Hotel(placeBookingRequest.getHotelId(), "Marriott Hanoi", "12 Phan Chu Trinh, Hoan Kiem, Hanoi");
+        // List<RoomTypeQuantityResponse> roomTypes = List.of(
+        //     new RoomTypeQuantityResponse("RT-001", 15));
+
+        // HotelAndRoomTypesResponse hotelAndRoomTypes = new HotelAndRoomTypesResponse(h, roomTypes);
         if (hotelAndRoomTypes == null) {
-            throw new HotelNotFoundException(placeBookingRequest.getHotelId());
+            throw new HotelNotFoundException(placeBookingRequest.getHotelId().toString());
         }
 
         // Bước 3: Kiểm tra khoảng ngày checkin/checkout hợp lệ.
@@ -80,7 +87,7 @@ public class PlaceBookingController {
             ? List.of()
             : hotelAndRoomTypes.roomTypes();
 
-        Map<String, Long> roomTypesTotalQuantity = roomTypes.stream()
+        Map<UUID, Long> roomTypesTotalQuantity = roomTypes.stream()
             .collect(Collectors.toMap(RoomTypeQuantityResponse::roomTypeId, RoomTypeQuantityResponse::totalQuantity));
 
         // Bước 4: Lấy số lượng phòng đã được đặt trong khoảng ngày từ booking-service.
@@ -93,12 +100,19 @@ public class PlaceBookingController {
             checkout
         );
 
+        // CountBookingsResponse countBookingsResponse = new CountBookingsResponse(
+        //     placeBookingRequest.getHotelId(),
+        //     checkin,
+        //     checkout,
+        //     List.of(
+        //     new ActiveBookingRoomType("RT-001", 10L)
+        // ));
         List<ActiveBookingRoomType> activeBookingRoomTypes =
             countBookingsResponse == null || countBookingsResponse.activeBookingCount() == null
                 ? List.of()
                 : countBookingsResponse.activeBookingCount();
 
-        Map<String, Long> activeBookingCounts = activeBookingRoomTypes.stream()
+        Map<UUID, Long> activeBookingCounts = activeBookingRoomTypes.stream()
             .collect(Collectors.toMap(
                 activeBookingRoomType -> activeBookingRoomType.roomTypeId(),
                 activeBookingRoomType -> activeBookingRoomType.bookingCount()
@@ -110,6 +124,7 @@ public class PlaceBookingController {
             if (totalQuantity == null) {
                 throw new RoomTypeNotFoundException(roomType.getRoomTypeId());
             }
+            roomType.setTotalQuantity(Math.toIntExact(totalQuantity));
 
             long activeBookingCount = activeBookingCounts.getOrDefault(roomType.getRoomTypeId(), 0L);
             if (activeBookingCount + roomType.getBookingQuantity() > totalQuantity) {
@@ -118,14 +133,12 @@ public class PlaceBookingController {
         });
 
         // Bước 6: Khởi tạo saga đặt phòng và ghi command vào outbox để xử lý bất đồng bộ.
-        String bookingId = placeBookingService.startSaga(placeBookingRequest, user, hotelAndRoomTypes.hotel());
+        UUID bookingId = placeBookingService.startSaga(placeBookingRequest, user, hotelAndRoomTypes.hotel());
 
-        // Bước 7: Trả bookingId cho client để polling trạng thái booking.
         return ResponseEntity.accepted().body(Map.of(
             "bookingId", bookingId,
             "status", "PENDING",
-            "message", "Booking request is being processed. Please check status with bookingId.",
-            "pollingUrl", "/bookings/" + bookingId
+            "message", "Booking request is being processed."
         ));
     }
 }

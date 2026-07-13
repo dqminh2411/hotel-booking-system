@@ -17,7 +17,6 @@ import java.util.List;
 
 public interface HotelRepository extends JpaRepository<HotelEntity, UUID> {
 
-
     @Query(value = """
         SELECT *
         FROM hotels

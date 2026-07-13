@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -103,6 +104,5 @@ public class HotelEntity {
     @OneToMany(mappedBy = "hotel")
     @BatchSize(size = 30)
     List<HotelAmenityEntity> hotelAmenities = new ArrayList<>();
-
 }
 

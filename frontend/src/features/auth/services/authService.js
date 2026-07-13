@@ -14,7 +14,7 @@ export async function registerUser({ fullName, email, phone, password }) {
 }
 
 export async function loginUser({ email, password }) {
-  const { data } = await axiosClient.post('/api/users/login', {
+  const { data } = await axiosClient.post('/api/auth/login', {
     email: email.trim().toLowerCase(),
     password,
   });
@@ -26,7 +26,13 @@ export async function loginWithGoogle(idToken) {
   return data;
 }
 
+export async function logoutUser(fcmToken) {
+  if (!fcmToken) return null;
+  const { data } = await axiosClient.post('/api/auth/logout', { fcmToken });
+  return data;
+}
+
 export async function verifyEmail(token) {
-  const { data } = await axiosClient.post('/api/users/verify-email', { token });
+  const { data } = await axiosClient.post('/api/auth/verify-email', { token });
   return data;
 }

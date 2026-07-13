@@ -21,7 +21,6 @@ import lombok.Setter;
 public class BookedRoomTypeEntity {
     @Id
     @Column(name = "id")
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "booking_id", nullable = false)

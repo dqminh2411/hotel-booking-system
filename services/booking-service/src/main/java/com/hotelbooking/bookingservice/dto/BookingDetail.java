@@ -22,6 +22,7 @@ public class BookingDetail {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Customer {
+        private UUID userId;
         private String name;
         private String email;
     }
@@ -29,6 +30,7 @@ public class BookingDetail {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Hotel{
+        private UUID hotelId;
         private String name;
         private String address;
     }
@@ -36,9 +38,11 @@ public class BookingDetail {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class RoomType{
+        private UUID roomTypeId;
         private String name;
         private int bedCount;
         private int bookingQuantity;
+        private int totalQuantity;
         private BigDecimal price;
     }
 }

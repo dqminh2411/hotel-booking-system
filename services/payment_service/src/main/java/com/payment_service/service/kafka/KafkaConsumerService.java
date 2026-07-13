@@ -67,7 +67,7 @@ public class KafkaConsumerService {
             Payment payment = new Payment();
             payment.setPaymentId(result.getPaymentId());
             payment.setBookingId(processPayment.getBookingId());
-            payment.setAmount(BigDecimal.valueOf(processPayment.getAmount()));
+            payment.setAmount(processPayment.getAmount());
             payment.setCurrency(processPayment.getCurrency());
             payment.setTransactionRef(result.getTransactionRef());
             payment.setIdempotencyKey(processPayment.getIdempotencyKey());

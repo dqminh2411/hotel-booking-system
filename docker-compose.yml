@@ -6,10 +6,13 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
     ports:
       - "${FRONTEND_PORT:-3000}:5173"
+    env_file:
+      - .env
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -50,6 +53,10 @@ services:
       place-booking-service:
         condition: service_healthy
       booking-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      notification-service:
         condition: service_started
     networks:
       - app-network
@@ -196,6 +203,26 @@ services:
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  notification-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+      - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -403,10 +430,16 @@ services:
     build: ./services/notification-service
     ports:
       - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
+      - "5013:5013" # debug
     env_file:
       - .env
     environment:
       SERVER_PORT: 5000
+      DB_HOST: notification-db
+      DB_PORT: 5432
+      DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+      DB_USER: ${NOTIFICATION_DB_USER:-postgres}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       KAFKA_CONSUMER_GROUP: notification-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
@@ -415,11 +448,18 @@ services:
       MAIL_PORT: ${MAIL_PORT}
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
+      FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
     depends_on:
+      notification-db:
+        condition: service_healthy
       kafka:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
     networks:
       - app-network
     volumes:
@@ -434,5 +474,6 @@ volumes:
   user-db-data:
   hotel-db-data:
   booking-db-data:
+  notification-db-data:
   maven-cache:
   redis-data:

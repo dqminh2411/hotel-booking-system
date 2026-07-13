@@ -13,6 +13,13 @@ import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
+import com.hotelbooking.hotelservice.repository.HotelAmenityRepository;
+import com.hotelbooking.hotelservice.repository.HotelImageRepository;
+import com.hotelbooking.hotelservice.repository.HotelRepository;
+import com.hotelbooking.hotelservice.repository.PolicyRepository;
+import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
+import com.hotelbooking.hotelservice.mapper.HotelMapper;
+import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.*;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
@@ -21,6 +28,7 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
+import java.rmi.server.UID;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collections;
@@ -38,7 +46,6 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
-
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -51,10 +58,9 @@ public class HotelServiceImpl implements HotelService {
     HotelImageRepository hotelImageRepository;
     PolicyRepository policyRepository;
     HotelAmenityRepository hotelAmenityRepository;
-    RoomTypeAmenityRepository roomTypeAmenityRepository;
     RoomTypeMapper roomTypeMapper;
     AmenityRepository amenityRepository;
-
+    RoomTypeAmenityRepository roomTypeAmenityRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -103,36 +109,6 @@ public class HotelServiceImpl implements HotelService {
 
         return roomTypeMapper.toListRoomtypeResponse(roomTypes);
     }
-
-    @Override
-    public List<RoomTypeResponse> getRoomTypesByHotel(String hotelId, LocalDate checkin, LocalDate checkout) {
-        return List.of();
-    }
-
-    @Override
-    public RoomTypeResponse getRoomTypeById(String hotelId, String roomTypeId, LocalDate checkin, LocalDate checkout) {
-        return null;
-    }
-
-    @Transactional(readOnly = true)
-    @Override
-    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList){
-        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
-                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
-        HotelSummaryResponse h = new HotelSummaryResponse(hotel.getId(), hotel.getName(), hotel.getAddress());
-        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
-        if (roomTypes.isEmpty()) {
-            return new HotelAndRoomTypesResponse(h, List.of());
-        }
-
-        List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
-                .map(roomType -> new RoomTypeQuantityResponse(roomType.getId(), roomType.getQuantity()))
-                .toList();
-
-        return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
-    };
-
-
     private void ensureHotelExists(UUID hotelId) {
         if (!hotelRepository.existsById(hotelId)) {
             throw new HotelNotFoundException(hotelId.toString());
@@ -196,12 +172,33 @@ public class HotelServiceImpl implements HotelService {
                 })
                 .collect(Collectors.toList());
     }
+    @Override
+    @Transactional(readOnly = true)
+    public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList){
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+        HotelSummaryResponse h = new HotelSummaryResponse(hotel.getId(), hotel.getName(), hotel.getAddress());
+        List<RoomTypeEntity> roomTypes = roomTypeRepository.findByHotel_IdAndIdIn(hotelId, roomTypeList);
+        if (roomTypes.isEmpty()) {
+            return new HotelAndRoomTypesResponse(h, List.of());
+        }
+
+        List<RoomTypeQuantityResponse> roomTypeQuantities = roomTypes.stream()
+                .map(roomType -> new RoomTypeQuantityResponse(roomType.getId(), roomType.getQuantity()))
+                .toList();
+
+        return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
+    };
 
     // đây là phần Long thêm và sửa
 
     @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "hotel-search",
+    key = "#locationCode + '::' + #checkinDate + '::' + #checkoutDate + '::' + #guestNum + '::' + #roomNum",
+    unless = "#result == null || #result.data.isEmpty()")
     public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) {
-
+        System.out.println("HOTEL-SEARCH - Lấy trong db");
         validateRequest(request);
 
         List<HotelEntity> hotels = findHotelByLocation(request);
@@ -210,6 +207,7 @@ public class HotelServiceImpl implements HotelService {
             return new PagedResponse<>(List.of(), 0, request.getPage(), request.getSize());
         }
 
+        List<UUID> hotelIds = extractHotelIds(hotels);
         List<UUID> hotelIdsByAmenities = filterAmenities(hotels, request.getAmenities());
 
         //        List<UUID> hotelIds = extractHotelIds(hotels);

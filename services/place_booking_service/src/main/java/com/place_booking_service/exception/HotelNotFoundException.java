@@ -1,6 +1,7 @@
 package com.place_booking_service.exception;
 
 import org.springframework.http.HttpStatus;
+import java.util.UUID;
 
 public class HotelNotFoundException extends PlaceBookingException {
 
