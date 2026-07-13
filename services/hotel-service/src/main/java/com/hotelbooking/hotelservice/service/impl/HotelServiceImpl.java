@@ -195,10 +195,10 @@ public class HotelServiceImpl implements HotelService {
     @Override
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = "hotel-search",
-    key = "#locationCode + '::' + #checkinDate + '::' + #checkoutDate + '::' + #guestNum + '::' + #roomNum",
+    key = "#request.locationCode + '::' + #request.checkinDate + '::' + #request.checkoutDate + '::' + #request.guestNum + '::' + #request.roomNum",
     unless = "#result == null || #result.data.isEmpty()")
     public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) {
-        System.out.println("HOTEL-SEARCH - Lấy trong db");
+        System.out.println(request.getLocationCode());
         validateRequest(request);
 
         List<HotelEntity> hotels = findHotelByLocation(request);
@@ -524,7 +524,7 @@ public class HotelServiceImpl implements HotelService {
 
         int toIndex = Math.min(fromIndex + size, totalElements);
 
-        List<HotelSearchItemDTO> pageItems = items.subList(fromIndex, toIndex);
+        List<HotelSearchItemDTO> pageItems = new ArrayList<>(items.subList(fromIndex, toIndex));
 
         return new PagedResponse<>(
                 pageItems,
