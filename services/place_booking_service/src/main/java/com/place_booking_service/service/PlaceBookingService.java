@@ -1,10 +1,8 @@
 package com.place_booking_service.service;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
 import java.util.UUID;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
