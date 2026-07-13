@@ -42,7 +42,11 @@ spring:
           uri: lb://notification-service
           predicates:
             - Path=/api/notifications,/api/notifications/**
-
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/hotel-booking-system}
 server:
   port: ${SERVER_PORT:8000}
 
