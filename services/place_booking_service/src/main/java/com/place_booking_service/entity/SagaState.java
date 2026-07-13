@@ -1,7 +1,6 @@
 package com.place_booking_service.entity;
 
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import lombok.Data;
@@ -25,5 +24,9 @@ public class SagaState {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /*theo yêu cầu check db khi redis lỗi */
+    private String hashRequest;
+    private UUID userId;
 
 }
