@@ -186,7 +186,8 @@ export default function CheckoutPage() {
 
     try {
       const response = await createBooking(payload);
-      const bookingId = response.bookingId;
+      console.log(response.data.data)
+      const bookingId = response.data.bookingId;
       if (!bookingId) throw new Error('Backend không trả về bookingId.');
 
       setActiveBookingId(bookingId);

@@ -48,4 +48,6 @@ public class PlaceBookingRequest {
 
     @NotBlank
     private String paymentToken;
+
+    private String forceToken;
 }
