@@ -207,10 +207,7 @@ public class HotelServiceImpl implements HotelService {
             return new PagedResponse<>(List.of(), 0, request.getPage(), request.getSize());
         }
 
-        List<UUID> hotelIds = extractHotelIds(hotels);
         List<UUID> hotelIdsByAmenities = filterAmenities(hotels, request.getAmenities());
-
-        //        List<UUID> hotelIds = extractHotelIds(hotels);
 
         Set<UUID> hotelIdSet = new HashSet<>(hotelIdsByAmenities);
 
