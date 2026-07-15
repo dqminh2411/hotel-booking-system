@@ -246,7 +246,7 @@ public class BookingService {
         saveOutboxEvent(new BookingCancelled(sagaId, eventType, bookingDetail, reason));
     }
 
-    private void saveOutboxEvent(Object event) {
+    public void saveOutboxEvent(Object event) {
         try {
             OutboxEventEntity outbox = new OutboxEventEntity();
             outbox.setId(UUID.randomUUID());
@@ -271,7 +271,7 @@ public class BookingService {
         }
     }
 
-    private BookingDetail toBookingDetail(CreateBookingCommand command) {
+    public BookingDetail toBookingDetail(CreateBookingCommand command) {
         BookingDetail bookingDetail = new BookingDetail();
         bookingDetail.setBookingId(command.bookingId());
         bookingDetail.setCheckin(command.checkin().toString());
@@ -332,9 +332,5 @@ public class BookingService {
                 throw new AppException("VALIDATION_ERROR", "room quantities must be positive", HttpStatus.BAD_REQUEST);
             }
         }
-    }
-
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
     }
 }
