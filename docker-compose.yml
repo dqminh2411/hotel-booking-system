@@ -387,6 +387,8 @@ services:
       KAFKA_CONSUMER_GROUP: place-booking-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     command:
       - mvn
       - spring-boot:run
@@ -409,6 +411,8 @@ services:
       booking-service:
         condition: service_started
       eureka-server:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - app-network

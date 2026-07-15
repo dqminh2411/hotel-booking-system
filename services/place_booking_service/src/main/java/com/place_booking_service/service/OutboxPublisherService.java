@@ -3,12 +3,14 @@ package com.place_booking_service.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.entity.OutboxMessage;
 import com.place_booking_service.repository.OutboxMessageRepository;
 import com.place_booking_service.service.kafka.KafkaProducerService;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,14 +21,13 @@ import java.util.UUID;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class OutboxPublisherService {
 
-    @Autowired
-    private  OutboxMessageRepository outboxMessageRepository;
-    @Autowired
-    private  KafkaProducerService kafkaProducerService;
-    @Autowired
-    private  ObjectMapper objectMapper;
+    OutboxMessageRepository outboxMessageRepository;
+    KafkaProducerService kafkaProducerService;
+    ObjectMapper objectMapper;
 
 
 
