@@ -9,7 +9,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.place_booking_service.dto.*;
 import com.place_booking_service.service.OutboxPublisherService;
-import org.springframework.beans.factory.annotation.Autowired;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,15 +22,11 @@ import com.place_booking_service.entity.SagaState;
 import com.place_booking_service.repository.SagaStateRepository;
 
 @Service
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class KafkaConsumerService {
 
-    @Autowired
     SagaStateRepository sagaStateRepository;
-
-
-
-
-    @Autowired
     OutboxPublisherService outboxPublisherService;
 
     @KafkaListener(topics = "booking-events")

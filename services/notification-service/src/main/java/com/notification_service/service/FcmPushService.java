@@ -12,7 +12,6 @@ import com.notification_service.entity.DeviceTokenEntity;
 import com.notification_service.repository.DeviceTokenRepository;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
