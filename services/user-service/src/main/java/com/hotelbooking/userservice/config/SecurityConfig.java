@@ -17,7 +17,6 @@ public class SecurityConfig {
 
     String[] whiteLists = {
         "/api/users/**",
-            "/api/auth/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/health"

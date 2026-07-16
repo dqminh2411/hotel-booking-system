@@ -20,14 +20,14 @@ public class UserEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
+    @Column(name = "keycloak_id", length = 255, unique = true)
+    private UUID keycloakId;
+
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
     @Column(name = "phone", length = 20)
     private String phone;
-
-    @Column(name = "password_hash", length = 255)
-    private String passwordHash;
 
     @Column(name = "full_name", nullable = false, length = 255)
     private String fullName;
@@ -43,7 +43,6 @@ public class UserEntity {
     @Column(name = "status", nullable = false, columnDefinition = "user_status")
     private UserStatus status;
 
-
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -52,15 +51,4 @@ public class UserEntity {
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
-
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "user_roles",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
-    private Set<RoleEntity> roles = new HashSet<>();
-
-    @OneToMany(fetch = FetchType.LAZY, mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<UserAuthProvider> authProviders = new HashSet<>();
 }

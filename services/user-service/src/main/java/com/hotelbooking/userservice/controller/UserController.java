@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 @Validated
 @RestController
-@RequestMapping({"/api/users", "/users"})
+@RequestMapping({"/api/users"})
 public class UserController {
     private final UserService userService;
 
@@ -21,7 +21,7 @@ public class UserController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
-        return userService.register(request);
+        return userService.createUser(request);
     }
 
     @GetMapping("/me")
