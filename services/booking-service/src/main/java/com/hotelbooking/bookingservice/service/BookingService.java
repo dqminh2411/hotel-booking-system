@@ -32,18 +32,22 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class BookingService {
@@ -56,6 +60,7 @@ public class BookingService {
     OutboxEventRepository outboxEventRepository;
     ObjectMapper objectMapper;
     RoomTypeInventoryRepository roomTypeInventoryRepository;
+    StringRedisTemplate stringRedisTemplate;
 
     public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
@@ -235,6 +240,11 @@ public class BookingService {
             )
         );
 
+        try {
+            clearHotelDetailCache(command.hotel().hotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
         
     }
 
@@ -348,6 +358,16 @@ public class BookingService {
             if (item.bookingQuantity() <= 0 || item.totalQuantity() <= 0) {
                 throw new AppException("VALIDATION_ERROR", "room quantities must be positive", HttpStatus.BAD_REQUEST);
             }
+        }
+    }
+
+    private void clearHotelDetailCache(UUID hotelId){
+        String keyPattern = "hotel-detail-availability::" + hotelId.toString() + "::*";
+
+        Set<String> keys = stringRedisTemplate.keys(keyPattern);
+
+        if(keys != null && !keys.isEmpty()){
+            stringRedisTemplate.delete(keys);
         }
     }
 }
