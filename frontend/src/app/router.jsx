@@ -6,7 +6,6 @@ import HotelDetailPage from '../pages/HotelDetailPage';
 import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import RegisterPage from '../pages/RegisterPage';
-import VerifyEmailPage from '../pages/VerifyEmailPage';
 
 export default function AppRouter() {
   return (
@@ -18,7 +17,8 @@ export default function AppRouter() {
       <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      {/* Keycloak now owns email verification (its own hosted page + email
+          template), so /verify-email is no longer served by the SPA. */}
       <Route path="/auth/login" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

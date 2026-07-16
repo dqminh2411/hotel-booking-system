@@ -15,12 +15,15 @@ services:
       - /app/node_modules
     depends_on:
       gateway:
-        condition: service_healthy
+        condition: service_started
       # keycloak:
       #   condition: service_started  
 
     environment:
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
     networks:
       - app-network
 

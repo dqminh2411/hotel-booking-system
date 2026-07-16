@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Silent SSO check</title>
+  </head>
+  <body>
+    <script>
+      // Loaded inside a hidden iframe by keycloak.init({ onLoad: 'check-sso' }).
+      // It just hands the auth result back to the parent window's Keycloak
+      // instance without any full-page redirect/flicker.
+      parent.postMessage(location.href, location.origin);
+    </script>
+  </body>
+</html>
