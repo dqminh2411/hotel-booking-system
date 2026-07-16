@@ -160,6 +160,7 @@ public class KafkaConsumerService {
             sendBookingFailed.setSagaId(saga.getId());
             sendBookingFailed.setBooking(bookingFailed.getBooking());
             sendBookingFailed.setEventType("SendBookingFailed");
+            sendBookingFailed.setReason(bookingFailed.getReason());
             outboxPublisherService.saveOutboxMessage("notification-commands",sendBookingFailed,"SendBookingFailed");
 
         }

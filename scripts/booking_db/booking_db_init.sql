@@ -94,6 +94,30 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     is_deleted    BOOLEAN     NOT NULL DEFAULT false
 );
 
+CREATE TABLE IF NOT EXISTS roomtype_inventory (
+    room_type_id   UUID          PRIMARY KEY,
+    hotel_id       UUID          NOT NULL,
+    total_quantity INT           NOT NULL,
+    synced_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO roomtype_inventory (room_type_id, hotel_id, total_quantity) VALUES
+    -- Standard Room (Số lượng gốc: 10)
+    ('d1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 10),
+    
+    -- Deluxe Room (Số lượng gốc: 8)
+    ('d1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 8),
+    
+    -- Superior Twin Room (Số lượng gốc: 6)
+    ('d1000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001', 6),
+    
+    -- Junior Suite (Số lượng gốc: 4)
+    ('d1000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000001', 4),
+    
+    -- Presidential Suite (Số lượng gốc: 1) -> Rất hợp lý để test giành giật phòng hiếm!
+    ('d1000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000001', 1)
+ON CONFLICT (room_type_id) DO NOTHING;
+
 
 -- ────────────────────────────────────────────────────────────
 -- INDEXES

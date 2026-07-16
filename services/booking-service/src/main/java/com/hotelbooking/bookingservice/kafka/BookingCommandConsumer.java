@@ -53,6 +53,7 @@ public class BookingCommandConsumer {
     private void handleLockCreateBooking(CreateBookingCommand command){
         List<UUID> listRoomTypeId = command.roomTypeList().stream()
                     .map(rt -> rt.roomTypeId())
+                    .distinct() 
                     .sorted()
                     .toList();
 
@@ -80,7 +81,7 @@ public class BookingCommandConsumer {
                 return;
             }
             log.info("Lấy khóa thành công {}", listRoomTypeId);
-            bookingService.handleCreateBooking(command);
+            bookingService.handleCreateBooking(command, listRoomTypeId);
 
         } catch (InterruptedException ex) {
             // cho trường hợp bị lỗi khi đang đứng chờ khóa
