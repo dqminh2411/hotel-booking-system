@@ -24,6 +24,16 @@ export function getBookingStatusFromNotification(payload) {
   return '';
 }
 
+// place-booking-service (KafkaConsumerService.handleBookingFailed / handleBookingCancelled)
+// luôn kèm theo "reason" khi publish SendBookingFailed sang notification-commands.
+// Đây thường là nội dung mô tả rõ nhất nguyên nhân that bai (vd: het phong do
+// race condition khi booking-service xac nhan, thanh toan that bai, ...), nen
+// uu tien hien thi truc tiep field nay cho nguoi dung thay vi tu dat lai text.
+export function getBookingFailureReason(payload) {
+  const data = payload?.data || {};
+  return data.reason || data.failReason || data.errorReason || '';
+}
+
 export function getBookingNotificationTitle(payload, status) {
   const data = payload?.data || {};
   if (status === 'CONFIRMED') return 'Đặt phòng thành công';
@@ -32,8 +42,16 @@ export function getBookingNotificationTitle(payload, status) {
   return data.title || payload?.notification?.title || 'Cập nhật đặt phòng';
 }
 
-export function getBookingNotificationBody(payload) {
+export function getBookingNotificationBody(payload, status) {
   const data = payload?.data || {};
+  const reason = getBookingFailureReason(payload);
+
+  // Với trạng thái thất bại/hủy (thường do race condition hết phòng hoặc thanh
+  // toán lỗi ở booking-service), ưu tiên hiển thị "reason" thật từ BE.
+  if ((status === 'FAILED' || status === 'CANCELLED') && reason) {
+    return reason;
+  }
+
   return data.body || payload?.notification?.body || 'Trạng thái đặt phòng vừa thay đổi.';
 }
 
@@ -78,4 +96,38 @@ export function buildBookingDetailFromDraft(draft, bookingId, status = 'PENDING'
       roomNum: draft.booking?.roomNum,
     },
   };
+}
+
+// Payload gửi lên POST /place-booking chỉ ảnh hưởng tới hash chống trùng của BE
+// (Helpler.toStringPlaceBookingRequest) bởi các field: userId, hotelId, checkin,
+// checkout, numAdults và roomTypeList{roomTypeId,bookingQuantity} (đã sort theo
+// roomTypeId). Hàm này tách riêng phần "khoá theo nội dung" để CheckoutPage có
+// thể build lại đúng payload khi gửi kèm forceToken mà không sợ lệch hash.
+export function buildPlaceBookingPayload({ checkoutDraft, userId, idempotencyKey, forceToken }) {
+  const payload = {
+    userId,
+    hotelId: checkoutDraft.hotel.hotelId,
+    roomTypeList: checkoutDraft.roomTypes.map((room) => ({
+      roomTypeId: room.roomTypeId,
+      name: room.name,
+      bedCount: Number(room.bedCount || room.bedCounts || 1),
+      bookingQuantity: Number(room.quantity),
+      totalQuantity: Number(room.totalQuantity || room.totalRooms || room.availableRooms || room.quantity),
+      price: Number(room.pricePerNight || room.basePricePerNight || room.price),
+    })),
+    checkin: checkoutDraft.booking.checkinDate,
+    checkout: checkoutDraft.booking.checkoutDate,
+    numAdults: Number(checkoutDraft.booking.guestNum || 1),
+    totalAmount: Number(checkoutDraft.price.finalPrice ?? checkoutDraft.price.totalPrice),
+    currency: 'VND',
+    paymentMethod: 'CREDIT_CARD',
+    paymentToken: createPaymentToken(),
+    idempotencyKey,
+  };
+
+  if (forceToken) {
+    payload.forceToken = forceToken;
+  }
+
+  return payload;
 }
