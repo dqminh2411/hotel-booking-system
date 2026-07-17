@@ -224,7 +224,8 @@ public class BookingService {
                         command.sagaId(),
                         "BookingFailed",
                         toBookingDetail(command),
-                        "Room " + String.join(", ", unAvailable.toString()) + " not available"
+                        "Có vẻ bạn đặt chậm tay mất rồi. Hãy quay lại và chọn lại phòng khác nhé.\n" 
+                            + "Các loại phòng đã hết: " + unAvailable.toString()
                     )
                 );
                 return;

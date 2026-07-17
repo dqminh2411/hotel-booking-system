@@ -490,7 +490,6 @@ export default function CheckoutPage() {
 
           {activeBookingId && (
             <div className="rounded-lg border border-blue-200 bg-white p-4 text-sm">
-              <p className="font-semibold text-slate-900">Mã booking: {activeBookingId}</p>
               {isSubmitting && (
                 <div className="mt-2 flex items-center gap-2 text-blue-700">
                   <Spinner />
