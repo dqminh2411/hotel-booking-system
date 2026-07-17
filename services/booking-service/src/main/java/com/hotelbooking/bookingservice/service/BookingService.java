@@ -126,14 +126,17 @@ public class BookingService {
             );
         }
 
-        booking.setStatus(newStatus);
-        bookingRepository.save(booking);
-        BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
-        if (newStatus == BookingStatus.CONFIRMED) {
-            saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
-        } else {
-            saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
-        }
+        // booking.setStatus(newStatus);
+        // bookingRepository.save(booking);
+        // BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
+        // if (newStatus == BookingStatus.CONFIRMED) {
+        //     saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
+        // } else {
+        //     saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
+        // }
+        String eventType = (newStatus == BookingStatus.CONFIRMED) ? "BookingConfirmed" : "BookingCancelled";
+        String reason = (newStatus == BookingStatus.CONFIRMED) ? "" : "Booking cancelled";
+        updateStatusFromCommand(null, bookingId, newStatus, eventType, reason);
         return getBookingById(bookingId);
     }
 
@@ -271,6 +274,11 @@ public class BookingService {
         }
 
         saveOutboxEvent(new BookingCancelled(sagaId, eventType, bookingDetail, reason));
+        try {
+            clearHotelDetailCache(bookingDetail.getHotel().getHotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
     }
 
     public void saveOutboxEvent(Object event) {
