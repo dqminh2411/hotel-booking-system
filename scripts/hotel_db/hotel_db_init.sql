@@ -292,7 +292,7 @@ VALUES
         'b0000000-0000-0000-0000-000000000001',
         'Presidential Suite',
         'Suite hạng sang rộng 80m², phòng ăn riêng, bồn tắm jacuzzi, tầm nhìn toàn cảnh phố cổ.',
-        8500000, 4, 80, 1, 2
+        8500000, 4, 80, 1, 1
     );
 
 

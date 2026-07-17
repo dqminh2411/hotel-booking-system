@@ -25,7 +25,6 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
-import java.rmi.server.UID;
 import java.time.LocalDate;
 import java.util.stream.Collectors;
 

@@ -3,10 +3,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useAuth from '../features/auth/hooks/useAuth';
 import { createBooking } from '../features/booking/api/bookingApi';
 import useBookingNotifications from '../features/booking/hooks/useBookingNotifications';
+import DuplicateBookingModal from '../features/booking/components/DuplicateBookingModal';
 import {
   buildBookingDetailFromDraft,
+  buildPlaceBookingPayload,
   createIdempotencyKey,
-  createPaymentToken,
 } from '../features/booking/utils/bookingUtils';
 import EmptyState from '../shared/components/EmptyState';
 import PublicHeader from '../shared/components/PublicHeader';
@@ -76,6 +77,12 @@ export default function CheckoutPage() {
   const [bookingStatus, setBookingStatus] = useState('IDLE');
   const [activeBookingId, setActiveBookingId] = useState('');
   const [createdBooking, setCreatedBooking] = useState(null);
+  // Lý do thất bại/hủy do BE trả kèm khi có race condition hết phòng, hoặc
+  // thanh toán lỗi ở booking-service (đến qua Kafka -> notification-service -> FCM).
+  const [failureReason, setFailureReason] = useState('');
+  // Cảnh báo trùng yêu cầu trong 5 phút (code=409 từ POST /place-booking, kèm forceToken).
+  const [duplicateNotice, setDuplicateNotice] = useState(null);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
 
   useEffect(() => {
     if (!checkoutDraft || bookingStatus === 'CONFIRMED') return undefined;
@@ -101,6 +108,15 @@ export default function CheckoutPage() {
     (update) => {
       if (!update.status) return;
       setBookingStatus(update.status);
+
+      // update.reason đến từ SendBookingFailed.reason (place-booking-service),
+      // là nguyên nhân thật của BE - ví dụ hết phòng do race condition khi
+      // booking-service xác nhận, hoặc thanh toán thất bại.
+      if (update.status === 'FAILED' || update.status === 'CANCELLED') {
+        setFailureReason(update.reason || '');
+      } else {
+        setFailureReason('');
+      }
 
       const nextBooking = buildBookingDetailFromDraft(
         { ...checkoutDraft, customer },
@@ -145,6 +161,74 @@ export default function CheckoutPage() {
     setFormErrors((current) => ({ ...current, [name]: '' }));
   }
 
+  // Gửi POST /place-booking. Dùng chung cho lần gửi đầu tiên và lần gửi lại
+  // kèm forceToken sau khi người dùng xác nhận ở DuplicateBookingModal.
+  //
+  // Lưu ý quan trọng về contract của BE (PlaceBookingController):
+  // - Case "trùng request trong 5 phút" KHÔNG throw exception, controller trả
+  //   thẳng ApiResponse với code=409 nhưng HTTP status vẫn là 200. Vì vậy phải
+  //   kiểm tra response.code === 409 ở nhánh try (KHÔNG rơi vào catch).
+  // - Case hợp lệ luôn trả code=200, data.status luôn là "PENDING" (vì booking
+  //   được xử lý bất đồng bộ qua saga/outbox), CONFIRMED/FAILED thật sự sẽ đến
+  //   sau qua Kafka -> FCM push (useBookingNotifications).
+  // - Các lỗi thật (400/404/...) như hết phòng ngay tại thời điểm gửi
+  //   (RoomTypeNotAvailableException), sai ngày, không tìm thấy khách sạn/user...
+  //   được GlobalExceptionHandler trả về đúng HTTP status lỗi -> axios reject -> catch.
+  const runPlaceBooking = useCallback(
+    async (forceToken) => {
+      const userId = user?.userId || user?.id;
+      if (!userId || !checkoutDraft) return;
+
+      setBookingStatus('PENDING');
+      setActiveBookingId('');
+      setCreatedBooking(null);
+      setFailureReason('');
+      setSubmitError('');
+
+      const payload = buildPlaceBookingPayload({
+        checkoutDraft,
+        userId,
+        idempotencyKey: idempotencyKeyRef.current,
+        forceToken,
+      });
+
+      try {
+        const response = await createBooking(payload);
+
+        if (response.code === 409) {
+          setBookingStatus('IDLE');
+          setDuplicateNotice({
+            message: response.message,
+            hint: response.data?.hint,
+            forceToken: response.data?.forceToken,
+          });
+          return;
+        }
+
+        setDuplicateNotice(null);
+
+        const bookingId = response.data?.bookingId;
+        if (!bookingId) throw new Error('Backend không trả về bookingId.');
+
+        setActiveBookingId(bookingId);
+        const optimisticBooking = buildBookingDetailFromDraft(
+          { ...checkoutDraft, customer },
+          bookingId,
+          response.data?.status || 'PENDING',
+        );
+        setCreatedBooking(optimisticBooking);
+        setBookingStatus(response.data?.status || 'PENDING');
+      } catch (error) {
+        setBookingStatus('FAILED');
+        setDuplicateNotice(null);
+        setSubmitError(error.response?.data?.message || error.message || 'Không thể tạo đặt phòng.');
+      } finally {
+        setDuplicateLoading(false);
+      }
+    },
+    [checkoutDraft, customer, user],
+  );
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitError('');
@@ -153,70 +237,35 @@ export default function CheckoutPage() {
     setFormErrors(errors);
     if (Object.keys(errors).length > 0 || !checkoutDraft) return;
 
-    const userId = user?.userId || user?.id;
-    if (!userId) {
+    if (!user?.userId && !user?.id) {
       setSubmitError('Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
       return;
     }
 
-    setBookingStatus('PENDING');
+    await runPlaceBooking();
+  }
+
+  async function handleConfirmDuplicateBooking() {
+    if (!duplicateNotice?.forceToken) return;
+    setDuplicateLoading(true);
+    await runPlaceBooking(duplicateNotice.forceToken);
+  }
+
+  function handleCancelDuplicateBooking() {
+    setDuplicateNotice(null);
+    setBookingStatus('IDLE');
+  }
+
+  // Đặt lại từ đầu sau khi nhận thông báo thất bại (thường là do race
+  // condition hết phòng ở booking-service). Tạo idempotencyKey mới để tránh
+  // dính vào saga cũ đã FAILED.
+  function handleRetryAfterFailure() {
+    idempotencyKeyRef.current = createIdempotencyKey();
     setActiveBookingId('');
     setCreatedBooking(null);
-
-    const payload = {
-      userId,
-      hotelId: checkoutDraft.hotel.hotelId,
-      roomTypeList: checkoutDraft.roomTypes.map((room) => ({
-        roomTypeId: room.roomTypeId,
-        name: room.name,
-        bedCount: Number(room.bedCount || room.bedCounts || 1),
-        bookingQuantity: Number(room.quantity),
-        totalQuantity: Number(room.totalQuantity || room.totalRooms || room.availableRooms || room.quantity),
-        price: Number(room.pricePerNight || room.basePricePerNight || room.price),
-      })),
-      checkin: checkoutDraft.booking.checkinDate,
-      checkout: checkoutDraft.booking.checkoutDate,
-      numAdults: Number(checkoutDraft.booking.guestNum || 1),
-      totalAmount: Number(checkoutDraft.price.finalPrice ?? checkoutDraft.price.totalPrice),
-      currency: 'VND',
-      paymentMethod: 'CREDIT_CARD',
-      paymentToken: createPaymentToken(),
-      idempotencyKey: idempotencyKeyRef.current,
-    };
-
-    try {
-      const response = await createBooking(payload);
-      console.log(response.data.data)
-      const bookingId = response.data.bookingId;
-      if (!bookingId) throw new Error('Backend không trả về bookingId.');
-
-      setActiveBookingId(bookingId);
-      const optimisticBooking = buildBookingDetailFromDraft(
-        { ...checkoutDraft, customer },
-        bookingId,
-        response.status || 'PENDING',
-      );
-      setCreatedBooking(optimisticBooking);
-
-      if (response.status === 'CONFIRMED') {
-        navigate(`/bookings/${bookingId}`, {
-          replace: true,
-          state: { booking: optimisticBooking, checkoutDraft: { ...checkoutDraft, customer } },
-        });
-        return;
-      }
-
-      if (response.status === 'FAILED') {
-        setBookingStatus('FAILED');
-        setSubmitError('Đặt phòng thất bại. Vui lòng thử lại.');
-        return;
-      }
-
-      setBookingStatus('PENDING');
-    } catch (error) {
-      setBookingStatus('FAILED');
-      setSubmitError(error.response?.data?.message || error.message || 'Không thể tạo đặt phòng.');
-    }
+    setFailureReason('');
+    setSubmitError('');
+    setBookingStatus('IDLE');
   }
 
   if (!checkoutDraft) {
@@ -244,6 +293,15 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-slate-50">
       <PublicHeader />
 
+      <DuplicateBookingModal
+        open={!!duplicateNotice}
+        message={duplicateNotice?.message}
+        hint={duplicateNotice?.hint}
+        loading={duplicateLoading}
+        onConfirm={handleConfirmDuplicateBooking}
+        onCancel={handleCancelDuplicateBooking}
+      />
+
       <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -255,13 +313,13 @@ export default function CheckoutPage() {
           </Link>
         </div>
 
-        <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        {/* <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <p className="font-semibold">Lưu ý về phiên thanh toán</p>
           <p className="mt-1">
-            Mỗi lần mở trang checkout được tính là một checkout attempt riêng. Nếu bạn tải lại trang rồi xác nhận lại,
-            hệ thống có thể tạo một yêu cầu đặt phòng mới với cùng thông tin.
+            Nếu bạn gửi lại một yêu cầu đặt phòng giống hệt yêu cầu trong vòng 5 phút trước (cùng khách sạn, ngày ở,
+            số khách và loại phòng), hệ thống sẽ hỏi xác nhận trước khi tạo đơn mới, để tránh việc vô tình đặt trùng.
           </p>
-        </section>
+        </section> */}
 
         <section className="mb-6 rounded-lg border border-blue-100 bg-blue-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -280,6 +338,13 @@ export default function CheckoutPage() {
               </button>
             )}
           </div>
+          {pushStatus !== 'ENABLED' && (
+            <p className="mt-2 text-xs text-blue-700">
+              Kết quả đặt phòng (thành công hoặc thất bại) được xử lý bất đồng bộ và báo về qua thông báo đẩy. Bật
+              thông báo để nhận cập nhật ngay khi hệ thống xử lý xong, kể cả khi phòng bất ngờ hết do có người khác
+              đặt cùng lúc.
+            </p>
+          )}
           {pushError && <p className="mt-3 rounded bg-white p-2 text-sm text-red-700">{pushError}</p>}
         </section>
 
@@ -425,14 +490,32 @@ export default function CheckoutPage() {
 
           {activeBookingId && (
             <div className="rounded-lg border border-blue-200 bg-white p-4 text-sm">
-              <p className="font-semibold text-slate-900">Mã booking: {activeBookingId}</p>
               {isSubmitting && (
                 <div className="mt-2 flex items-center gap-2 text-blue-700">
                   <Spinner />
-                  <span>Hệ thống đang xử lý booking. Đang chờ kết quả qua thông báo FCM...</span>
+                  <span>
+                    Hệ thống đang xử lý booking (kiểm tra phòng, thanh toán, xác nhận). Đang chờ kết quả qua thông
+                    báo FCM...
+                  </span>
                 </div>
               )}
-              {bookingStatus === 'FAILED' && <p className="mt-2 text-red-700">Đặt phòng thất bại. Bạn có thể kiểm tra thông tin và thử lại.</p>}
+
+              {bookingStatus === 'FAILED' && (
+                <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-red-800">
+                  <p className="font-semibold">Đặt phòng thất bại.</p>
+                  <p className="mt-1">
+                    {failureReason ||
+                      'Có thể do phòng vừa hết trong lúc xử lý (nhiều người đặt cùng lúc) hoặc thanh toán không thành công. Vui lòng thử lại hoặc chọn phòng khác.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRetryAfterFailure}
+                    className="accent-button mt-3 inline-flex"
+                  >
+                    Thử đặt lại
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

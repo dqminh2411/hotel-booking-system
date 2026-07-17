@@ -17,15 +17,12 @@ import com.hotelbooking.userservice.service.NotificationDeviceTokenClient;
 import com.hotelbooking.userservice.service.TokenHashService;
 import com.hotelbooking.userservice.service.UserService;
 import jakarta.ws.rs.BadRequestException;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.AuthProvider;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -39,7 +36,6 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final PasswordEncoder passwordEncoder;
     private final AuthProviderRepository authProviderRepository;
     private final UserAuthProviderRepository userAuthProviderRepository;
     private final TokenHashService tokenHashService;
