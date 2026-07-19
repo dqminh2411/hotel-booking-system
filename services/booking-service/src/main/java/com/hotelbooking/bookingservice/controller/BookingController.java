@@ -1,6 +1,8 @@
 package com.hotelbooking.bookingservice.controller;
 
+import com.hotelbooking.bookingservice.dto.ApiResponse;
 import com.hotelbooking.bookingservice.dto.BookingResponse;
+import com.hotelbooking.bookingservice.dto.CheckinRequest;
 import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
 import com.hotelbooking.bookingservice.dto.UpdateBookingStatusRequest;
 import com.hotelbooking.bookingservice.service.BookingService;
@@ -46,5 +48,14 @@ public class BookingController {
     @PatchMapping("/{bookingId}/status")
     public BookingResponse updateBookingStatus(@PathVariable UUID bookingId, @Valid @RequestBody UpdateBookingStatusRequest request) {
         return bookingService.updateBookingStatus(bookingId, request.status());
+    }
+
+    @PatchMapping("/checkin")
+    public ApiResponse<Void> checkinBooking(@RequestBody CheckinRequest checkinRequest){
+        bookingService.checkin(checkinRequest);
+        return ApiResponse.<Void>builder()
+                            .code(200)
+                            .message("Checkin cho khách hàng thành công")
+                            .build();
     }
 }

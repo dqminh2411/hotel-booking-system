@@ -2,13 +2,17 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
+import com.hotelbooking.hotelservice.constant.RoomStatus;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
+import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
 import com.hotelbooking.hotelservice.dto.response.*;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.HotelImageEntity;
 import com.hotelbooking.hotelservice.entity.PolicyEntity;
+import com.hotelbooking.hotelservice.entity.RoomEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
+import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
@@ -17,6 +21,7 @@ import com.hotelbooking.hotelservice.repository.HotelAmenityRepository;
 import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
 import com.hotelbooking.hotelservice.repository.PolicyRepository;
+import com.hotelbooking.hotelservice.repository.RoomRepository;
 import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
@@ -35,6 +40,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -50,6 +56,7 @@ public class HotelServiceImpl implements HotelService {
     PolicyRepository policyRepository;
     HotelAmenityRepository hotelAmenityRepository;
     RoomTypeMapper roomTypeMapper;
+    RoomRepository roomRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -179,6 +186,47 @@ public class HotelServiceImpl implements HotelService {
         return new HotelAndRoomTypesResponse(h, roomTypeQuantities);
     };
 
+    @Override
+    @Transactional
+    public void updateRoomStatus(RoomCheckinRequest request){
+        List<UUID> roomIds = request.roomIds();
+        if (roomIds == null || roomIds.isEmpty()) {
+            throw new AppException("VALIDATION_ERROR", "Danh sách phòng check-in không được để trống", HttpStatus.BAD_REQUEST);
+        }
+
+        // check room tồn tại
+        List<UUID> uniqueRoomId = roomIds.stream().distinct().toList();
+        List<RoomEntity> roomEntities = roomRepository.findAllById(uniqueRoomId);
+        if(roomEntities.size() != uniqueRoomId.size()){
+            throw new AppException("ROOM_NOT_FOUND", "Một số roomId không tồn tại trong hệ thống", HttpStatus.BAD_REQUEST);
+        }
+
+        // check đúng số lượng đặt theo roomType
+        Map<UUID, Long> countByRoomType = roomEntities.stream()
+            .collect(Collectors.groupingBy(room -> room.getRoomType().getId(), Collectors.counting()));
+
+        for (RoomCheckinRequest.RoomTypeQuantity expected : request.roomTypeQuantities()) {
+            long count = countByRoomType.getOrDefault(expected.roomTypeId(), 0L);
+            if (count != expected.quantity()) {
+                throw new AppException(
+                    "ROOM_TYPE_QUANTITY_MISMATCH",
+                    "Số phòng chọn cho loại phòng " + expected.roomTypeId()
+                        + " không khớp (cần " + expected.quantity() + ", nhận " + count + ")",
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+        }
+
+        int updateRows = roomRepository.updateStatusRooms(uniqueRoomId, RoomStatus.AVAILABLE, RoomStatus.OCCUPIED);
+
+        if (updateRows != uniqueRoomId.size()) {
+            throw new AppException(
+                "ROOM_NOT_AVAILABLE", 
+                "Check-in thất bại! Có phòng trong danh sách không ở trạng thái trống (AVAILABLE). Vui lòng tải lại danh sách phòng.", 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+    }
 
 
     // đây là phần Long thêm và sửa

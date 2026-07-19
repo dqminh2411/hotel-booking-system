@@ -1,12 +1,14 @@
 package com.hotelbooking.bookingservice.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Data;
 
 @Builder
-public record ApiResponse<T>(
-    int code,
-    String message,
-    T data
-) {
-
+@Data
+@AllArgsConstructor
+public class ApiResponse<T>{
+    int code;
+    String message;
+    T data;
 }

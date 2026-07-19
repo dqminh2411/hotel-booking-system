@@ -1,11 +1,8 @@
 package com.hotelbooking.hotelservice.controller;
 
-import com.hotelbooking.hotelservice.dto.response.ApiResponse;
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
-import com.hotelbooking.hotelservice.dto.response.PagedResponse;
+import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -19,11 +16,6 @@ import lombok.experimental.FieldDefaults;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
 
 import com.hotelbooking.hotelservice.dto.response.*;
@@ -82,6 +74,15 @@ public class HotelController {
             @RequestParam(required = false, name = "roomTypeList") List<UUID> roomTypeList
     ) {
         return hotelService.getRequestedRoomTypesByHotel(hotelId, roomTypeList);
+    }
+
+    @PostMapping("/rooms")
+    public ApiResponse<Void> updateRoomStatus(@Valid @RequestBody RoomCheckinRequest request){
+        hotelService.updateRoomStatus(request);
+        return ApiResponse.<Void>builder()
+                            .code(200)
+                            .message("Cập nhật trạng thái các phòng thành công")
+                            .build();
     }
 }
 

@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotelbooking.bookingservice.dto.BookingDetail;
 import com.hotelbooking.bookingservice.dto.BookingResponse;
+import com.hotelbooking.bookingservice.dto.CheckinRequest;
 import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
+import com.hotelbooking.bookingservice.dto.RoomCheckinRequest;
+import com.hotelbooking.bookingservice.client.HotelServiceFiegnClient;
 import com.hotelbooking.bookingservice.dto.ActiveBookingRoomType;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCancelled;
 import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
@@ -18,11 +21,15 @@ import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
+import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
+
+import feign.FeignException;
+import feign.RetryableException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -61,6 +68,8 @@ public class BookingService {
     ObjectMapper objectMapper;
     RoomTypeInventoryRepository roomTypeInventoryRepository;
     StringRedisTemplate stringRedisTemplate;
+    HotelServiceFiegnClient hotelServiceFiegnClient;
+
 
     public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
@@ -103,6 +112,51 @@ public class BookingService {
         );
 
         return new CountBookingsResponse(hotelId, checkin, checkout, activeBookingCount);
+    }
+
+    @Transactional
+    public void checkin(CheckinRequest checkinRequest){
+        BookingEntity bookingEntity = bookingRepository.findById(checkinRequest.bookingId())
+                                                    .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
+
+        if (bookingEntity.getStatus() != BookingStatus.CONFIRMED) {
+            throw new AppException(
+                "BOOKING_STATUS_INVALID",
+                "Chỉ có thể check-in cho booking đã CONFIRMED",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        List<BookedRoomTypeEntity> bookedRoomTypes = bookedRoomTypeRepository.findByBookingId(checkinRequest.bookingId());
+        List<RoomCheckinRequest.RoomTypeQuantity> roomTypeQuantities = bookedRoomTypes.stream()
+            .map(brt -> new RoomCheckinRequest.RoomTypeQuantity(brt.getRoomTypeId(), brt.getQuantity()))
+            .toList();
+
+        // check số lượng phòng đặt với tổng số lượng phòng trong booking
+        int totalRoomsBooking = roomTypeQuantities.stream()
+            .mapToInt(RoomCheckinRequest.RoomTypeQuantity::quantity)
+            .sum();
+        if (checkinRequest.listRoomId().size() != totalRoomsBooking) {
+            throw new AppException(
+                "ROOM_COUNT_MISMATCH",
+                "Số phòng đã chọn (" + checkinRequest.listRoomId().size() + ") không khớp tổng số phòng đã đặt (" + totalRoomsBooking + ")",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+        
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(new RoomCheckinRequest(bookingEntity.getHotelId(), checkinRequest.listRoomId(), roomTypeQuantities));
+        } catch (RetryableException ex) {
+            log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
+            throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
+        } catch (FeignException ex) {
+            log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
+            throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
+        }
+        
+
+        bookingEntity.setStatus(BookingStatus.CHECKEDIN);
+        bookingRepository.save(bookingEntity); 
     }
 
     @Transactional
