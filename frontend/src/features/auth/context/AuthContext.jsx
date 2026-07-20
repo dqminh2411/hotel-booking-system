@@ -9,11 +9,17 @@ function mapKeycloakUser(tokenParsed) {
 
   return {
     id: tokenParsed.sub,
+    // "fullName" and "phone" are custom User Profile attributes exposed via
+    // dedicated protocol mappers (see Keycloak setup guide). Fall back to
+    // the standard OIDC claims in case those mappers aren't configured yet
+    // (e.g. accounts created through Google, which populate name/given_name).
     fullName:
-      tokenParsed.name || [tokenParsed.given_name, tokenParsed.family_name].filter(Boolean).join(' '),
+      tokenParsed.fullName ||
+      tokenParsed.name ||
+      [tokenParsed.given_name, tokenParsed.family_name].filter(Boolean).join(' '),
     email: tokenParsed.email,
     emailVerified: Boolean(tokenParsed.email_verified),
-    phone: tokenParsed.phone_number || '',
+    phone: tokenParsed.phone || tokenParsed.phone_number || '',
     roles: tokenParsed.realm_access?.roles || [],
   };
 }

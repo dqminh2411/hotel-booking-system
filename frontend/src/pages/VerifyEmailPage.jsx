@@ -1,76 +1,57 @@
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import AuthLayout from '../features/auth/components/AuthLayout';
-import { verifyEmail } from '../features/auth/services/authService';
-import { getApiErrorMessage } from '../shared/api/getApiErrorMessage';
+import useAuth from '../features/auth/hooks/useAuth';
+import { consumePostAuthRedirect } from '../features/auth/utils/postAuthRedirect';
 
 export default function VerifyEmailPage() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
-  const [status, setStatus] = useState(token ? 'loading' : 'error');
-  const [message, setMessage] = useState(
-    token ? '' : 'Liên kết xác thực không hợp lệ hoặc thiếu token.',
-  );
+  const { isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
+  function handleContinue() {
+    const { redirectTo, state } = consumePostAuthRedirect();
+    navigate(redirectTo, { replace: true, state });
+  }
 
-    verifyEmail(token)
-      .then(() => {
-        if (active) {
-          setStatus('success');
-          setMessage('Email đã được xác thực. Bạn có thể đăng nhập ngay bây giờ.');
-        }
-      })
-      .catch((error) => {
-        if (active) {
-          setStatus('error');
-          setMessage(getApiErrorMessage(error, 'Không thể xác thực email. Liên kết có thể đã hết hạn.'));
-        }
-      });
+  // Happy path: same browser/tab that registered is still open when the
+  // user clicks the verification link, so Keycloak resumes the flow and
+  // sends them back here already authenticated. The backend profile row
+  // (fullName/email/phone/keycloakId) is created in the background by
+  // useSyncUserProfile (mounted app-wide), so there's nothing to call here.
+  if (isAuthenticated) {
+    return (
+      <AuthLayout
+        eyebrow="Đăng ký thành công"
+        title="Xác thực email thành công"
+        description="Tài khoản của bạn đã sẵn sàng để sử dụng."
+      >
+        <div className="rounded-lg border border-green-200 bg-green-50 p-5 text-center">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-green-100 text-xl text-green-700">
+            ✓
+          </span>
+          <p className="mt-4 text-sm leading-6 text-green-800">
+            Chào mừng {user?.fullName || user?.email} đến với HotelHub! Email của bạn đã được xác thực.
+          </p>
+        </div>
+        <button type="button" onClick={handleContinue} className="primary-button mt-5 w-full">
+          Tiếp tục
+        </button>
+      </AuthLayout>
+    );
+  }
 
-    return () => {
-      active = false;
-    };
-  }, [token]);
-
+  // If this page is opened without an active Keycloak session (e.g. the
+  // verification link was opened on a different device/browser than the
+  // one used to register), Keycloak itself already showed its own
+  // confirmation page. Here we just point the user back to login.
   return (
     <AuthLayout
       eyebrow="Xác thực email"
-      title={
-        status === 'loading'
-          ? 'Đang xác thực tài khoản'
-          : status === 'success'
-            ? 'Xác thực thành công'
-            : 'Không thể xác thực'
-      }
-      description="HotelHub đang kiểm tra liên kết kích hoạt tài khoản của bạn."
+      title="Email đã được xác thực"
+      description="Bạn có thể đăng nhập ngay bây giờ để tiếp tục sử dụng HotelHub."
     >
-      {status === 'loading' && (
-        <div className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-          <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
-          Vui lòng chờ trong giây lát...
-        </div>
-      )}
-
-      {status !== 'loading' && (
-        <>
-          <div
-            role="status"
-            className={`rounded-lg border p-4 text-sm ${
-              status === 'success'
-                ? 'border-green-200 bg-green-50 text-green-700'
-                : 'border-red-200 bg-red-50 text-red-700'
-            }`}
-          >
-            {message}
-          </div>
-          <Link to="/login" className="primary-button mt-5 w-full">
-            Đến trang đăng nhập
-          </Link>
-        </>
-      )}
+      <Link to="/login" className="primary-button w-full">
+        Đến trang đăng nhập
+      </Link>
     </AuthLayout>
   );
 }

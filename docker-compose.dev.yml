@@ -187,7 +187,8 @@ services:
 
     ports:
       - "8085:8080"
-
+    volumes:
+      - ./keycloak/theme/hotelhub:/opt/keycloak/themes/hotelhub
     networks:
       - app-network
   
@@ -202,3 +203,4 @@ volumes:
   maven-cache:
   redis-data:
   keycloak-db-data:
+

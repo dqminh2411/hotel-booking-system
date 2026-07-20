@@ -2,6 +2,7 @@
 # Run: docker compose up --build
 # Docs: https://docs.docker.com/compose/
 
+name: microservices-assignment
 services:
   frontend:
     build:

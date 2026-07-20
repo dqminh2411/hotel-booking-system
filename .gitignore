@@ -124,3 +124,7 @@ UI-desc.md
 deploy.md
 google-login.md
 FCM.md
+
+frontend-2/
+keycloak-theme/
+*.zip

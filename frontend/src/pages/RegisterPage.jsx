@@ -20,7 +20,13 @@ export default function RegisterPage() {
 
   function handleEmailRegister() {
     storePostAuthRedirect(location.state);
-    register();
+    // If the same browser/tab is still around when the user clicks the
+    // verification link in their email, Keycloak resumes this flow and
+    // lands them back on /verify-email already logged in. If they open the
+    // link elsewhere, they'll see Keycloak's own confirmation page instead
+    // and can just log in normally afterwards — useSyncUserProfile takes
+    // care of creating the backend profile row either way.
+    register({ redirectUri: `${window.location.origin}/verify-email` });
   }
 
   function handleGoogleRegister() {

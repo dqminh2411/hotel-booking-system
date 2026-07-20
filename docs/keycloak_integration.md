@@ -585,8 +585,49 @@ Connection & authentication:
 - Add google identity provider in Keycloak Admin console
 - Config:
     - redirect URI: `http://localhost:8085/realms/hotel-booking-system/broker/google/endpoint` (add this URI to Authorize Redirect URI to Google Cloud Console of google project)
+    - set alias=`google`
     - Client ID and Client Secret: from Google Cloud Console of google project
     - Jwt Authorization grant: ON
     - Trust Email: ON (no need to verify email from Google after first login)
     - First login flow override: `first broker login`
+
+12. Custom Authentication Flow:
+- Registration flow: 
+```mermaid
+flowchart TD
+    A[Registration form] -->|full name, email, phone, password, confirm password| B(Registration User Profile Creation)
+    B --> C[Password Validation <br/> Always set password on register form = Enabled]
+    C --> D[Email Verification]
+    D --> E[Success - Auto Login]
+```
+
+- Login Email/password flow:
+
+```mermaid
+flowchart TD
+    A[Login form] -->|email, password| B(Login User)
+    B --> C[Check Users' credentials]
+    C --> D[Success - Redirect to Dashboard]
+```
+
+- Login Google Keycloak flow:
+Create custom login flow duplicated from `first broker login flow`
+```mermaid
+flowchart TD
+    A[Login form] -->|Click Google Login button| B(Redirect to Google Login Page)
+    B --> C[User enters Google credentials]
+    C --> D[Google redirects back to Keycloak with authorization code]
+    D --> E[Keycloak exchanges code for tokens]
+    E --> F[GIS returns ID token and access token]
+    F -->|Custom login flow| G[User creation or linking]
+    G --> H{User exists?}
+
+    H -->|Yes| I[Link Google account to existing user <br/> Automatically set existing user = Required]
+    H -->|No| J[Create new user in Keycloak]
+```
+
+13. Customize trang login Keycloak:
+
+hoàn thiện sau sử dụng HUONG-DAN-CAI-DAT.md
+
 
