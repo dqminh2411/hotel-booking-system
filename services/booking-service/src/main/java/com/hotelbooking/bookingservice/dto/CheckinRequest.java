@@ -1,6 +1,7 @@
 package com.hotelbooking.bookingservice.dto;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotEmpty;
@@ -13,7 +14,7 @@ public record CheckinRequest(
     UUID bookingId,
 
     @NotEmpty(message = "Danh sách phòng cần checkin không được để trống")
-    List<UUID> listRoomId
+    Map<UUID, List<UUID>> listRoomId
 ) {
 
 }

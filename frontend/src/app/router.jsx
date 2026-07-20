@@ -6,6 +6,7 @@ import HotelDetailPage from '../pages/HotelDetailPage';
 import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import RegisterPage from '../pages/RegisterPage';
+import StaffCheckinPage from '../pages/StaffCheckinPage';
 import VerifyEmailPage from '../pages/VerifyEmailPage';
 
 export default function AppRouter() {
@@ -16,6 +17,7 @@ export default function AppRouter() {
       <Route path="/checkout" element={<CheckoutPage />} />
       <Route path="/booking/checkout" element={<Navigate to="/checkout" replace />} />
       <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+      <Route path="/staff/bookings/:bookingId/checkin" element={<StaffCheckinPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />

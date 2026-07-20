@@ -20,6 +20,7 @@ import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
+import com.hotelbooking.bookingservice.enums.RoomStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
 import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
@@ -69,6 +70,7 @@ public class BookingService {
     RoomTypeInventoryRepository roomTypeInventoryRepository;
     StringRedisTemplate stringRedisTemplate;
     HotelServiceFiegnClient hotelServiceFiegnClient;
+    CheckinCheckoutService checkinCheckoutService;
 
 
     public BookingResponse getBookingById(UUID bookingId) {
@@ -114,38 +116,17 @@ public class BookingService {
         return new CountBookingsResponse(hotelId, checkin, checkout, activeBookingCount);
     }
 
-    @Transactional
+    /*------checkin------*/
+    /* Lý do tại sao tách sang service kia (tại ban đầu t code gộp chung vào 1 hàm luôn)
+    1. Để  feign client trong @Transactional thấy bảo cạn kiệt connection db khi mà bị timeout các thứ
+    2. Nếu tách thành các method trong cùng 1 class này thì đều 0 chạy được đặc trưng @Transactional
+        vì cơ chế Proxy gì đó của Spring boot
+    3. Rủi ro dữ liệu 0 đồng nhất do gọi qua service khác */
     public void checkin(CheckinRequest checkinRequest){
-        BookingEntity bookingEntity = bookingRepository.findById(checkinRequest.bookingId())
-                                                    .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
-
-        if (bookingEntity.getStatus() != BookingStatus.CONFIRMED) {
-            throw new AppException(
-                "BOOKING_STATUS_INVALID",
-                "Chỉ có thể check-in cho booking đã CONFIRMED",
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        List<BookedRoomTypeEntity> bookedRoomTypes = bookedRoomTypeRepository.findByBookingId(checkinRequest.bookingId());
-        List<RoomCheckinRequest.RoomTypeQuantity> roomTypeQuantities = bookedRoomTypes.stream()
-            .map(brt -> new RoomCheckinRequest.RoomTypeQuantity(brt.getRoomTypeId(), brt.getQuantity()))
-            .toList();
-
-        // check số lượng phòng đặt với tổng số lượng phòng trong booking
-        int totalRoomsBooking = roomTypeQuantities.stream()
-            .mapToInt(RoomCheckinRequest.RoomTypeQuantity::quantity)
-            .sum();
-        if (checkinRequest.listRoomId().size() != totalRoomsBooking) {
-            throw new AppException(
-                "ROOM_COUNT_MISMATCH",
-                "Số phòng đã chọn (" + checkinRequest.listRoomId().size() + ") không khớp tổng số phòng đã đặt (" + totalRoomsBooking + ")",
-                HttpStatus.BAD_REQUEST
-            );
-        }
+        RoomCheckinRequest roomCheckinRequest = checkinCheckoutService.validateAndGetCheckinData(checkinRequest);
         
         try {
-            hotelServiceFiegnClient.updateRoomStatus(new RoomCheckinRequest(bookingEntity.getHotelId(), checkinRequest.listRoomId(), roomTypeQuantities));
+            hotelServiceFiegnClient.updateRoomStatus(roomCheckinRequest);
         } catch (RetryableException ex) {
             log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
             throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
@@ -155,9 +136,45 @@ public class BookingService {
         }
         
 
-        bookingEntity.setStatus(BookingStatus.CHECKEDIN);
-        bookingRepository.save(bookingEntity); 
+        try {
+            checkinCheckoutService.updateBookingStatusCheckin(checkinRequest);
+        } catch (Exception e) {
+            RoomCheckinRequest rollBack = new RoomCheckinRequest(roomCheckinRequest.roomIds(),
+                                                                roomCheckinRequest.roomTypeQuantities(),
+                                                                RoomStatus.OCCUPIED,
+                                                                RoomStatus.AVAILABLE);
+            hotelServiceFiegnClient.updateRoomStatus(rollBack);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
+    /*------checkin------*/
+
+    /*------checkout------*/
+    public void checkout(UUID bookingId){
+        RoomCheckinRequest requestCheckout = checkinCheckoutService.validateCheckoutAndGetData(bookingId);
+
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(requestCheckout);
+        } catch (RetryableException ex) {
+            log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
+            throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
+        } catch (FeignException ex) {
+            log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
+            throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
+        }
+
+        try {
+            checkinCheckoutService.updateBookingStatusCheckout(bookingId);
+        } catch (Exception e) {
+            RoomCheckinRequest rollBack = new RoomCheckinRequest(requestCheckout.roomIds(),
+                                                                requestCheckout.roomTypeQuantities(),
+                                                                RoomStatus.CLEANING,
+                                                                RoomStatus.OCCUPIED);
+            hotelServiceFiegnClient.updateRoomStatus(rollBack);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkout------*/
 
     @Transactional
     public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS booked_roomtypes (
     price_per_night  NUMERIC       NOT NULL,
     nights           INTEGER       NOT NULL,
     subtotal         NUMERIC       NOT NULL,
+    room_ids         UUID[],       -- Trường mảng UUID tương ứng với List<UUID> trong Entity
     is_deleted       BOOLEAN       NOT NULL DEFAULT false,
     CONSTRAINT chk_booked_roomtypes_quantity CHECK (quantity > 0),
     CONSTRAINT chk_booked_roomtypes_nights   CHECK (nights > 0)

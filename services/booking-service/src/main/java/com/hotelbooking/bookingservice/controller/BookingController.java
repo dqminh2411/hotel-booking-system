@@ -58,4 +58,13 @@ public class BookingController {
                             .message("Checkin cho khách hàng thành công")
                             .build();
     }
+
+    @PatchMapping("/checkout/{bookingId}")
+    public ApiResponse<Void> checkout(@PathVariable(name = "bookingId") UUID bookingId){
+        bookingService.checkout(bookingId);
+        return ApiResponse.<Void>builder()
+                            .code(200)
+                            .message("Checkout cho khách hàng thành công")
+                            .build();
+    }
 }

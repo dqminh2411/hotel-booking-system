@@ -2,7 +2,6 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.constant.RoomStatus;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
@@ -217,12 +216,12 @@ public class HotelServiceImpl implements HotelService {
             }
         }
 
-        int updateRows = roomRepository.updateStatusRooms(uniqueRoomId, RoomStatus.AVAILABLE, RoomStatus.OCCUPIED);
+        int updateRows = roomRepository.updateStatusRooms(uniqueRoomId, request.oldStatus(), request.newStatus());
 
         if (updateRows != uniqueRoomId.size()) {
             throw new AppException(
                 "ROOM_NOT_AVAILABLE", 
-                "Check-in thất bại! Có phòng trong danh sách không ở trạng thái trống (AVAILABLE). Vui lòng tải lại danh sách phòng.", 
+                "Check-in thất bại! Có phòng trong danh sách không ở trạng thái trống. Vui lòng tải lại danh sách phòng", 
                 HttpStatus.BAD_REQUEST
             );
         }
