@@ -28,35 +28,27 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     // add keycloak id from jwt
-    public UserResponse createUser(RegisterUserRequest request) {
+    public UserResponse createUser(UUID keycloakId, CreateUserRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String phone = request.phone().trim();
-        if (userRepository.existsByEmailIgnoreCase(email)) {
-            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_ALREADY_EXISTS",
-                    "Email is already used by another account");
+        String fullName = request.fullName().trim();
+        if (userRepository.existsByEmailIgnoreCaseOrPhoneOrKeycloakId(email, phone, keycloakId)) {
+            throw new ApiException(HttpStatus.CONFLICT, "INVALID_USER_DATA",
+                    "Email, phone or keycloakId already exists");
         }
-        if (userRepository.existsByPhone(phone)) {
-            throw new ApiException(HttpStatus.CONFLICT, "PHONE_ALREADY_EXISTS",
-                    "Phone is already used by another account");
-        }
-        // check if a user with same keycloak id exists, if yes, throw exception
-
-    
+        
         Instant now = Instant.now();
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setEmail(email);
         user.setPhone(phone);
-        // user.setKeycloakId(request.keycloakId());
-        user.setFullName(request.fullName().trim());
+        user.setKeycloakId(keycloakId);
+        user.setFullName(fullName);
         user.setStatus(UserStatus.ACTIVE);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         user.setDeleted(false);
         userRepository.save(user);
-
-        // String verificationToken = jwtService.createEmailVerificationToken(user);
-        // emailService.send(user.getEmail(), user.getFullName(), verificationToken);
         return toResponse(user);
     }
 

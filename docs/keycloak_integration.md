@@ -295,7 +295,7 @@ security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/hotel-booking-system}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8085/realms/hotel-booking-system}
 ```
 
 > Spring Security will automatically fetch the JWKS from Keycloak's well-known endpoint: `http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs` and use it to validate incoming JWTs.

@@ -1,25 +1,21 @@
-// package com.hotelbooking.userservice.dto;
+package com.hotelbooking.userservice.dto;
 
-// import java.util.UUID;
+import java.util.UUID;
 
-// import com.hotelbooking.userservice.validation.PasswordMatch;
 
-// import jakarta.validation.constraints.Email;
-// import jakarta.validation.constraints.NotBlank;
-// import jakarta.validation.constraints.Pattern;
-// import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
-// public record CreateUserRequest(
+public record CreateUserRequest(
 
-//         @NotBlank 
-//         UUID keycloakId,
+        @NotBlank @Email @Size(max = 255) String email,
 
-//         @NotBlank @Email @Size(max = 255) String email,
+        @NotBlank
+        @Pattern(regexp = "^\\+?[0-9]{9,15}$", message = "phone must contain 9 to 15 digits")
+        String phone,
 
-//         @NotBlank
-//         @Pattern(regexp = "^\\+?[0-9]{9,15}$", message = "phone must contain 9 to 15 digits")
-//         String phone,
-
-//         @NotBlank @Size(max = 255) String fullName
-// ) {
-// }
+        @NotBlank @Size(max = 255) String fullName
+) {
+}

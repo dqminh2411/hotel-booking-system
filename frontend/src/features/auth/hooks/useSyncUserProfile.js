@@ -24,7 +24,6 @@ export default function useSyncUserProfile() {
 
     axiosClient
       .post('/api/users', {
-        keycloakId: user.id,
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,

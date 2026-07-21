@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public interface UserService {
     
-    UserResponse createUser(RegisterUserRequest request);
+    UserResponse createUser(UUID keycloakId, CreateUserRequest request);
     UserResponse getCurrentUser(String authorizationHeader);
 
     UserResponse getUserById(UUID userId);

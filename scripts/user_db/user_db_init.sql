@@ -23,7 +23,7 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    keycloak_id VARCHAR(255) NOT NULL UNIQUE,
+    keycloak_id UUID NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
     phone VARCHAR(20),
     full_name VARCHAR(255) NOT NULL,
