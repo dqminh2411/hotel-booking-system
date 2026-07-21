@@ -7,9 +7,13 @@ import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import RegisterPage from '../pages/RegisterPage';
 import VerifyEmailPage from '../pages/VerifyEmailPage';
+import HomePageSearch from "../pages/HomePageSearch.jsx";
+import SearchResultsPage from '../pages/SearchResultsPage.jsx';
+import Header from '../features/hotel/components/Header';
 
 export default function AppRouter() {
   return (
+
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/hotels/:hotelId" element={<HotelDetailPage />} />
@@ -21,6 +25,8 @@ export default function AppRouter() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/login" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
+      <Route path="/hotels" element={<HomePageSearch />} />
+      <Route path="/hotels/search" element={<SearchResultsPage />} />
     </Routes>
   );
 }

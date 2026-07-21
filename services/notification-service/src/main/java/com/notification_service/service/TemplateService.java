@@ -4,7 +4,6 @@ import com.notification_service.dto.EmailRequest;
 import com.notification_service.dto.EmailTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 
 @Service
 public class TemplateService {

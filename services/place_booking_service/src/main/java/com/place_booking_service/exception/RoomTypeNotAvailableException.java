@@ -8,7 +8,7 @@ public class RoomTypeNotAvailableException extends PlaceBookingException {
     public RoomTypeNotAvailableException(UUID roomTypeId) {
         super(
             "ROOM_TYPE_NOT_AVAILABLE",
-            "Room type " + roomTypeId + " does not have enough available rooms",
+            "Có vẻ bạn đặt chậm tay mất rồi khi đặt phòng " + roomTypeId.toString() + ". \nHãy quay lại và chọn lại phòng khác nhé",
             HttpStatus.BAD_REQUEST
         );
     }

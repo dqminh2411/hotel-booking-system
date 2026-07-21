@@ -15,38 +15,52 @@ import com.hotelbooking.bookingservice.entity.BookedRoomTypeEntity;
 import com.hotelbooking.bookingservice.entity.BookingEntity;
 import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
+import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
+import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class BookingService {
     private static final String OUTBOX_TOPIC = "booking-events";
     private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CHECKEDIN);
 
-    private final BookingRepository bookingRepository;
-    private final BookedRoomTypeRepository bookedRoomTypeRepository;
-    private final BookingInfoRepository bookingInfoRepository;
-    private final OutboxEventRepository outboxEventRepository;
-    private final ObjectMapper objectMapper;
+    BookingRepository bookingRepository;
+    BookedRoomTypeRepository bookedRoomTypeRepository;
+    BookingInfoRepository bookingInfoRepository;
+    OutboxEventRepository outboxEventRepository;
+    ObjectMapper objectMapper;
+    RoomTypeInventoryRepository roomTypeInventoryRepository;
+    StringRedisTemplate stringRedisTemplate;
 
     public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
@@ -112,75 +126,84 @@ public class BookingService {
             );
         }
 
-        booking.setStatus(newStatus);
-        bookingRepository.save(booking);
-        BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
-        if (newStatus == BookingStatus.CONFIRMED) {
-            saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
-        } else {
-            saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
-        }
+        // booking.setStatus(newStatus);
+        // bookingRepository.save(booking);
+        // BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
+        // if (newStatus == BookingStatus.CONFIRMED) {
+        //     saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
+        // } else {
+        //     saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
+        // }
+        String eventType = (newStatus == BookingStatus.CONFIRMED) ? "BookingConfirmed" : "BookingCancelled";
+        String reason = (newStatus == BookingStatus.CONFIRMED) ? "" : "Booking cancelled";
+        updateStatusFromCommand(null, bookingId, newStatus, eventType, reason);
         return getBookingById(bookingId);
     }
 
     @Transactional
-    public void handleCreateBooking(CreateBookingCommand command) {
+    public void handleCreateBooking(CreateBookingCommand command, List<UUID> sortedRoomTypeId){
         validateCreateCommand(command);
-        if (bookingRepository.existsById(command.bookingId())) {
+        if(bookingRepository.existsById(command.bookingId())){
             return;
         }
 
-        Map<UUID, CreateBookingCommand.RoomTypeItem> roomTypeMap = command.roomTypeList().stream()
-            .collect(Collectors.toMap(CreateBookingCommand.RoomTypeItem::roomTypeId, Function.identity()));
+        Map<UUID, RoomTypeInventory> inventories = new LinkedHashMap<>();
+        for(UUID roomTypeId : sortedRoomTypeId){
+            RoomTypeInventory roomTypeInventory = roomTypeInventoryRepository.findByIdForTruth(roomTypeId)
+                                .orElseThrow(() -> new AppException("ROOMTYPE_INVENTORY_NOT_FOUND", "Không tìm thấy roomTypeInventory có id: " + roomTypeId, HttpStatus.NOT_FOUND));
 
-        List<ActiveBookingRoomType> activeRows = bookingRepository.countActiveBookingsByRoomType(
-            command.hotel().hotelId(),
-            new ArrayList<>(roomTypeMap.keySet()),
-            roomTypeMap.isEmpty(),
-            command.checkin(),
-            command.checkout(),
-            ACTIVE_STATUSES
-        );
-        Map<UUID, Long> activeByRoomType = activeRows.stream()
-            .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
+            inventories.put(roomTypeId, roomTypeInventory);
+        }
 
-
+        List<ActiveBookingRoomType> activeBookings = bookingRepository.countActiveBookingsByRoomType(
+                    command.hotel().hotelId(),
+                    sortedRoomTypeId,
+                    sortedRoomTypeId.isEmpty(),
+                    command.checkin(),
+                    command.checkout(),
+                    ACTIVE_STATUSES);
+        
+        Map<UUID, Long> activeByRoomType = activeBookings.stream()
+                .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
+        
         BookingDetail bookingDetail = toBookingDetail(command);
 
-        BookingEntity booking = new BookingEntity();
-        booking.setId(command.bookingId());
-        booking.setCustomerId(command.user().userId());
-        booking.setHotelId(command.hotel().hotelId());
-        booking.setCreatedAt(Instant.now());
-        booking.setCheckinDate(command.checkin());
-        booking.setCheckoutDate(command.checkout());
-        booking.setNumAdults(command.numAdults());
-        booking.setTotalAmount(command.totalAmount());
-        booking.setCurrency(command.currency());
-        booking.setPaymentMethod(command.paymentMethod());
-        booking.setStatus(BookingStatus.PENDING);
-        bookingRepository.save(booking);
+        BookingEntity bookingEntity = new BookingEntity();
+        bookingEntity.setId(command.bookingId());
+        bookingEntity.setCustomerId(command.user().userId());
+        bookingEntity.setHotelId(command.hotel().hotelId());
+        bookingEntity.setCreatedAt(Instant.now());
+        bookingEntity.setCheckinDate(command.checkin());
+        bookingEntity.setCheckoutDate(command.checkout());
+        bookingEntity.setNumAdults(command.numAdults());
+        bookingEntity.setTotalAmount(command.totalAmount());
+        bookingEntity.setCurrency(command.currency());
+        bookingEntity.setStatus(BookingStatus.PENDING);
+        bookingEntity.setPaymentMethod(command.paymentMethod());
+        bookingRepository.save(bookingEntity);
 
-        boolean isBookingFailed = false;
-        List<String> unavailableRoomTypes = new ArrayList<>();
-
+        boolean isRoomTypeNotEnough = false;
         long nights = ChronoUnit.DAYS.between(command.checkin(), command.checkout());
-        for (CreateBookingCommand.RoomTypeItem item : command.roomTypeList()) {
-            long existing = activeByRoomType.getOrDefault(item.roomTypeId(), 0L);
-            long expected = existing + item.bookingQuantity();
-            if(expected > item.totalQuantity()) {
-                isBookingFailed = true;
-                unavailableRoomTypes.add(item.name());
+        List<UUID> unAvailable = new ArrayList<>();
+
+        for(CreateBookingCommand.RoomTypeItem roomTypeItem : command.roomTypeList()){
+            long totalBooking = activeByRoomType.getOrDefault(roomTypeItem.roomTypeId(), 0L);
+            long expected = totalBooking + roomTypeItem.bookingQuantity();
+
+            if(expected > ((RoomTypeInventory)inventories.get(roomTypeItem.roomTypeId())).getTotalQuantity()){
+                isRoomTypeNotEnough = true;
+                unAvailable.add(roomTypeItem.roomTypeId());
             }
-            BookedRoomTypeEntity entity = new BookedRoomTypeEntity();
-            entity.setId(UUID.randomUUID());
-            entity.setBookingId(command.bookingId());
-            entity.setRoomTypeId(item.roomTypeId());
-            entity.setQuantity(item.bookingQuantity());
-            entity.setPricePerNight(item.price());
-            entity.setNights((int) nights);
-            entity.setSubtotal(item.price().multiply(BigDecimal.valueOf(item.bookingQuantity())).multiply(BigDecimal.valueOf(nights)));
-            bookedRoomTypeRepository.save(entity);
+
+            BookedRoomTypeEntity bookedRoomTypeEntity = new BookedRoomTypeEntity();
+            bookedRoomTypeEntity.setId(UUID.randomUUID());
+            bookedRoomTypeEntity.setBookingId(command.bookingId());
+            bookedRoomTypeEntity.setRoomTypeId(roomTypeItem.roomTypeId());
+            bookedRoomTypeEntity.setQuantity(roomTypeItem.bookingQuantity());
+            bookedRoomTypeEntity.setPricePerNight(roomTypeItem.price());
+            bookedRoomTypeEntity.setNights((int)nights);
+            bookedRoomTypeEntity.setSubtotal(roomTypeItem.price().multiply(BigDecimal.valueOf(roomTypeItem.bookingQuantity())).multiply(BigDecimal.valueOf(nights)));
+            bookedRoomTypeRepository.save(bookedRoomTypeEntity);
         }
 
         try {
@@ -193,15 +216,16 @@ public class BookingService {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to persist booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        if(isBookingFailed){
-            booking.setStatus(BookingStatus.FAILED);
-            bookingRepository.save(booking);
+        if(isRoomTypeNotEnough){
+            bookingEntity.setStatus(BookingStatus.FAILED);
+            bookingRepository.save(bookingEntity);
             saveOutboxEvent(
                     new BookingFailed(
                         command.sagaId(),
                         "BookingFailed",
                         toBookingDetail(command),
-                        "Room " + String.join(", ", unavailableRoomTypes) + " not available"
+                        "Có vẻ bạn đặt chậm tay mất rồi. Hãy quay lại và chọn lại phòng khác nhé.\n" 
+                            + "Các loại phòng đã hết: " + unAvailable.toString()
                     )
                 );
                 return;
@@ -219,6 +243,13 @@ public class BookingService {
                 command.paymentToken()
             )
         );
+
+        try {
+            clearHotelDetailCache(command.hotel().hotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
+        
     }
 
     @Transactional
@@ -244,9 +275,14 @@ public class BookingService {
         }
 
         saveOutboxEvent(new BookingCancelled(sagaId, eventType, bookingDetail, reason));
+        try {
+            clearHotelDetailCache(bookingDetail.getHotel().getHotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
     }
 
-    private void saveOutboxEvent(Object event) {
+    public void saveOutboxEvent(Object event) {
         try {
             OutboxEventEntity outbox = new OutboxEventEntity();
             outbox.setId(UUID.randomUUID());
@@ -271,7 +307,7 @@ public class BookingService {
         }
     }
 
-    private BookingDetail toBookingDetail(CreateBookingCommand command) {
+    public BookingDetail toBookingDetail(CreateBookingCommand command) {
         BookingDetail bookingDetail = new BookingDetail();
         bookingDetail.setBookingId(command.bookingId());
         bookingDetail.setCheckin(command.checkin().toString());
@@ -334,7 +370,13 @@ public class BookingService {
         }
     }
 
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+    private void clearHotelDetailCache(UUID hotelId){
+        String keyPattern = "hotel-detail-availability::" + hotelId.toString() + "::*";
+
+        Set<String> keys = stringRedisTemplate.keys(keyPattern);
+
+        if(keys != null && !keys.isEmpty()){
+            stringRedisTemplate.delete(keys);
+        }
     }
 }
