@@ -76,7 +76,8 @@ public class CheckinCheckoutService {
 
     @Transactional
     public void updateBookingStatusCheckin(CheckinRequest checkinRequest) {
-        BookingEntity bookingEntity = bookingRepository.findById(checkinRequest.bookingId()).orElseThrow();
+        BookingEntity bookingEntity = bookingRepository.findById(checkinRequest.bookingId())
+                .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
         List<BookedRoomTypeEntity> bookedRoomTypes = bookedRoomTypeRepository
                 .findByBookingId(checkinRequest.bookingId());
 

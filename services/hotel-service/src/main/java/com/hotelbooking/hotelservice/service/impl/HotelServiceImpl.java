@@ -37,12 +37,14 @@ import java.util.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class HotelServiceImpl implements HotelService {
@@ -190,7 +192,10 @@ public class HotelServiceImpl implements HotelService {
     public void updateRoomStatus(RoomCheckinRequest request){
         List<UUID> roomIds = request.roomIds();
         if (roomIds == null || roomIds.isEmpty()) {
-            throw new AppException("VALIDATION_ERROR", "Danh sách phòng check-in không được để trống", HttpStatus.BAD_REQUEST);
+            throw new AppException("VALIDATION_ERROR", "Danh sách phòng không được để trống", HttpStatus.BAD_REQUEST);
+        }
+        if (request.oldStatus() == null || request.newStatus() == null) {
+            throw new AppException("VALIDATION_ERROR", "oldStatus/newStatus không được để trống", HttpStatus.BAD_REQUEST);
         }
 
         // check room tồn tại
@@ -216,12 +221,26 @@ public class HotelServiceImpl implements HotelService {
             }
         }
 
+        // check: đảm bảo mọi phòng trong roomIds đều thuộc roomType đã đặt
+        Set<UUID> roomTypeIds = request.roomTypeQuantities().stream()
+            .map(RoomCheckinRequest.RoomTypeQuantity::roomTypeId)
+            .collect(Collectors.toSet());
+
+        if (!roomTypeIds.containsAll(countByRoomType.keySet())) {
+            throw new AppException(
+                "ROOM_TYPE_QUANTITY_MISMATCH",
+                "Danh sách phòng chứa loại phòng không được đặt trong roomTypeQuantities",
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
         int updateRows = roomRepository.updateStatusRooms(uniqueRoomId, request.oldStatus(), request.newStatus());
 
         if (updateRows != uniqueRoomId.size()) {
             throw new AppException(
                 "ROOM_NOT_AVAILABLE", 
-                "Check-in thất bại! Có phòng trong danh sách không ở trạng thái trống. Vui lòng tải lại danh sách phòng", 
+                "Cập nhật trạng thái phòng thất bại! Có phòng không ở trạng thái " + request.oldStatus()
+                    + " như mong đợi. Vui lòng tải lại danh sách phòng.", 
                 HttpStatus.BAD_REQUEST
             );
         }
@@ -427,9 +446,3 @@ public class HotelServiceImpl implements HotelService {
         );
     }
 }
-
-
-
-
-
-

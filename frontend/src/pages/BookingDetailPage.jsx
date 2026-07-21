@@ -31,6 +31,11 @@ const STATUS_CONFIG = {
     badge: 'border-blue-200 bg-blue-50 text-blue-700',
     message: 'Khách đã nhận phòng thành công.',
   },
+  COMPLETED: {
+    label: 'Đã hoàn tất',
+    badge: 'border-slate-300 bg-slate-100 text-slate-700',
+    message: 'Khách đã trả phòng. Đặt phòng đã hoàn tất.',
+  },
 };
 
 function normalizeBooking(rawBooking) {
@@ -128,6 +133,15 @@ export default function BookingDetailPage() {
                 className="accent-button"
               >
                 Xác nhận checkin
+              </Link>
+            )}
+            {normalized?.status === 'CHECKEDIN' && (
+              <Link
+                to={`/staff/bookings/${bookingId}/checkout`}
+                state={{ booking: normalized }}
+                className="accent-button"
+              >
+                Xác nhận checkout
               </Link>
             )}
             <Link to="/" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">

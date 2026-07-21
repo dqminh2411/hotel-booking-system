@@ -27,3 +27,13 @@ export async function confirmBookingCheckin(bookingId, listRoomId) {
   const { data } = await axiosClient.patch('/bookings/checkin', { bookingId, listRoomId });
   return data;
 }
+
+// booking-service: BookingController#checkout
+// PATCH /bookings/checkout/{bookingId} (không cần body).
+// BE validate: booking phải đang CHECKEDIN, tự lấy lại danh sách roomId đã lưu
+// từ lúc check-in (BookedRoomTypeEntity.roomIds) - nhân viên không cần chọn lại
+// phòng. Nếu hợp lệ: phòng OCCUPIED -> CLEANING, booking chuyển sang COMPLETED.
+export async function confirmBookingCheckout(bookingId) {
+  const { data } = await axiosClient.patch(`/bookings/checkout/${bookingId}`);
+  return data;
+}

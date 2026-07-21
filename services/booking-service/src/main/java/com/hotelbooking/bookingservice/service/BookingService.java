@@ -20,7 +20,6 @@ import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
-import com.hotelbooking.bookingservice.enums.RoomStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
 import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
@@ -124,26 +123,13 @@ public class BookingService {
     3. Rủi ro dữ liệu 0 đồng nhất do gọi qua service khác */
     public void checkin(CheckinRequest checkinRequest){
         RoomCheckinRequest roomCheckinRequest = checkinCheckoutService.validateAndGetCheckinData(checkinRequest);
-        
-        try {
-            hotelServiceFiegnClient.updateRoomStatus(roomCheckinRequest);
-        } catch (RetryableException ex) {
-            log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
-            throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
-        } catch (FeignException ex) {
-            log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
-            throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
-        }
+        callHotelFeignService(roomCheckinRequest);
         
 
         try {
             checkinCheckoutService.updateBookingStatusCheckin(checkinRequest);
         } catch (Exception e) {
-            RoomCheckinRequest rollBack = new RoomCheckinRequest(roomCheckinRequest.roomIds(),
-                                                                roomCheckinRequest.roomTypeQuantities(),
-                                                                RoomStatus.OCCUPIED,
-                                                                RoomStatus.AVAILABLE);
-            hotelServiceFiegnClient.updateRoomStatus(rollBack);
+            rollBackRoomStatus(roomCheckinRequest);
             throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -152,9 +138,20 @@ public class BookingService {
     /*------checkout------*/
     public void checkout(UUID bookingId){
         RoomCheckinRequest requestCheckout = checkinCheckoutService.validateCheckoutAndGetData(bookingId);
+        callHotelFeignService(requestCheckout);
 
         try {
-            hotelServiceFiegnClient.updateRoomStatus(requestCheckout);
+            checkinCheckoutService.updateBookingStatusCheckout(bookingId);
+        } catch (Exception e) {
+            rollBackRoomStatus(requestCheckout);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkout------*/
+
+    private void callHotelFeignService(RoomCheckinRequest request){
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(request);
         } catch (RetryableException ex) {
             log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
             throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
@@ -162,19 +159,21 @@ public class BookingService {
             log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
             throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
         }
+    }
 
+    private void rollBackRoomStatus(RoomCheckinRequest oldRequest){
+        RoomCheckinRequest rollBack = new RoomCheckinRequest(oldRequest.roomIds(),
+                                            oldRequest.roomTypeQuantities(),
+                                            oldRequest.newStatus(),
+                                            oldRequest.oldStatus());
+        
         try {
-            checkinCheckoutService.updateBookingStatusCheckout(bookingId);
-        } catch (Exception e) {
-            RoomCheckinRequest rollBack = new RoomCheckinRequest(requestCheckout.roomIds(),
-                                                                requestCheckout.roomTypeQuantities(),
-                                                                RoomStatus.CLEANING,
-                                                                RoomStatus.OCCUPIED);
             hotelServiceFiegnClient.updateRoomStatus(rollBack);
-            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        } catch (Exception e) {
+            log.error("ROLLBACK FAILED for rooms: {}", e.getMessage());
         }
     }
-    /*------checkout------*/
+    /*-------*/
 
     @Transactional
     public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {
