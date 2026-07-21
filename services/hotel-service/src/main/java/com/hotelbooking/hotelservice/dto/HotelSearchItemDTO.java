@@ -4,6 +4,7 @@ package com.hotelbooking.hotelservice.dto;
 import lombok.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -13,7 +14,7 @@ import java.util.List;
 
 public class HotelSearchItemDTO {
 
-    private String hotelId;
+    private UUID hotelId;
 
     private String name;
 

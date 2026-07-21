@@ -34,6 +34,7 @@ security:
   - bearerAuth: []
 
 paths:
+  /api/promotions:
     post:
       tags: [Promotions]
       summary: Create promotion
@@ -202,6 +203,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/promotions/{promotionId}:
     get:
       tags: [Promotions]
       summary: Get promotion detail
@@ -312,6 +314,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/promotions/{promotionId}/status:
     patch:
       tags: [Promotions]
       summary: Change promotion status
@@ -354,6 +357,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/promotions/validate:
     post:
       tags: [Promotion Validation]
       summary: Validate promotion and calculate discount
@@ -424,6 +428,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/promotions/usages/confirm:
     post:
       tags: [Promotion Usage]
       summary: Confirm promotion usage
@@ -474,6 +479,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /api/promotions/usages/cancel:
     post:
       tags: [Promotion Usage]
       summary: Cancel promotion usage
@@ -756,7 +762,7 @@ components:
     PromotionConditionInput:
       type: object
       additionalProperties: false
-      required: [conditionType, operator, conditionValue]
+      required: [ conditionType, operator, conditionValue ]
       properties:
         conditionType:
           $ref: '#/components/schemas/ConditionType'

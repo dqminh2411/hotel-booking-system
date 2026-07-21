@@ -78,7 +78,7 @@ services:
     networks:
       - app-network
 
-  kafka:
+  Kafka:
     image: confluentinc/cp-kafka:7.5.0
     depends_on:
       zookeeper:
@@ -203,6 +203,26 @@ services:
       POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  promotion-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "${PROMOTION_DB_EXTERNAL_PORT:-5437}:5432"
+    environment:
+      POSTGRES_DB: ${PROMOTION_DB_NAME}
+      POSTGRES_USER: ${PROMOTION_DB_USER}
+      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD}
+    volumes:
+      - promotion-db-data:/var/lib/postgresql/data
+      - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PROMOTION_DB_USER:-postgres}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -424,7 +444,7 @@ services:
     depends_on:
       payment-db:
         condition: service_healthy
-      kafka:
+      Kafka:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
@@ -432,6 +452,46 @@ services:
       - app-network
     volumes:
       - ./services/payment_service:/app
+      - maven-cache:/root/.m2
+
+  promotion-service:
+    build: ./services/promotion-service
+    ports:
+      - "${PROMOTION_SERVICE_PORT:-5007}:5000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${PROMOTION_DB_HOST}
+      DB_PORT: ${PROMOTION_DB_PORT}
+      DB_NAME: ${PROMOTON_DB_NAME}
+      DB_USER: ${PROMOTION_DB_USER}
+      DB_PASSWORD: ${PROMOTION_DB_PASSWORD}
+      SERVER_PORT: 5000
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      KAFKA_CONSUMER_GROUP: promotion-group
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      promotion-db:
+        condition: service_healthy
+      Kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    volumes:
+      - ./services/promotion-service:/app
       - maven-cache:/root/.m2
 
   notification-service:
@@ -483,5 +543,6 @@ volumes:
   hotel-db-data:
   booking-db-data:
   notification-db-data:
+  promotion-db-data:
   maven-cache:
   redis-data:

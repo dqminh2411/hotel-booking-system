@@ -5,6 +5,8 @@ import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
+import com.hotelbooking.hotelservice.dto.response.ApiResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.response.PagedResponse;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.Valid;
