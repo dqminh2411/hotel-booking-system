@@ -7,16 +7,14 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<UserEntity, UUID> {
+    
+    Optional<UserEntity> findByIdAndDeletedFalse(UUID id);
 
-    @EntityGraph(attributePaths = "roles")
-    Optional<UserEntity> findWithRolesByIdAndDeletedFalse(UUID id);
+    Optional<UserEntity> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
-    @EntityGraph(attributePaths = "roles")
-    Optional<UserEntity> findWithRolesByEmailIgnoreCaseAndDeletedFalse(String email);
-
-    boolean existsByEmailIgnoreCase(String email);
+    boolean existsByEmailIgnoreCaseOrPhoneOrKeycloakId(String email, String phone, UUID keycloakId);
 
     boolean existsByPhone(String phone);
 
-    Optional<UserEntity> findByEmail(String email);
+    Optional<UserEntity> findByKeycloakIdAndDeletedFalse(UUID keycloakId);
 }

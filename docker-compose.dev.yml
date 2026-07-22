@@ -14,9 +14,16 @@ services:
       - ./frontend:/app
       - /app/node_modules
     depends_on:
-      - gateway
+      gateway:
+        condition: service_started
+      # keycloak:
+      #   condition: service_started  
+
     environment:
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
     networks:
       - app-network
 
@@ -48,34 +55,32 @@ services:
     depends_on:
       eureka-server:
         condition: service_healthy
-      booking-service:
-        condition: service_healthy
-      hotel-service:
-        condition: service_healthy
       user-service:
         condition: service_started
+      # keycloak:
+      #   condition: service_started
     networks:
       - app-network
     volumes:
       - ./gateway:/app
       - maven-cache:/root/.m2
 
-  redis:
-    image: redis:7.2-alpine
-    container_name: redis
-    restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --save 60 1 --loglevel warning
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-    networks:
-      - app-network
+  # redis:
+  #   image: redis:7.2-alpine
+  #   container_name: redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${REDIS_PORT:-6380}:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   command: redis-server --save 60 1 --loglevel warning
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
   user-db:
     image: postgres:16-alpine
@@ -91,46 +96,6 @@ services:
       - ./scripts/user_db/user_db_init.sql:/docker-entrypoint-initdb.d/user_db_init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
-  
-  hotel-db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "${HOTEL_DB_EXTERNAL_PORT:-5433}:5432"
-    environment:
-      POSTGRES_DB: ${HOTEL_DB_NAME}
-      POSTGRES_USER: ${HOTEL_DB_USER}
-      POSTGRES_PASSWORD: ${HOTEL_DB_PASSWORD}
-    volumes:
-      - hotel-db-data:/var/lib/postgresql/data
-      - ./scripts/hotel_db/hotel_db_init.sql:/docker-entrypoint-initdb.d/hotel_db_init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${HOTEL_DB_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
-
-  booking-db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "${BOOKING_DB_EXTERNAL_PORT:-5434}:5432"
-    environment:
-      POSTGRES_DB: ${BOOKING_DB_NAME}
-      POSTGRES_USER: ${BOOKING_DB_USER}
-      POSTGRES_PASSWORD: ${BOOKING_DB_PASSWORD}
-    volumes:
-      - booking-db-data:/var/lib/postgresql/data
-      - ./scripts/booking_db/booking_db_init.sql:/docker-entrypoint-initdb.d/booking_db_init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${BOOKING_DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -180,78 +145,53 @@ services:
       - ./services/user-service:/app
       - maven-cache:/root/.m2
 
-  hotel-service:
-    build: ./services/hotel-service
-    ports:
-      - "${HOTEL_SERVICE_PORT:-5003}:5000"
-    env_file:
-      - .env
-    environment:
-      DB_HOST: ${HOTEL_DB_HOST}
-      DB_PORT: ${HOTEL_DB_PORT}
-      DB_NAME: ${HOTEL_DB_NAME}
-      DB_USER: ${HOTEL_DB_USER}
-      DB_PASSWORD: ${HOTEL_DB_PASSWORD}
-      SERVER_PORT: 5000
-      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    depends_on:
-      hotel-db:
-        condition: service_healthy
-      eureka-server:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    networks:
-      - app-network
-    volumes:
-      - ./services/hotel-service:/app
-      - maven-cache:/root/.m2
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-db
 
-  booking-service:
-    build: ./services/booking-service
     ports:
-      - "${BOOKING_SERVICE_PORT:-5004}:5000"
-      - "5010:5010" # debug
-    env_file:
-      - .env
+      - "${KEYCLOAK_DB_EXTERNAL_PORT:-5437}:${KEYCLOAK_DB_PORT:-5432}"
     environment:
-      DB_HOST: ${BOOKING_DB_HOST}
-      DB_PORT: ${BOOKING_DB_PORT}
-      DB_NAME: ${BOOKING_DB_NAME}
-      DB_USER: ${BOOKING_DB_USER}
-      DB_PASSWORD: ${BOOKING_DB_PASSWORD}
-      SERVER_PORT: 5000
-      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
-    command:
-      - mvn
-      - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010
-    depends_on:
-      booking-db:
-        condition: service_healthy
-      eureka-server:
-        condition: service_healthy
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak_db}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-db}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-db} -d ${KEYCLOAK_DB_NAME:-keycloak_db}"]
+      interval: 5s
       timeout: 5s
-      retries: 12
-      start_period: 30s
+      retries: 10
+
     networks:
       - app-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: keycloak
+    command: start-dev
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_DB: ${KC_DB:-postgres}
+      KC_DB_URL_HOST: ${KC_DB_URL_HOST:-keycloak-db}
+      KC_DB_URL_DATABASE: ${KC_DB_URL_DATABASE:-keycloak_db}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-db}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-your-password}
+
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-}
+
+    ports:
+      - "8085:8080"
     volumes:
-      - ./services/booking-service:/app
-      - maven-cache:/root/.m2
+      - ./keycloak/theme/hotelhub:/opt/keycloak/themes/hotelhub
+    networks:
+      - app-network
+  
 networks:
   app-network:
     driver: bridge
@@ -262,3 +202,5 @@ volumes:
   booking-db-data:
   maven-cache:
   redis-data:
+  keycloak-db-data:
+

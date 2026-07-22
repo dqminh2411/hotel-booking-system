@@ -2,6 +2,7 @@
 # Run: docker compose up --build
 # Docs: https://docs.docker.com/compose/
 
+name: microservices-assignment
 services:
   frontend:
     build:
@@ -78,7 +79,7 @@ services:
     networks:
       - app-network
 
-  Kafka:
+  kafka:
     image: confluentinc/cp-kafka:7.5.0
     depends_on:
       zookeeper:
@@ -444,7 +445,7 @@ services:
     depends_on:
       payment-db:
         condition: service_healthy
-      Kafka:
+      kafka:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
@@ -476,7 +477,7 @@ services:
     depends_on:
       promotion-db:
         condition: service_healthy
-      Kafka:
+      kafka:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
