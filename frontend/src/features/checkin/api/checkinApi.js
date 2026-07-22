@@ -37,3 +37,23 @@ export async function confirmBookingCheckout(bookingId) {
   const { data } = await axiosClient.patch(`/bookings/checkout/${bookingId}`);
   return data;
 }
+
+// booking-service: BookingController#getBookingCheckinToday
+// GET /bookings/today/{hotelId}?page=&size= (size: 10-30, mặc định 10)
+// -> ApiResponse.data = Page<BookingCheckinInfo> (Spring Data mặc định serialize
+// dạng { content: [...], totalElements, totalPages, number, size, last, first }).
+// Chỉ trả về booking CONFIRMED có checkinDate = hôm nay của hotelId tương ứng.
+export async function fetchTodayCheckins(hotelId, page = 0, size = 10) {
+  const { data } = await axiosClient.get(`/bookings/today/${hotelId}`, { params: { page, size } });
+  return data?.data;
+}
+
+// booking-service: BookingController#getBookingIsCheckin
+// GET /bookings/{hotelId}/checkin?page=&size= (size: 10-30, mặc định 10)
+// -> ApiResponse.data = Page<BookingCheckinInfo>, sort theo checkoutDate ASC.
+// Chỉ trả về booking đang ở trạng thái CHECKEDIN (đã nhận phòng, chưa trả
+// phòng) của hotelId tương ứng - dùng cho danh sách "chờ check-out".
+export async function fetchCheckedInBookings(hotelId, page = 0, size = 10) {
+  const { data } = await axiosClient.get(`/bookings/${hotelId}/checkin`, { params: { page, size } });
+  return data?.data;
+}

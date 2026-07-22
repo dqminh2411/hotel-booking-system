@@ -9,6 +9,7 @@ import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
 import com.hotelbooking.bookingservice.dto.RoomCheckinRequest;
 import com.hotelbooking.bookingservice.client.HotelServiceFiegnClient;
 import com.hotelbooking.bookingservice.dto.ActiveBookingRoomType;
+import com.hotelbooking.bookingservice.dto.BookingCheckinInfo;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCancelled;
 import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCreated;
@@ -48,6 +49,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -171,6 +174,49 @@ public class BookingService {
             hotelServiceFiegnClient.updateRoomStatus(rollBack);
         } catch (Exception e) {
             log.error("ROLLBACK FAILED for rooms: {}", e.getMessage());
+        }
+    }
+    /*-------*/
+    
+    @Transactional(readOnly = true)
+    public Page<BookingCheckinInfo> getBookingToday(UUID hotelId, LocalDate today, BookingStatus status, Pageable pageable){
+
+        Page<BookingEntity> bookingEntities = bookingRepository.findByHotelIdAndCheckinDateAndStatus(hotelId, today, status, pageable);
+
+        List<UUID> bookingIds = bookingEntities.getContent().stream()
+                                            .map(BookingEntity::getId)
+                                            .toList();
+
+        Map<UUID, BookingInfoEntity> bookingInfoEntities = bookingInfoRepository.findAllById(bookingIds).stream()
+                                                .collect(Collectors.toMap(
+                                                    BookingInfoEntity::getBookingId,
+                                                    info -> info));
+                                                    
+        return bookingEntities.map(booking -> {
+            BookingInfoEntity bookingInfoEntity = bookingInfoEntities.get(booking.getId());
+            if(bookingInfoEntity == null){
+                throw new AppException("BOOKING_DETAIL_NOT_FOUND", "Booking detail does not exist", HttpStatus.NOT_FOUND);
+            }
+            BookingDetail bookingDetail = toBookingDetail(bookingInfoEntity);
+            
+            return new BookingCheckinInfo(
+                    booking.getId(),
+                    booking.getStatus(),
+                    bookingDetail.getCustomer().getName(),
+                    bookingDetail.getCustomer().getEmail(),
+                    booking.getCheckinDate(),
+                    booking.getCheckoutDate(),
+                    booking.getNumAdults(),
+                    booking.getTotalAmount()
+            );
+        });
+    }
+
+    private BookingDetail toBookingDetail(BookingInfoEntity bookingInfoEntity){
+        try {
+            return objectMapper.readValue(bookingInfoEntity.getBookingDetail(), BookingDetail.class);
+        } catch (Exception ex) {
+            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to parse booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
     /*-------*/
