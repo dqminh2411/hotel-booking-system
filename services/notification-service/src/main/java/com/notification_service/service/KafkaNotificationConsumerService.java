@@ -4,11 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.notification_service.dto.EmailRequest;
 import com.notification_service.dto.EmailTemplate;
+
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 import com.notification_service.enums.KafkaEventType;
 
@@ -83,5 +87,69 @@ public class KafkaNotificationConsumerService {
         } catch (RuntimeException error) {
             log.error("Could not send booking push for user {}", userId, error);
         }
+    }
+
+    @KafkaListener(
+        topics = {"promotion-active-notification", "coupon-active-notification"},
+        groupId = "notification-service-group"
+    )
+    public void consumePromotionNotification(
+        String payloadJson,
+        @Header(KafkaHeaders.RECEIVED_TOPIC) String topic
+    ) {
+        log.info("Received active notification event on topic {}: {}", topic, payloadJson);
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> event = objectMapper.readValue(payloadJson, Map.class);
+            
+            String eventType = (String) event.getOrDefault("eventType", "");
+            String title;
+            String body;
+            Map<String, String> data = new HashMap<>();
+
+            for (Map.Entry<String, Object> entry : event.entrySet()) {
+                if (entry.getValue() != null) {
+                    data.put(entry.getKey(), entry.getValue().toString());
+                }
+            }
+
+            if ("coupon-active-notification".equals(topic)) {
+                String code = (String) event.getOrDefault("code", "");
+                String promotionName = (String) event.getOrDefault("promotionName", "Khuyến mãi");
+                String discountValue = String.valueOf(event.getOrDefault("discountValue", ""));
+                
+                title = "Mã giảm giá mới: " + code;
+                body = String.format("Nhập mã '%s' để nhận ưu đãi %s cho chương trình '%s'.", code, discountValue, promotionName);
+            } else {
+                String name = (String) event.getOrDefault("name", "Khuyến mãi mới");
+                String description = (String) event.getOrDefault("description", "Vào ngay app để nhận ưu đãi đặt phòng!");
+                
+                title = "Khuyến mãi mới: " + name;
+                body = description.isBlank() ? "Vào ngay ứng dụng để xem chi tiết ưu đãi mới!" : description;
+            }
+
+            String targetFcmTopic = resolveFcmTopic(topic, event);
+            log.info("Dispatching FCM push notification to topic '{}' with title: '{}'", targetFcmTopic, title);
+            
+            // fcmPushService.sendTopicNotification(targetFcmTopic, title, body, data);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to parse promotion/coupon notification event from topic {}", topic, e);
+        } catch (Exception e) {
+            log.error("Error processing active notification event on topic {}", topic, e);
+        }
+    }
+
+    public String resolveFcmTopic(String kafkaTopic, Map<String, Object> event) {
+        String scopeType = (String) event.get("scopeType");
+        String scopeRefId = (String) event.get("scopeRefId");
+
+        if ("HOTEL".equalsIgnoreCase(scopeType) && scopeRefId != null && !scopeRefId.isBlank()) {
+            return kafkaTopic + "-hotel-" + scopeRefId;
+        } else if ("USER_SEGMENT".equalsIgnoreCase(scopeType) && scopeRefId != null && !scopeRefId.isBlank()) {
+            return kafkaTopic + "-segment-" + scopeRefId;
+        }
+
+        
+        return kafkaTopic;
     }
 }
