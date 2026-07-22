@@ -38,6 +38,10 @@ spring:
           uri: lb://hotel-service
           predicates:
             - Path=/api/hotels/**,/api/room-types/**
+        - id: promotion-service-route
+          uri: lb://promotion-service
+          predicates:
+            - Path=/api/promotions/**
         - id: notification-service-route
           uri: lb://notification-service
           predicates:
