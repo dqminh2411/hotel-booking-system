@@ -13,6 +13,27 @@ import org.springframework.data.repository.query.Param;
 
 public interface HotelAmenityRepository extends JpaRepository<HotelAmenityEntity, HotelAmenityId> {
 
+    static List<UUID> findByHOTELScope(List<AmenityEntity> amenities) {
+        return List.of();
+    }
+
+    @Query("""
+        SELECT hae.hotel.id
+        FROM HotelAmenityEntity hae
+        WHERE hae.hotel.id IN :hotelIds
+            AND hae.amenity.id IN :amenityIds
+            AND hae.isDeleted = false
+            AND hae.amenity.isDeleted = false
+        GROUP BY hae.hotel.id
+        HAVING COUNT(DISTINCT hae.amenity.id) = :amenityCount
+        
+""")
+    List<UUID> findHotelIdsByAmenityIds(
+            @Param("hotelIds") List<UUID> hotelIds,
+            @Param("amenityIds") List<UUID> amenityIds,
+            @Param("amenityCount") long amenityCount
+    );
+
     @Query("""
             SELECT a FROM HotelAmenityEntity ha
             JOIN ha.amenity a

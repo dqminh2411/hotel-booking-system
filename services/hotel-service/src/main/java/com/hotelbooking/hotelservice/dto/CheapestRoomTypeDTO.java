@@ -4,6 +4,7 @@ package com.hotelbooking.hotelservice.dto;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -12,7 +13,7 @@ import java.math.BigDecimal;
 @Builder
 
 public class CheapestRoomTypeDTO {
-    private String roomTypeId;
+    private UUID roomTypeId;
 
     private String name;
 
