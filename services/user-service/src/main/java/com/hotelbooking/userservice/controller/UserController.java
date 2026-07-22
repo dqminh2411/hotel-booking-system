@@ -7,10 +7,12 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @Validated
 @RestController
-@RequestMapping({"/api/users", "/users"})
+@RequestMapping({"/api/users"})
 public class UserController {
     private final UserService userService;
 
@@ -20,8 +22,11 @@ public class UserController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
-        return userService.register(request);
+    public UserResponse register(@Valid @RequestBody CreateUserRequest request,
+        @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+        return userService.createUser(keycloakId, request);
     }
 
     @GetMapping("/me")

@@ -3,6 +3,7 @@ import { listenForegroundMessages, requestFcmToken } from '../../../firebase';
 import { setStoredFcmToken } from '../../auth/services/authStorage';
 import { upsertDeviceToken } from '../api/notificationApi';
 import {
+  getBookingFailureReason,
   getBookingNotificationBody,
   getBookingNotificationTitle,
   getBookingStatusFromNotification,
@@ -46,7 +47,12 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
     const data = payload?.data || {};
     const notificationStatus = getBookingStatusFromNotification(payload);
     const title = getBookingNotificationTitle(payload, notificationStatus);
-    const body = getBookingNotificationBody(payload);
+    const body = getBookingNotificationBody(payload, notificationStatus);
+    // reason: nguyên nhân thất bại do BE gửi kèm (vd: race condition hết phòng
+    // khi booking-service xác nhận, hoặc thanh toán thất bại). Xem
+    // place-booking-service KafkaConsumerService#handleBookingFailed /
+    // #handleBookingCancelled -> SendBookingFailed.reason.
+    const reason = getBookingFailureReason(payload);
     const currentBookingId = activeBookingIdRef.current;
     const isActiveBooking = data.bookingId ? data.bookingId === currentBookingId : true;
 
@@ -60,10 +66,11 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
 
     if (!isActiveBooking) return;
 
-    setForegroundMessage({ title, body, data });
+    setForegroundMessage({ title, body, reason, data });
     onBookingUpdateRef.current?.({
       bookingId: data.bookingId,
       status: notificationStatus,
+      reason,
       data,
       title,
       body,

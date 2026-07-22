@@ -1,0 +1,79 @@
+{
+  "attributes": [
+    {
+      "name": "username",
+      "displayName": "${username}",
+      "validations": {
+        "length": { "min": 3, "max": 255 },
+        "username-prohibited-characters": {},
+        "up-username-not-idn-homograph": {}
+      },
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    },
+    {
+      "name": "email",
+      "displayName": "${email}",
+      "validations": {
+        "email": {},
+        "length": { "max": 255 }
+      },
+      "required": {
+        "roles": ["user"]
+      },
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    },
+    {
+      "name": "fullName",
+      "displayName": "Họ và tên",
+      "required": {
+        "roles": ["user"]
+      },
+      "validations": {
+        "length": { "min": 2, "max": 255 }
+      },
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    },
+    {
+      "name": "phone",
+      "displayName": "Số điện thoại",
+      "required": {
+        "roles": ["user"]
+      },
+      "validations": {
+        "pattern": {
+          "pattern": "^[0-9+ ]{8,15}$",
+          "error-message": "Số điện thoại không hợp lệ"
+        }
+      },
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    },
+    {
+      "name": "firstName",
+      "displayName": "${firstName}",
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    },
+    {
+      "name": "lastName",
+      "displayName": "${lastName}",
+      "permissions": {
+        "view": ["admin", "user"],
+        "edit": ["admin", "user"]
+      }
+    }
+  ]
+}

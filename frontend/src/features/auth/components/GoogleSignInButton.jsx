@@ -1,89 +1,33 @@
-import { useEffect, useRef, useState } from 'react';
-
-const GOOGLE_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
-
-function loadGoogleScript() {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.id) {
-      resolve();
-      return;
-    }
-
-    const existingScript = document.querySelector(`script[src="${GOOGLE_SCRIPT_URL}"]`);
-    if (existingScript) {
-      existingScript.addEventListener('load', resolve, { once: true });
-      existingScript.addEventListener('error', reject, { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = GOOGLE_SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-
-export default function GoogleSignInButton({ onCredential, disabled }) {
-  const containerRef = useRef(null);
-  const [loadError, setLoadError] = useState('');
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-  useEffect(() => {
-    if (!clientId || !containerRef.current) return undefined;
-    let active = true;
-
-    loadGoogleScript()
-      .then(() => {
-        if (!active || !containerRef.current) return;
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: ({ credential }) => onCredential(credential),
-        });
-        containerRef.current.replaceChildren();
-        window.google.accounts.id.renderButton(containerRef.current, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          text: 'continue_with',
-          shape: 'rectangular',
-          width: containerRef.current.clientWidth,
-          locale: 'vi',
-        });
-      })
-      .catch(() => {
-        if (active) setLoadError('Không thể tải Google Sign-In. Vui lòng thử lại sau.');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [clientId, onCredential]);
-
-  if (!clientId) {
-    return (
-      <div>
-        <button
-          type="button"
-          disabled
-          className="flex h-11 w-full cursor-not-allowed items-center justify-center gap-3 rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-400"
-        >
-          <span className="font-bold">G</span>
-          Tiếp tục với Google
-        </button>
-        <p className="mt-2 text-xs text-amber-700">
-          Thêm VITE_GOOGLE_CLIENT_ID để bật đăng nhập Google.
-        </p>
-      </div>
-    );
-  }
-
+// Google sign-in now goes through Keycloak's Google identity provider
+// (kc_idp_hint=google), so clicking this jumps straight past Keycloak's
+// own login form and into the Google account chooser.
+export default function GoogleSignInButton({ onClick, disabled }) {
   return (
-    <div className={disabled ? 'pointer-events-none opacity-60' : ''}>
-      <div ref={containerRef} className="min-h-11 w-full" aria-label="Đăng nhập với Google" />
-      {loadError && <p className="mt-2 text-xs text-red-600">{loadError}</p>}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex h-11 w-full items-center justify-center gap-3 rounded-md border border-slate-300 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <svg className="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true">
+        <path
+          fill="#FFC107"
+          d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+        />
+        <path
+          fill="#FF3D00"
+          d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+        />
+        <path
+          fill="#4CAF50"
+          d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+        />
+        <path
+          fill="#1976D2"
+          d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 01-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
+        />
+      </svg>
+      Tiếp tục với Google
+    </button>
   );
 }

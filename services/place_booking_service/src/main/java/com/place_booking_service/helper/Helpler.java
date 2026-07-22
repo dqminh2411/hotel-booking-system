@@ -40,8 +40,8 @@ public class Helpler {
 
         String key = "dup:booking-request:" + userId.toString() + ":" + hashRequest;
         try {
-            Boolean isFirst = stringRedisTemplate.opsForValue().setIfAbsent(key, "locked", Duration.ofSeconds(10));
-            if (Boolean.FALSE.equals(isFirst)) {
+            Boolean isNewRequest = stringRedisTemplate.opsForValue().setIfAbsent(key, "locked", Duration.ofSeconds(10));
+            if (Boolean.FALSE.equals(isNewRequest)) {
                 return new DuplicateRequestResult(true, null);
             }
         } catch (Exception ex) {

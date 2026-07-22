@@ -149,12 +149,11 @@ public class PlaceBookingController {
                 hashRequest);
 
         return ApiResponse.<Map<String, Object>>builder()
-                .code(200)
-                .message("OK")
+                .code(202)
+                .message("Đã tiếp nhận yêu cầu đặt phòng thành công")
                 .data(Map.of(
                         "bookingId", bookingId,
-                        "status", "PENDING",
-                        "message", "Booking request is being processed."))
+                        "status", "PENDING"))
                 .build();
     }
 }

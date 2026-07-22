@@ -3,6 +3,7 @@ package com.place_booking_service.service;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +41,7 @@ public class PlaceBookingService {
                 throw new PlaceBookingException(
                     "SAGA_STATE_CONFLICT",
                     "Có lỗi trong quá trình thực hiện yêu cầu. Vui lòng thử lại sau",
-                    org.springframework.http.HttpStatus.CONFLICT
+                    HttpStatus.CONFLICT
                 );
             }
             return sagaState.getBookingId();
