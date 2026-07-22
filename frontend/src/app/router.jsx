@@ -6,6 +6,10 @@ import HotelDetailPage from '../pages/HotelDetailPage';
 import LoginPage from '../pages/LoginPage';
 import NotFoundPage from '../pages/NotFoundPage';
 import RegisterPage from '../pages/RegisterPage';
+import StaffCheckedInBookingsPage from '../pages/StaffCheckedInBookingsPage';
+import StaffCheckinPage from '../pages/StaffCheckinPage';
+import StaffCheckoutPage from '../pages/StaffCheckoutPage';
+import StaffTodayCheckinsPage from '../pages/StaffTodayCheckinsPage';
 import VerifyEmailPage from '../pages/VerifyEmailPage';
 import HomePageSearch from "../pages/HomePageSearch.jsx";
 import SearchResultsPage from '../pages/SearchResultsPage.jsx';
@@ -20,6 +24,10 @@ export default function AppRouter() {
       <Route path="/checkout" element={<CheckoutPage />} />
       <Route path="/booking/checkout" element={<Navigate to="/checkout" replace />} />
       <Route path="/bookings/:bookingId" element={<BookingDetailPage />} />
+      <Route path="/staff/bookings/:bookingId/checkin" element={<StaffCheckinPage />} />
+      <Route path="/staff/bookings/:bookingId/checkout" element={<StaffCheckoutPage />} />
+      <Route path="/staff/hotels/:hotelId/today-checkins" element={<StaffTodayCheckinsPage />} />
+      <Route path="/staff/hotels/:hotelId/checkins" element={<StaffCheckedInBookingsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
