@@ -1,4 +1,4 @@
-﻿# Phân tích và thiết kế Notification Service
+# Phân tích và thiết kế Notification Service
 
 `notification-service` là service riêng dùng để quản lý thông báo người dùng, token thiết bị, trạng thái đã đọc, log gửi thông báo và điều phối gửi email/push notification trong hệ thống Hotel Booking SaaS.
 
@@ -56,6 +56,8 @@ Notification Service tiêu thụ các event sau:
 | `payment-events` | `payment.failed` | payment-service | Thông báo thanh toán thất bại (optional) |
 | `notification-internal` | `promotion.broadcast.requested` | notification-service (sau REST broadcast) | Xử lý broadcast bất đồng bộ |
 | `notification-internal` | `notification.retry` | notification-service | Retry gửi email/push |
+| `promotion-active-notification` | `PromotionActiveCreated`, `PromotionActiveUpdated` | promotion-service | Thông báo push theo FCM Topic cho promotion mới/cập nhật trạng thái ACTIVE |
+| `coupon-active-notification` | `CouponActiveCreated`, `CouponActiveUpdated` | promotion-service | Thông báo push theo FCM Topic cho coupon mới/cập nhật trạng thái ACTIVE |
 
 Payload event nên gồm tối thiểu: `eventId`, `eventType`, `occurredAt`, `recipientUserId`, `title`, `body`, `payload` (JSON), `correlationId`. Consumer cần idempotent theo `eventId`.
 
@@ -292,6 +294,8 @@ Base path qua API Gateway: `/api/notifications`.
 | Method | Endpoint | Mô tả | Quyền | Response chính |
 |---|---|---|---|---|
 | `POST` | `/api/notifications/device-token` | Đăng ký hoặc cập nhật FCM token thiết bị | Authenticated user | `201 Created`, `200 OK` |
+| `POST` | `/api/notifications/topics/subscribe` | Đăng ký nhận thông báo FCM cho topic (khuyến mãi, coupon,...) | Authenticated user | `200 OK` |
+| `POST` | `/api/notifications/topics/unsubscribe` | Hủy đăng ký nhận thông báo FCM cho topic | Authenticated user | `200 OK` |
 | `GET` | `/api/notifications/my` | Xem danh sách thông báo của user hiện tại | Authenticated user | `200 OK` |
 | `PATCH` | `/api/notifications/{notificationId}/read` | Đánh dấu một thông báo là đã đọc | Owner of notification | `200 OK` |
 | `POST` | `/api/notifications/broadcast` | Tạo yêu cầu gửi thông báo khuyến mãi theo nhóm khách hàng | Admin/Owner | `202 Accepted` |

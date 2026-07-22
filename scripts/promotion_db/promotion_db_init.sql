@@ -240,3 +240,17 @@ CREATE INDEX idx_promotion_audit_logs_promotion
 
 CREATE INDEX idx_promotion_audit_logs_created_at
     ON promotion_audit_logs(created_at);
+
+
+-- ────────────────────────────────────────────────────────────
+-- BẢNG outbox_events
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    topic         VARCHAR(100) NOT NULL,
+    payload       JSONB       NOT NULL,
+    published     BOOLEAN     NOT NULL DEFAULT false,
+    created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
+    published_at  TIMESTAMP,
+    is_deleted    BOOLEAN     NOT NULL DEFAULT false
+);

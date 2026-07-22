@@ -9,6 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.server.ResponseStatusException;
 
 @Validated
 @RestController
@@ -30,8 +31,12 @@ public class UserController {
     }
 
     @GetMapping("/me")
-    public UserResponse getCurrentUser(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        return userService.getCurrentUser(authorization);
+    public UserResponse getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
+        if (jwt == null || jwt.getSubject() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication token");
+        }
+        UUID userId = UUID.fromString(jwt.getSubject());
+        return userService.getUserById(userId);
     }
 
     @GetMapping("/{userId}")

@@ -12,9 +12,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
     Optional<UserEntity> findByEmailIgnoreCaseAndDeletedFalse(String email);
 
-    boolean existsByEmailIgnoreCaseOrPhoneOrKeycloakId(String email, String phone, UUID keycloakId);
+    boolean existsByEmailIgnoreCaseOrPhoneOrId(String email, String phone, UUID id);
 
     boolean existsByPhone(String phone);
-
-    Optional<UserEntity> findByKeycloakIdAndDeletedFalse(UUID keycloakId);
 }

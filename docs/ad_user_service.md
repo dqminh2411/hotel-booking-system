@@ -8,8 +8,7 @@
 
 | Cột | Kiểu dữ liệu | Ràng buộc | Mô tả                              |
 | --- | --- | --- |------------------------------------|
-| id | UUID | PK | Định danh người dùng               |
-| keycloak_id | UUID | UNIQUE, NOT NULL | Định danh người dùng trong Keycloak |
+| id | UUID | PK | Định danh người dùng (Keycloak User ID từ sub claim) |
 | email | VARCHAR(255) | UNIQUE, NOT NULL | Email đăng nhập                    |
 | phone | VARCHAR(20) | NULL | Số điện thoại                      |
 | full_name | VARCHAR(255) | NOT NULL | Họ tên                             |
@@ -96,7 +95,6 @@ erDiagram
 
     USERS {
         UUID id PK
-        UUID keycloak_id UNIQUE
         string email
         string phone
         string full_name
@@ -273,9 +271,9 @@ sequenceDiagram
 
     UserService->>UserService: Validate JWT using JWKS
 
-    UserService->>UserService: Extract sub claim (keycloak_id)
+    UserService->>UserService: Extract sub claim (User ID)
 
-    UserService->>UserDB: Find profile by keycloak_id
+    UserService->>UserDB: Find profile by id
 
     alt First Login
         UserService->>UserDB: Create User Profile
