@@ -5,11 +5,13 @@ import java.util.List;
 
 import org.springframework.stereotype.Component;
 
+import com.hotelbooking.hotelservice.dto.other.AvailableRoomResponse;
 import com.hotelbooking.hotelservice.dto.other.HotelAmenity;
 import com.hotelbooking.hotelservice.dto.other.Image;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeDetailResponse;
 import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
+import com.hotelbooking.hotelservice.entity.RoomEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeImageEntity;
 
@@ -75,5 +77,13 @@ public class RoomTypeMapper {
         return amenities.stream()
                 .map(a -> new HotelAmenity(a.getId(), a.getName(), a.getScope()))
                 .toList();
+    }
+
+    public AvailableRoomResponse toAvailableRoomResponse(RoomEntity roomEntity){
+        return new AvailableRoomResponse(
+            roomEntity.getId(),
+            roomEntity.getRoomNumber(),
+            roomEntity.getFloor()
+        );
     }
 }
