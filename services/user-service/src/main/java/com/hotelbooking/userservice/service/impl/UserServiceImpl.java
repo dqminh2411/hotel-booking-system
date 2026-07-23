@@ -32,17 +32,16 @@ public class UserServiceImpl implements UserService {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String phone = request.phone().trim();
         String fullName = request.fullName().trim();
-        if (userRepository.existsByEmailIgnoreCaseOrPhoneOrKeycloakId(email, phone, keycloakId)) {
+        if (userRepository.existsByEmailIgnoreCaseOrPhoneOrId(email, phone, keycloakId)) {
             throw new ApiException(HttpStatus.CONFLICT, "INVALID_USER_DATA",
-                    "Email, phone or keycloakId already exists");
+                    "Email, phone or user already exists");
         }
         
         Instant now = Instant.now();
         UserEntity user = new UserEntity();
-        user.setId(UUID.randomUUID());
+        user.setId(keycloakId);
         user.setEmail(email);
         user.setPhone(phone);
-        user.setKeycloakId(keycloakId);
         user.setFullName(fullName);
         user.setStatus(UserStatus.ACTIVE);
         user.setCreatedAt(now);

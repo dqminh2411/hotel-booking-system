@@ -20,9 +20,6 @@ public class UserEntity {
     @Column(name = "id", nullable = false)
     private UUID id;
 
-    @Column(name = "keycloak_id", length = 255, unique = true)
-    private UUID keycloakId;
-
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 

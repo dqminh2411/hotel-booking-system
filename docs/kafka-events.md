@@ -12,6 +12,8 @@
 | `payment-events` | payment-service | place-booking-service | `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`, **`RefundFailed` (MỚI)** |
 | **`promotion-commands` (MỚI)** | **place-booking-service** | **promotion-service** | **`ValidatePromotion`, `ConfirmPromotionUsage`, `ReleasePromotionUsage`** |
 | **`promotion-events` (MỚI)** | **promotion-service** | **place-booking-service** | **`PromotionValidated`, `PromotionRejected`, `PromotionUsageConfirmed`, `PromotionUsageFailed`** |
+| **`promotion-active-notification` (MỚI)** | **promotion-service** | **notification-service** | **`PromotionActiveCreated`, `PromotionActiveUpdated`** |
+| **`coupon-active-notification` (MỚI)** | **promotion-service** | **notification-service** | **`CouponActiveCreated`, `CouponActiveUpdated`** |
 | `notification-commands` | place-booking-service | notification-service | `SendBookingConfirmed`, `SendBookingFailed`, **`SendBookingCancelled` (MỚI)**, **`SendRefundFailed` (MỚI)** |
 
 ## 2. Event Schema
@@ -238,3 +240,36 @@
 |  | `sagaId` | `String` | ID của saga đặt phòng. |
 |  | `bookingId` | `String` | Booking không ghi nhận được usage. |
 |  | `reason` | `String` | Lý do xác nhận usage thất bại. |
+
+**`promotion-active-notification` (MỚI)**
+
+| Event Type | Attribute | Type | Description |
+|------------|-----------|------|-------------|
+| `PromotionActiveCreated` / `PromotionActiveUpdated` | `eventId` | `UUID` | ID của sự kiện outbox. |
+|  | `eventType` | `String` | Giá trị `PromotionActiveCreated` hoặc `PromotionActiveUpdated`. |
+|  | `promotionId` | `UUID` | ID khuyến mãi. |
+|  | `name` | `String` | Tên chương trình khuyến mãi. |
+|  | `description` | `String` | Mô tả chi tiết khuyến mãi. |
+|  | `discountType` | `String` | Loaị giảm giá (`PERCENTAGE` / `FIXED_AMOUNT`). |
+|  | `discountValue` | `BigDecimal` | Giá trị giảm. |
+|  | `maxDiscountAmount` | `BigDecimal` | Số tiền giảm tối đa. |
+|  | `startAt` | `OffsetDateTime` | Thời gian bắt đầu hiệu lực. |
+|  | `endAt` | `OffsetDateTime` | Thời gian kết thúc hiệu lực. |
+|  | `scopeType` | `String` | Phạm vi áp dụng (ví dụ: `SYSTEM`, `HOTEL`). |
+|  | `occurredAt` | `OffsetDateTime` | Thời điểm phát sinh sự kiện. |
+
+**`coupon-active-notification` (MỚI)**
+
+| Event Type | Attribute | Type | Description |
+|------------|-----------|------|-------------|
+| `CouponActiveCreated` / `CouponActiveUpdated` | `eventId` | `UUID` | ID của sự kiện outbox. |
+|  | `eventType` | `String` | Giá trị `CouponActiveCreated` hoặc `CouponActiveUpdated`. |
+|  | `couponId` | `UUID` | ID coupon. |
+|  | `promotionId` | `UUID` | ID promotion chứa coupon. |
+|  | `code` | `String` | Mã giảm giá coupon (ví dụ: `SUMMER2026`). |
+|  | `promotionName` | `String` | Tên chương trình khuyến mãi đi kèm. |
+|  | `discountType` | `String` | Loại giảm giá (`PERCENTAGE` / `FIXED_AMOUNT`). |
+|  | `discountValue` | `BigDecimal` | Giá trị giảm. |
+|  | `usageLimit` | `Integer` | Giới hạn số lượt dùng. |
+|  | `occurredAt` | `OffsetDateTime` | Thời điểm phát sinh sự kiện. |
+
