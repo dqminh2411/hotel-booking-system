@@ -218,7 +218,7 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "${PROMOTION_DB_EXTERNAL_PORT:-5437}:5432"
+      - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
     environment:
       POSTGRES_DB: ${PROMOTION_DB_NAME}
       POSTGRES_USER: ${PROMOTION_DB_USER}
@@ -468,7 +468,7 @@ services:
     environment:
       DB_HOST: ${PROMOTION_DB_HOST}
       DB_PORT: ${PROMOTION_DB_PORT}
-      DB_NAME: ${PROMOTON_DB_NAME}
+      DB_NAME: ${PROMOTION_DB_NAME}
       DB_USER: ${PROMOTION_DB_USER}
       DB_PASSWORD: ${PROMOTION_DB_PASSWORD}
       SERVER_PORT: 5000

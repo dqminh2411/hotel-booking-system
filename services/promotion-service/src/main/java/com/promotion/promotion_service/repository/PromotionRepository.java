@@ -35,11 +35,8 @@ public interface PromotionRepository extends JpaRepository<PromotionEntity, UUID
         FROM PromotionEntity p
         WHERE p.isDeleted = false
           AND (:status IS NULL OR p.status = :status)
-          AND (
-                :keyword IS NULL
-                OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
-              )
-    """)
+          AND LOWER(p.name) LIKE CONCAT('%', LOWER(:keyword), '%')
+        """)
     Page<PromotionEntity> search(
             @Param("keyword") String keyword,
             @Param("status") PromotionStatus status,

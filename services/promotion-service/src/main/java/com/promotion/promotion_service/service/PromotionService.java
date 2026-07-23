@@ -1,6 +1,7 @@
 package com.promotion.promotion_service.service;
 
 import com.promotion.promotion_service.constant.promotions.PromotionStatus;
+import com.promotion.promotion_service.dto.request.ChangePromotionStatusRequest;
 import com.promotion.promotion_service.dto.request.CreatePromotionRequest;
 import com.promotion.promotion_service.dto.request.UpdatePromotionRequest;
 import com.promotion.promotion_service.dto.response.PromotionPageResponse;
@@ -24,6 +25,6 @@ public interface PromotionService {
 
     void delete(UUID id);
 
-    PromotionResponse changeStatus(UUID id, PromotionStatus status);
+    PromotionResponse changeStatus(UUID id, ChangePromotionStatusRequest request);
 
 }

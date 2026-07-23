@@ -25,7 +25,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdatePromotionRequest extends CreatePromotionRequest {
+public class UpdatePromotionRequest {
 
     /**
      * Ignored in current sprint.
