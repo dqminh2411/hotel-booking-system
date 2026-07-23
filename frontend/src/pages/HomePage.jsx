@@ -93,12 +93,24 @@ export default function HomePage() {
             </p>
           )}
 
-          <div className="mt-5">
+          <div className="mt-5 flex flex-wrap gap-3">
             <Link
               to={`/hotels/${DEMO_HOTEL_ID}?checkinDate=${today}&checkoutDate=${tomorrow}&guestNum=2&roomNum=1`}
               className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
             >
               Xem chi tiết khách sạn demo
+            </Link>
+            <Link
+              to={`/staff/hotels/${DEMO_HOTEL_ID}/today-checkins`}
+              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+            >
+              Xem check-in hôm nay (demo)
+            </Link>
+            <Link
+              to={`/staff/hotels/${DEMO_HOTEL_ID}/checkins`}
+              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+            >
+              Check-out (demo)
             </Link>
           </div>
         </div>

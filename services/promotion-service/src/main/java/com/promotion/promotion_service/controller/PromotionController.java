@@ -1,6 +1,7 @@
 package com.promotion.promotion_service.controller;
 
 import com.promotion.promotion_service.constant.promotions.PromotionStatus;
+import com.promotion.promotion_service.dto.request.ChangePromotionStatusRequest;
 import com.promotion.promotion_service.dto.request.CreatePromotionRequest;
 import com.promotion.promotion_service.dto.request.UpdatePromotionRequest;
 import com.promotion.promotion_service.dto.response.PromotionPageResponse;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/promotions")
+@RequestMapping("/api/promotions")
 @RequiredArgsConstructor
 @Validated
 public class PromotionController {
@@ -65,10 +66,9 @@ public class PromotionController {
     @PatchMapping("/{id}/status")
     public PromotionResponse changeStatus(
             @PathVariable UUID id,
-            @RequestParam PromotionStatus status,
-            @AuthenticationPrincipal Jwt jwt) {
-
-        return promotionService.changeStatus(id, status);
+            @Valid @RequestBody ChangePromotionStatusRequest request
+      ) {
+        return promotionService.changeStatus(id, request);
     }
 
     @DeleteMapping("/{id}")

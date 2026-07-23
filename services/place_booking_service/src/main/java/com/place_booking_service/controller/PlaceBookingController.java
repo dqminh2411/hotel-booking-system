@@ -141,7 +141,7 @@ public class PlaceBookingController {
         });
 
         // Bước 6: Khởi tạo saga đặt phòng và ghi command vào outbox để xử lý bất đồng bộ.
-        placeBookingService.startSaga(
+        bookingId = placeBookingService.startSaga(
                 placeBookingRequest,
                 user,
                 hotelAndRoomTypes.hotel(),

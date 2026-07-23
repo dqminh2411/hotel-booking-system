@@ -13,6 +13,7 @@ import com.promotion.promotion_service.entity.PromotionConditionEntity;
 import com.promotion.promotion_service.entity.PromotionEntity;
 import com.promotion.promotion_service.entity.PromotionScopeEntity;
 import com.promotion.promotion_service.exception.ResourceNotFoundException;
+import com.promotion.promotion_service.exception.BusinessException;
 import com.promotion.promotion_service.repository.CouponRepository;
 import com.promotion.promotion_service.repository.PromotionConditionRepository;
 import com.promotion.promotion_service.repository.PromotionRepository;
@@ -20,7 +21,9 @@ import com.promotion.promotion_service.repository.PromotionScopeRepository;
 import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
 import jakarta.ws.rs.BadRequestException;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,8 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@Transactional
 public class PromotionServiceImpl implements PromotionService {
 
     private final CouponRepository couponRepository;
@@ -43,6 +48,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final PromotionRepository promotionRepository;
     private final OutboxPublisherService outboxPublisherService;
 
+
     @Override
     @Transactional
     public PromotionResponse create(CreatePromotionRequest request) {
@@ -50,7 +56,28 @@ public class PromotionServiceImpl implements PromotionService {
         validateCreateRequest(request);
 
         // 2. Tạo Promotion
+        PromotionEntity promotion = getPromotionEntity(request);
+
+        promotion = promotionRepository.save(promotion);
+
+        // 3. Lưu Scope
+        saveScopes(promotion, request.getScopes());
+
+        // 4. Lưu Condition
+        saveConditions(promotion, request.getConditions());
+
+        // 5. Lưu Coupon
+        saveCoupons(promotion, request.getCoupons());
+
+        // 6. Trả về chi tiết Promotion
+        return getById(promotion.getId());
+    }
+
+    private static PromotionEntity getPromotionEntity(CreatePromotionRequest request) {
         PromotionEntity promotion = new PromotionEntity();
+
+        promotion.setTenantId(request.getTenantId());
+
         promotion.setName(request.getName());
         promotion.setDescription(request.getDescription());
 
@@ -68,16 +95,14 @@ public class PromotionServiceImpl implements PromotionService {
 
         promotion.setStatus(request.getStatus());
 
-        promotion = promotionRepository.save(promotion);
+        promotion.setTotalUsageLimit(request.getTotalUsageLimit());
+        promotion.setPerUserUsageLimit(request.getPerUserUsageLimit());
 
-        // 3. Lưu Scope
-        saveScopes(promotion, request.getScopes());
+        promotion.setCurrentUsageCount(0);
 
-        // 4. Lưu Condition
-        saveConditions(promotion, request.getConditions());
+        promotion.setStackable(Boolean.TRUE.equals(request.getStackable()));
 
-        // 5. Lưu Coupon
-        saveCoupons(promotion, request.getCoupons());
+        promotion.setDeleted(false);
 
         // 6. Gửi outbox event nếu status == ACTIVE
         publishPromotionActiveEvent(promotion, true);
@@ -127,9 +152,9 @@ public class PromotionServiceImpl implements PromotionService {
                 .findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Promotion not found"));
 
-        PromotionResponse response = new PromotionResponse();
+        PromotionResponse response = toResponse(promotion);
 
-        // Promotion
+        /*// Promotion
         response.setId(promotion.getId());
         response.setName(promotion.getName());
         response.setDescription(promotion.getDescription());
@@ -145,7 +170,8 @@ public class PromotionServiceImpl implements PromotionService {
         response.setStartAt(promotion.getStartAt());
         response.setEndAt(promotion.getEndAt());
 
-        response.setStatus(promotion.getStatus());
+        response.setStatus(promotion.getStatus());*/
+
 
         // Scope
         List<PromotionScopeResponse> scopes =
@@ -177,6 +203,45 @@ public class PromotionServiceImpl implements PromotionService {
         return response;
     }
 
+    private static PromotionResponse toResponse(PromotionEntity promotion) {
+
+        PromotionResponse response = new PromotionResponse();
+
+        response.setTenantId(promotion.getTenantId());
+
+        response.setId(promotion.getId());
+        response.setName(promotion.getName());
+        response.setDescription(promotion.getDescription());
+        response.setType(promotion.getType());
+
+        response.setDiscountType(promotion.getDiscountType());
+        response.setDiscountValue(promotion.getDiscountValue());
+        response.setMaxDiscountAmount(promotion.getMaxDiscountAmount());
+
+        response.setMinBookingAmount(promotion.getMinBookingAmount());
+        response.setMinNights(promotion.getMinNights());
+
+        response.setStartAt(promotion.getStartAt());
+        response.setEndAt(promotion.getEndAt());
+
+        response.setStatus(promotion.getStatus());
+
+        response.setTotalUsageLimit(promotion.getTotalUsageLimit());
+        response.setPerUserUsageLimit(promotion.getPerUserUsageLimit());
+
+        response.setCurrentUsageCount(promotion.getCurrentUsageCount());
+
+        response.setStackable(promotion.isStackable());
+
+        response.setCreatedAt(promotion.getCreatedAt());
+        response.setUpdatedAt(promotion.getUpdatedAt());
+
+        response.setCreatedBy(promotion.getCreatedBy());
+        response.setUpdatedBy(promotion.getUpdatedBy());
+
+        return response;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public PromotionPageResponse getAll(String keyword,
@@ -188,9 +253,17 @@ public class PromotionServiceImpl implements PromotionService {
                 ? keyword.trim()
                 : null;
 
-        Page<PromotionEntity> page =
-                promotionRepository.search(keyword, status, pageable);
+        Page<PromotionEntity> page;
 
+        if (keyword == null) {
+            if (status == null) {
+                page = promotionRepository.findAllByIsDeletedFalse(pageable);
+            } else {
+                page = promotionRepository.findAllByStatusAndIsDeletedFalse(status, pageable);
+            }
+        } else {
+            page = promotionRepository.search(keyword, status, pageable);
+        }
         List<PromotionResponse> contents = page.getContent()
                 .stream()
                 .map(this::toPromotionResponse)
@@ -221,15 +294,15 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     @Transactional
-    public PromotionResponse changeStatus(UUID id, PromotionStatus status) {
+    public PromotionResponse changeStatus(UUID id, ChangePromotionStatusRequest request) {
 
         PromotionEntity promotion = promotionRepository
                 .findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Promotion not found"));
 
-        validateStatusTransition(promotion.getStatus(), status);
+        validateStatusTransition(promotion.getStatus(), request.getStatus());
 
-        promotion.setStatus(status);
+        promotion.setStatus(request.getStatus());
 
         promotion = promotionRepository.save(promotion);
 
@@ -243,9 +316,9 @@ public class PromotionServiceImpl implements PromotionService {
 
     private void validateCreateRequest(CreatePromotionRequest request) {
 
-        validateDate(request);
+        validateDate(request.getStartAt(), request.getEndAt());
 
-        validateDiscount(request);
+        validateDiscount(request.getDiscountType(), request.getDiscountValue());
 
         validateScopes(request.getScopes());
 
@@ -258,9 +331,9 @@ public class PromotionServiceImpl implements PromotionService {
     private void validateUpdateRequest(PromotionEntity promotion,
                                        UpdatePromotionRequest request) {
 
-        validateDate(request);
+        validateDate(request.getStartAt(), request.getEndAt());
 
-        validateDiscount(request);
+        validateDiscount(request.getDiscountType(), request.getDiscountValue());
 
         validateScopes(request.getScopes());
 
@@ -271,23 +344,33 @@ public class PromotionServiceImpl implements PromotionService {
         validateStatusTransition(
                 promotion.getStatus(),
                 request.getStatus());
+
     }
 
-    private void validateDate(CreatePromotionRequest request) {
+    private void validateDate(
+            OffsetDateTime startAt,
+            OffsetDateTime endAt) {
 
-        if (request.getStartAt() == null || request.getEndAt() == null) {
+        if (startAt == null || endAt == null) {
             return; // @NotNull xử lý trước
         }
 
-        if (!request.getStartAt().isBefore(request.getEndAt())) {
+        if (!startAt.isBefore(endAt)) {
             throw new BadRequestException("Promotion startAt must be before endAt.");
         }
     }
 
-    private void validateDiscount(CreatePromotionRequest request) {
+    private void validateDiscount(
+            PromotionDiscountType type,
+            BigDecimal value
+    ) {
 
-        if (request.getDiscountType() == PromotionDiscountType.PERCENTAGE
-                && request.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+        if (type == null || value == null) {
+            return; // @NotNull xử lý
+        }
+
+        if (type == PromotionDiscountType.PERCENTAGE
+                && value.compareTo(BigDecimal.valueOf(100)) > 0) {
 
             throw new BadRequestException(
                     "Percentage discount must not exceed 100.");
@@ -303,9 +386,13 @@ public class PromotionServiceImpl implements PromotionService {
         for (PromotionScopeInput scope : scopes) {
 
             if (scope.getScopeType() != ScopeType.SYSTEM) {
-
-                throw new BadRequestException(
+                throw new BusinessException(
                         "Only SYSTEM scope is supported.");
+            }
+
+            if (scope.getScopeRefId() != null) {
+                throw new BusinessException(
+                        "scopeRefId must be null for SYSTEM scope.");
             }
         }
     }
@@ -322,13 +409,13 @@ public class PromotionServiceImpl implements PromotionService {
 
             if (!codes.add(coupon.getCode())) {
 
-                throw new BadRequestException(
+                throw new BusinessException(
                         "Duplicate coupon code: " + coupon.getCode());
             }
 
             if (couponRepository.existsByCodeAndIsDeletedFalse(coupon.getCode())) {
 
-                throw new BadRequestException(
+                throw new BusinessException(
                         "Coupon code already exists: " + coupon.getCode());
             }
         }
@@ -631,7 +718,7 @@ public class PromotionServiceImpl implements PromotionService {
 
         response.setConditionType(entity.getConditionType());
         response.setOperator(entity.getOperator());
-        response.setConditionType(entity.getConditionType());
+        response.setConditionValue(entity.getConditionValue());
 
         return response;
     }
