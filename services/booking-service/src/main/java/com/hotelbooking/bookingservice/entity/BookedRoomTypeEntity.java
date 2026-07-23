@@ -5,8 +5,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -37,6 +40,10 @@ public class BookedRoomTypeEntity {
 
     @Column(name = "subtotal", nullable = false)
     private BigDecimal subtotal;
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "room_ids", nullable = true)
+    private List<UUID> roomIds;
 
     @Column(name = "is_deleted", nullable = false)
     private Boolean isDeleted = false;

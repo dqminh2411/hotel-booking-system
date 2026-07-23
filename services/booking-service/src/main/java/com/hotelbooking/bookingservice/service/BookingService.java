@@ -4,8 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotelbooking.bookingservice.dto.BookingDetail;
 import com.hotelbooking.bookingservice.dto.BookingResponse;
+import com.hotelbooking.bookingservice.dto.CheckinRequest;
 import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
+import com.hotelbooking.bookingservice.dto.RoomCheckinRequest;
+import com.hotelbooking.bookingservice.client.HotelServiceFiegnClient;
 import com.hotelbooking.bookingservice.dto.ActiveBookingRoomType;
+import com.hotelbooking.bookingservice.dto.BookingCheckinInfo;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCancelled;
 import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCreated;
@@ -18,11 +22,15 @@ import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
+import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
+
+import feign.FeignException;
+import feign.RetryableException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -41,6 +49,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -61,6 +71,9 @@ public class BookingService {
     ObjectMapper objectMapper;
     RoomTypeInventoryRepository roomTypeInventoryRepository;
     StringRedisTemplate stringRedisTemplate;
+    HotelServiceFiegnClient hotelServiceFiegnClient;
+    CheckinCheckoutService checkinCheckoutService;
+
 
     public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
@@ -104,6 +117,109 @@ public class BookingService {
 
         return new CountBookingsResponse(hotelId, checkin, checkout, activeBookingCount);
     }
+
+    /*------checkin------*/
+    /* Lý do tại sao tách sang service kia (tại ban đầu t code gộp chung vào 1 hàm luôn)
+    1. Để  feign client trong @Transactional thấy bảo cạn kiệt connection db khi mà bị timeout các thứ
+    2. Nếu tách thành các method trong cùng 1 class này thì đều 0 chạy được đặc trưng @Transactional
+        vì cơ chế Proxy gì đó của Spring boot
+    3. Rủi ro dữ liệu 0 đồng nhất do gọi qua service khác */
+    public void checkin(CheckinRequest checkinRequest){
+        RoomCheckinRequest roomCheckinRequest = checkinCheckoutService.validateAndGetCheckinData(checkinRequest);
+        callHotelFeignService(roomCheckinRequest);
+        
+
+        try {
+            checkinCheckoutService.updateBookingStatusCheckin(checkinRequest);
+        } catch (Exception e) {
+            rollBackRoomStatus(roomCheckinRequest);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkin------*/
+
+    /*------checkout------*/
+    public void checkout(UUID bookingId){
+        RoomCheckinRequest requestCheckout = checkinCheckoutService.validateCheckoutAndGetData(bookingId);
+        callHotelFeignService(requestCheckout);
+
+        try {
+            checkinCheckoutService.updateBookingStatusCheckout(bookingId);
+        } catch (Exception e) {
+            rollBackRoomStatus(requestCheckout);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkout------*/
+
+    private void callHotelFeignService(RoomCheckinRequest request){
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(request);
+        } catch (RetryableException ex) {
+            log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
+            throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
+        } catch (FeignException ex) {
+            log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
+            throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
+        }
+    }
+
+    private void rollBackRoomStatus(RoomCheckinRequest oldRequest){
+        RoomCheckinRequest rollBack = new RoomCheckinRequest(oldRequest.roomIds(),
+                                            oldRequest.roomTypeQuantities(),
+                                            oldRequest.newStatus(),
+                                            oldRequest.oldStatus());
+        
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(rollBack);
+        } catch (Exception e) {
+            log.error("ROLLBACK FAILED for rooms: {}", e.getMessage());
+        }
+    }
+    /*-------*/
+    
+    @Transactional(readOnly = true)
+    public Page<BookingCheckinInfo> getBookingToday(UUID hotelId, LocalDate today, BookingStatus status, Pageable pageable){
+
+        Page<BookingEntity> bookingEntities = bookingRepository.findByHotelIdAndCheckinDateAndStatus(hotelId, today, status, pageable);
+
+        List<UUID> bookingIds = bookingEntities.getContent().stream()
+                                            .map(BookingEntity::getId)
+                                            .toList();
+
+        Map<UUID, BookingInfoEntity> bookingInfoEntities = bookingInfoRepository.findAllById(bookingIds).stream()
+                                                .collect(Collectors.toMap(
+                                                    BookingInfoEntity::getBookingId,
+                                                    info -> info));
+                                                    
+        return bookingEntities.map(booking -> {
+            BookingInfoEntity bookingInfoEntity = bookingInfoEntities.get(booking.getId());
+            if(bookingInfoEntity == null){
+                throw new AppException("BOOKING_DETAIL_NOT_FOUND", "Booking detail does not exist", HttpStatus.NOT_FOUND);
+            }
+            BookingDetail bookingDetail = toBookingDetail(bookingInfoEntity);
+            
+            return new BookingCheckinInfo(
+                    booking.getId(),
+                    booking.getStatus(),
+                    bookingDetail.getCustomer().getName(),
+                    bookingDetail.getCustomer().getEmail(),
+                    booking.getCheckinDate(),
+                    booking.getCheckoutDate(),
+                    booking.getNumAdults(),
+                    booking.getTotalAmount()
+            );
+        });
+    }
+
+    private BookingDetail toBookingDetail(BookingInfoEntity bookingInfoEntity){
+        try {
+            return objectMapper.readValue(bookingInfoEntity.getBookingDetail(), BookingDetail.class);
+        } catch (Exception ex) {
+            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to parse booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*-------*/
 
     @Transactional
     public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {

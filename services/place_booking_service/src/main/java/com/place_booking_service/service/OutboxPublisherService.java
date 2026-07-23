@@ -40,6 +40,8 @@ public class OutboxPublisherService {
                 JsonNode payload = objectMapper.readTree(message.getPayload());
                 String bookingId= payload.path("bookingId").asText();
                 Object payloadObj = objectMapper.readValue(message.getPayload(), Object.class);
+
+                
                 kafkaProducerService.send(message.getTopic(),bookingId, payloadObj);
 
                 message.setStatus("PROCESSED");
