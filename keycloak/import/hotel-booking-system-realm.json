@@ -418,7 +418,7 @@
     "path" : "/hotel owners",
     "subGroups" : [ ],
     "attributes" : { },
-    "realmRoles" : [ ],
+    "realmRoles" : [ "HOTEL_OWNER" ],
     "clientRoles" : { }
   }, {
     "id" : "e74f0010-381a-4c92-8bd1-b50385265991",
@@ -427,7 +427,7 @@
     "path" : "/hotel staff",
     "subGroups" : [ ],
     "attributes" : { },
-    "realmRoles" : [ ],
+    "realmRoles" : [ "HOTEL_STAFF" ],
     "clientRoles" : { }
   }, {
     "id" : "7eb1fef3-20fc-415d-ae13-7ea81f3c7848",
@@ -436,7 +436,7 @@
     "path" : "/platform admins",
     "subGroups" : [ ],
     "attributes" : { },
-    "realmRoles" : [ ],
+    "realmRoles" : [ "PLATFORM_ADMIN" ],
     "clientRoles" : { }
   } ],
   "defaultRole" : {
@@ -490,6 +490,10 @@
     "lastName" : "1",
     "email" : "admin1@gmail.com",
     "emailVerified" : true,
+    "attributes" : {
+      "fullName" : [ "Admin" ],
+      "phone" : [ "0999999999" ]
+    },
     "enabled" : true,
     "createdTimestamp" : 1784109695817,
     "totp" : false,
@@ -503,7 +507,7 @@
     } ],
     "disableableCredentialTypes" : [ ],
     "requiredActions" : [ ],
-    "realmRoles" : [ "default-roles-hotel-booking-system" ],
+    "realmRoles" : [ "PLATFORM_ADMIN", "default-roles-hotel-booking-system" ],
     "notBefore" : 0,
     "groups" : [ "/platform admins" ]
   }, {
@@ -589,6 +593,10 @@
     "lastName" : "1",
     "email" : "owner1@gmail.com",
     "emailVerified" : true,
+    "attributes" : {
+      "fullName" : [ "Owner" ],
+      "phone" : [ "098898989" ]
+    },
     "enabled" : true,
     "createdTimestamp" : 1784109642856,
     "totp" : false,
@@ -627,7 +635,7 @@
     } ],
     "disableableCredentialTypes" : [ ],
     "requiredActions" : [ ],
-    "realmRoles" : [ "default-roles-hotel-booking-system" ],
+    "realmRoles" : [ "HOTEL_STAFF", "default-roles-hotel-booking-system" ],
     "notBefore" : 0,
     "groups" : [ "/hotel staff" ]
   }, {
@@ -662,6 +670,10 @@
     "lastName" : "2",
     "email" : "user2@gmail.com",
     "emailVerified" : true,
+    "attributes" : {
+      "fullName" : [ "Usertwo" ],
+      "phone" : [ "0123456712" ]
+    },
     "enabled" : true,
     "createdTimestamp" : 1784213297753,
     "totp" : false,
@@ -880,7 +892,7 @@
     "consentRequired" : false,
     "standardFlowEnabled" : true,
     "implicitFlowEnabled" : false,
-    "directAccessGrantsEnabled" : false,
+    "directAccessGrantsEnabled" : true,
     "serviceAccountsEnabled" : false,
     "publicClient" : true,
     "frontchannelLogout" : true,
