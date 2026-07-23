@@ -255,9 +255,9 @@ public class PromotionServiceImpl implements PromotionService {
                 request.getStatus());
     }
 
-    private void validateDate(CreatePromotionRequest request) {
+    private  void validateDate( CreatePromotionRequest request) {
 
-        if (request.getStartAt() == null || request.getEndAt() == null) {
+        if ( request.getStartAt() == null || request.getEndAt() == null) {
             return; // @NotNull xử lý trước
         }
 
@@ -276,6 +276,26 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
+    private  void validateDate( UpdatePromotionRequest request) {
+
+        if ( request.getStartAt() == null || request.getEndAt() == null) {
+            return; // @NotNull xử lý trước
+        }
+
+        if (!request.getStartAt().isBefore(request.getEndAt())) {
+            throw new BadRequestException("Promotion startAt must be before endAt.");
+        }
+    }
+
+    private void validateDiscount(UpdatePromotionRequest request) {
+
+        if (request.getDiscountType() == PromotionDiscountType.PERCENTAGE
+                && request.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+
+            throw new BadRequestException(
+                    "Percentage discount must not exceed 100.");
+        }
+    }
     private void validateScopes(List<PromotionScopeInput> scopes) {
 
         if (scopes == null) {

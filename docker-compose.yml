@@ -218,11 +218,11 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     ports:
-      - "${PROMOTION_DB_EXTERNAL_PORT:-5437}:5432"
+      - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
     environment:
-      POSTGRES_DB: ${PROMOTION_DB_NAME}
-      POSTGRES_USER: ${PROMOTION_DB_USER}
-      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD}
+      POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
+      POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
     volumes:
       - promotion-db-data:/var/lib/postgresql/data
       - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
@@ -544,11 +544,11 @@ services:
     container_name: keycloak-db
 
     ports:
-      - "${KEYCLOAK_DB_EXTERNAL_PORT:-5437}:${KEYCLOAK_DB_PORT:-5432}"
+      - "${KEYCLOAK_DB_EXTERNAL_PORT:-5439}:${KEYCLOAK_DB_PORT:-5432}"
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak_db}
       POSTGRES_USER: ${KEYCLOAK_DB_USER:-db}
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-1}
 
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
@@ -565,7 +565,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.0
     container_name: keycloak
-    command: start-dev
+    command: start-dev --import-realm
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -583,6 +583,7 @@ services:
       - "8085:8080"
     volumes:
       - ./keycloak/theme/hotelhub:/opt/keycloak/themes/hotelhub
+      - ./keycloak/import:/opt/keycloak/data/import
     networks:
       - app-network
 networks:
