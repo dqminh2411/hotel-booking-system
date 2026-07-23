@@ -139,7 +139,7 @@ public class PromotionServiceImpl implements PromotionService {
                 .findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Promotion not found"));
 
-        PromotionResponse response = toResponse(promotion);
+        PromotionResponse response = toPromotionResponse(promotion);
 
         /*// Promotion
         response.setId(promotion.getId());
@@ -190,7 +190,7 @@ public class PromotionServiceImpl implements PromotionService {
         return response;
     }
 
-    private static PromotionResponse toResponse(PromotionEntity promotion) {
+    private PromotionResponse toPromotionResponse(PromotionEntity promotion) {
 
         PromotionResponse response = new PromotionResponse();
 
@@ -657,6 +657,8 @@ public class PromotionServiceImpl implements PromotionService {
 
         CouponResponse response = new CouponResponse();
 
+        response.setId(entity.getId());
+
         response.setCode(entity.getCode());
         response.setStatus(entity.getStatus());
         response.setUsageLimit(entity.getUsageLimit());
@@ -665,30 +667,4 @@ public class PromotionServiceImpl implements PromotionService {
         return response;
     }
 
-    private PromotionResponse toPromotionResponse(PromotionEntity entity) {
-
-        PromotionResponse response = new PromotionResponse();
-
-        response.setId(entity.getId());
-        response.setName(entity.getName());
-        response.setDescription(entity.getDescription());
-
-        response.setType(entity.getType());
-
-        response.setDiscountType(entity.getDiscountType());
-        response.setDiscountValue(entity.getDiscountValue());
-
-        response.setMaxDiscountAmount(entity.getMaxDiscountAmount());
-
-        response.setMinBookingAmount(entity.getMinBookingAmount());
-
-        response.setMinNights(entity.getMinNights());
-
-        response.setStartAt(entity.getStartAt());
-        response.setEndAt(entity.getEndAt());
-
-        response.setStatus(entity.getStatus());
-
-        return response;
-    }
 }
