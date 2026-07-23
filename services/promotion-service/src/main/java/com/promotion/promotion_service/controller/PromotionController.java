@@ -1,6 +1,7 @@
 package com.promotion.promotion_service.controller;
 
 import com.promotion.promotion_service.constant.promotions.PromotionStatus;
+import com.promotion.promotion_service.dto.request.ChangePromotionStatusRequest;
 import com.promotion.promotion_service.dto.request.CreatePromotionRequest;
 import com.promotion.promotion_service.dto.request.UpdatePromotionRequest;
 import com.promotion.promotion_service.dto.response.PromotionPageResponse;
@@ -59,9 +60,9 @@ public class PromotionController {
     @PatchMapping("/{id}/status")
     public PromotionResponse changeStatus(
             @PathVariable UUID id,
-            @RequestParam PromotionStatus status) {
+            @Valid @RequestBody ChangePromotionStatusRequest request) {
 
-        return promotionService.changeStatus(id, status);
+        return promotionService.changeStatus(id, request);
     }
 
     @DeleteMapping("/{id}")

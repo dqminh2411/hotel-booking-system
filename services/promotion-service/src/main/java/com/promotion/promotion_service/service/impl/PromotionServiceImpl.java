@@ -280,15 +280,15 @@ public class PromotionServiceImpl implements PromotionService {
     }
 
     @Transactional
-    public PromotionResponse changeStatus(UUID id, PromotionStatus status) {
+    public PromotionResponse changeStatus(UUID id, ChangePromotionStatusRequest request) {
 
         PromotionEntity promotion = promotionRepository
                 .findByIdAndIsDeletedFalse(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Promotion not found"));
 
-        validateStatusTransition(promotion.getStatus(), status);
+        validateStatusTransition(promotion.getStatus(), request.getStatus());
 
-        promotion.setStatus(status);
+        promotion.setStatus(request.getStatus());
 
         promotionRepository.save(promotion);
 
@@ -648,7 +648,7 @@ public class PromotionServiceImpl implements PromotionService {
 
         response.setConditionType(entity.getConditionType());
         response.setOperator(entity.getOperator());
-        response.setConditionType(entity.getConditionType());
+        response.setConditionValue(entity.getConditionValue());
 
         return response;
     }
