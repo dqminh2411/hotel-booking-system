@@ -1,21 +1,25 @@
 package com.promotion.promotion_service.service.impl;
 
+import com.promotion.promotion_service.constant.coupons.CouponStatus;
 import com.promotion.promotion_service.constant.promotions.PromotionDiscountType;
 import com.promotion.promotion_service.constant.promotions.PromotionStatus;
 import com.promotion.promotion_service.constant.scope.ScopeType;
+import com.promotion.promotion_service.dto.event.CouponActiveNotificationEvent;
+import com.promotion.promotion_service.dto.event.PromotionActiveNotificationEvent;
 import com.promotion.promotion_service.dto.request.*;
 import com.promotion.promotion_service.dto.response.*;
 import com.promotion.promotion_service.entity.CouponEntity;
 import com.promotion.promotion_service.entity.PromotionConditionEntity;
 import com.promotion.promotion_service.entity.PromotionEntity;
 import com.promotion.promotion_service.entity.PromotionScopeEntity;
+import com.promotion.promotion_service.exception.ResourceNotFoundException;
 import com.promotion.promotion_service.exception.BusinessException;
 import com.promotion.promotion_service.repository.CouponRepository;
 import com.promotion.promotion_service.repository.PromotionConditionRepository;
 import com.promotion.promotion_service.repository.PromotionRepository;
 import com.promotion.promotion_service.repository.PromotionScopeRepository;
+import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
-import com.promotion.promotion_service.exception.ResourceNotFoundException;
 import jakarta.ws.rs.BadRequestException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -38,10 +42,12 @@ import java.util.stream.Collectors;
 @Transactional
 public class PromotionServiceImpl implements PromotionService {
 
-    private CouponRepository couponRepository;
-    private PromotionScopeRepository promotionScopeRepository;
-    private PromotionConditionRepository promotionConditionRepository;
-    private PromotionRepository promotionRepository;
+    private final CouponRepository couponRepository;
+    private final PromotionScopeRepository promotionScopeRepository;
+    private final PromotionConditionRepository promotionConditionRepository;
+    private final PromotionRepository promotionRepository;
+    private final OutboxPublisherService outboxPublisherService;
+
 
     @Override
     @Transactional
@@ -98,7 +104,11 @@ public class PromotionServiceImpl implements PromotionService {
 
         promotion.setDeleted(false);
 
-        return promotion;
+        // 6. Gửi outbox event nếu status == ACTIVE
+        publishPromotionActiveEvent(promotion, true);
+
+        // 7. Trả về chi tiết Promotion
+        return getById(promotion.getId());
     }
 
     @Override
@@ -127,7 +137,10 @@ public class PromotionServiceImpl implements PromotionService {
         // 6. Sync Coupon
         syncCoupons(promotion, request.getCoupons());
 
-        // 7. Trả về chi tiết
+        // 7. Gửi outbox event nếu status == ACTIVE
+        publishPromotionActiveEvent(promotion, false);
+
+        // 8. Trả về chi tiết
         return getById(id);
     }
 
@@ -232,8 +245,8 @@ public class PromotionServiceImpl implements PromotionService {
     @Override
     @Transactional(readOnly = true)
     public PromotionPageResponse getAll(String keyword,
-                                        PromotionStatus status,
-                                        Pageable pageable) {
+                                         PromotionStatus status,
+                                         Pageable pageable) {
 
         // XỬ LÝ CHUỖI RỖNG
         keyword = StringUtils.hasText(keyword)
@@ -279,6 +292,7 @@ public class PromotionServiceImpl implements PromotionService {
         promotionRepository.delete(promotion);
     }
 
+    @Override
     @Transactional
     public PromotionResponse changeStatus(UUID id, ChangePromotionStatusRequest request) {
 
@@ -290,7 +304,9 @@ public class PromotionServiceImpl implements PromotionService {
 
         promotion.setStatus(request.getStatus());
 
-        promotionRepository.save(promotion);
+        promotion = promotionRepository.save(promotion);
+
+        publishPromotionActiveEvent(promotion, false);
 
         return getById(id);
     }
@@ -535,7 +551,11 @@ public class PromotionServiceImpl implements PromotionService {
             entities.add(entity);
         }
 
-        couponRepository.saveAll(entities);
+        entities = couponRepository.saveAll(entities);
+
+        for (CouponEntity entity : entities) {
+            publishCouponActiveEvent(promotion, entity, true);
+        }
     }
 
     private void updatePromotionEntity(PromotionEntity promotion,
@@ -603,10 +623,16 @@ public class PromotionServiceImpl implements PromotionService {
                 if (existing != null) {
 
                     // Update coupon hiện có
+                    CouponStatus oldStatus = existing.getStatus();
                     existing.setStatus(input.getStatus());
                     existing.setUsageLimit(input.getUsageLimit());
 
-                    couponRepository.save(existing);
+                    existing = couponRepository.save(existing);
+
+                    if (input.getStatus() == CouponStatus.ACTIVE) {
+                        boolean isNewActive = oldStatus != CouponStatus.ACTIVE;
+                        publishCouponActiveEvent(promotion, existing, isNewActive);
+                    }
 
                 } else {
 
@@ -618,7 +644,9 @@ public class PromotionServiceImpl implements PromotionService {
                     coupon.setStatus(input.getStatus());
                     coupon.setUsageLimit(input.getUsageLimit());
 
-                    couponRepository.save(coupon);
+                    coupon = couponRepository.save(coupon);
+
+                    publishCouponActiveEvent(promotion, coupon, true);
                 }
             }
         }
@@ -626,6 +654,48 @@ public class PromotionServiceImpl implements PromotionService {
         // Soft delete coupon không còn trong request
         existingCouponMap.values()
                 .forEach(couponRepository::delete);
+    }
+
+    private void publishPromotionActiveEvent(PromotionEntity promotion, boolean isNew) {
+        if (promotion.getStatus() == PromotionStatus.ACTIVE) {
+            String eventType = isNew ? "PromotionActiveCreated" : "PromotionActiveUpdated";
+            PromotionActiveNotificationEvent event = PromotionActiveNotificationEvent.builder()
+                    .eventId(UUID.randomUUID())
+                    .eventType(eventType)
+                    .promotionId(promotion.getId())
+                    .name(promotion.getName())
+                    .description(promotion.getDescription())
+                    .type(promotion.getType())
+                    .discountType(promotion.getDiscountType())
+                    .discountValue(promotion.getDiscountValue())
+                    .maxDiscountAmount(promotion.getMaxDiscountAmount())
+                    .startAt(promotion.getStartAt())
+                    .endAt(promotion.getEndAt())
+                    .scopeType(ScopeType.SYSTEM.name())
+                    .occurredAt(OffsetDateTime.now())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("promotion-active-notification", event, eventType);
+        }
+    }
+
+    private void publishCouponActiveEvent(PromotionEntity promotion, CouponEntity coupon, boolean isNew) {
+        if (coupon.getStatus() == CouponStatus.ACTIVE) {
+            String eventType = isNew ? "CouponActiveCreated" : "CouponActiveUpdated";
+            CouponActiveNotificationEvent event = CouponActiveNotificationEvent.builder()
+                    .eventId(UUID.randomUUID())
+                    .eventType(eventType)
+                    .couponId(coupon.getId())
+                    .promotionId(promotion.getId())
+                    .code(coupon.getCode())
+                    .promotionName(promotion.getName())
+                    .promotionDescription(promotion.getDescription())
+                    .discountType(promotion.getDiscountType())
+                    .discountValue(promotion.getDiscountValue())
+                    .usageLimit(coupon.getUsageLimit())
+                    .occurredAt(OffsetDateTime.now())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("coupon-active-notification", event, eventType);
+        }
     }
 
     /*

@@ -172,7 +172,7 @@ Quá trình tích hợp Keycloak được chia thành 9 giai đoạn (phase), li
 # 2.1 Khái niệm IAM và Keycloak
 
 JWT do Keycloak phát hành chứa:
-- **sub**: UUID của user trong DB Keycloak (= `keycloak_id` trong DB của user service)
+- **sub**: UUID của user trong DB Keycloak (= `id` PK trong DB của user service)
 - email
 - name
 - scope: giá trị có thể là `openid`, `profile`, `email`
@@ -419,14 +419,13 @@ User service không còn quản lý authentication và authorization nữa. Thay
 
 ### 2.5.1 DB schema
 
-User service **không còn lưu** `password_hash`, `roles`, `user_roles`, `auth_providers`, `user_auth_providers`, `refresh_tokens` — toàn bộ được Keycloak đảm nhiệm. Bảng `users` có thêm cột `keycloak_id` (UNIQUE, NOT NULL) để liên kết với user tương ứng bên Keycloak.
+User service **không còn lưu** `password_hash`, `roles`, `user_roles`, `auth_providers`, `user_auth_providers`, `refresh_tokens` — toàn bộ được Keycloak đảm nhiệm. Bảng `users` dùng luôn `id` (UUID PK) làm định danh người dùng trong Keycloak (khớp với claim `sub` từ JWT).
 
 **Bảng `users`**
 
 | Cột | Kiểu dữ liệu | Ràng buộc | Mô tả                              |
 | --- | --- | --- |------------------------------------|
-| id | UUID | PK | Định danh người dùng               |
-| keycloak_id | UUID | UNIQUE, NOT NULL | Định danh người dùng trong Keycloak |
+| id | UUID | PK | Định danh người dùng (Keycloak User ID từ sub claim) |
 | email | VARCHAR(255) | UNIQUE, NOT NULL | Email đăng nhập                    |
 | phone | VARCHAR(20) | NULL | Số điện thoại                      |
 | full_name | VARCHAR(255) | NOT NULL | Họ tên                             |
@@ -765,9 +764,9 @@ flowchart TD
 
 14. Đồng bộ thông tin user từ Keycloak sang User Service:
     - Khi user đăng nhập, gửi request đến API `/api/users` để tạo user trong User Service nếu chưa tồn tại. User service extract thông tin user từ JWT và tạo bản ghi user mới trong DB của mình.
-    - User service controller lấy `keycloakId` từ JWT claim `sub`; `email`, `fullName`, `phone` từ payload `CreateUserRequest`.
-    - **`POST /api/users` bắt buộc phải idempotent theo `keycloakId`** (upsert / bỏ qua nếu đã tồn tại), vì frontend gọi lại API này mỗi phiên trình duyệt (không đảm bảo chỉ gọi đúng 1 lần duy nhất trong đời user — xem giải thích ở mục dưới).
-    - **Cơ chế gọi ở phía frontend** (`useSyncUserProfile` hook, chạy ở component gốc `App.jsx`): không cố xác định chính xác "đây có phải lần đăng nhập đầu tiên" (vì `sessionStorage` bị xoá khi đóng tab/đổi thiết bị, không đáng tin cho mục đích này) — chỉ đảm bảo gọi **ít nhất 1 lần mỗi phiên trình duyệt**, dựa vào flag lưu trong `sessionStorage` theo `keycloakId` để tránh gọi lặp lại nhiều lần trong cùng phiên. Việc đảm bảo "chỉ tạo 1 bản ghi duy nhất" là trách nhiệm của backend (upsert theo `keycloak_id`), không phải frontend.
+    - User service controller lấy user id từ JWT claim `sub` (dùng làm `id` PK); `email`, `fullName`, `phone` từ payload `CreateUserRequest`.
+    - **`POST /api/users` bắt buộc phải idempotent theo `id`** (upsert / bỏ qua nếu đã tồn tại), vì frontend gọi lại API này mỗi phiên trình duyệt (không đảm bảo chỉ gọi đúng 1 lần duy nhất trong đời user — xem giải thích ở mục dưới).
+    - **Cơ chế gọi ở phía frontend** (`useSyncUserProfile` hook, chạy ở component gốc `App.jsx`): không cố xác định chính xác "đây có phải lần đăng nhập đầu tiên" (vì `sessionStorage` bị xoá khi đóng tab/đổi thiết bị, không đáng tin cho mục đích này) — chỉ đảm bảo gọi **ít nhất 1 lần mỗi phiên trình duyệt**, dựa vào flag lưu trong `sessionStorage` theo user id để tránh gọi lặp lại nhiều lần trong cùng phiên. Việc đảm bảo "chỉ tạo 1 bản ghi duy nhất" là trách nhiệm của backend (upsert theo `id`), không phải frontend.
     - Nếu cần biết chính xác "đây là lần đầu" (ví dụ để hiện onboarding UI), nên dựa vào **status code response** của `POST /api/users` (`201 Created` = user mới, `200 OK` = đã tồn tại) thay vì suy đoán ở phía client.
 
 ## 2.7 Required Actions trong Realm

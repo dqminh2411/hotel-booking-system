@@ -11,6 +11,10 @@ Service này tuân theo nguyên tắc **Database per Service**:
 
 ## 1. Phạm vi trách nhiệm
 
+Phân biệt khái niệm Promotion và coupon:
+- Promotion: chương trình khuyến mãi cấp hệ thống/khách sạn (giảm giá theo %, theo mùa, flash sale...), không cần user nhập mã.
+- Coupon: mã giảm giá cụ thể (có code), user phải nhập ở bước checkout, có thể do admin phát hành hàng loạt hoặc user tự thu thập (collect).
+
 `promotion-service` chịu trách nhiệm:
 
 - Tạo, cập nhật, tạm dừng, xóa mềm promotion.
@@ -51,7 +55,7 @@ Database `promotion_db` gồm các bảng chính sau:
 | `tenant_id` | `UUID` | nullable, index | Tenant hoặc chuỗi khách sạn sở hữu promotion |
 | `name` | `VARCHAR(150)` | not null | Tên promotion |
 | `description` | `TEXT` | nullable | Mô tả |
-| `type` | `VARCHAR(50)` | not null, index | `SYSTEM`, `HOTEL`, `ROOM_TYPE`, `COUPON` |
+| `type` | `VARCHAR(50)` | not null, index | `SYSTEM`, `HOTEL`, `ROOM_TYPE` |
 | `discount_type` | `VARCHAR(30)` | not null | `PERCENTAGE`, `FIXED_AMOUNT` |
 | `discount_value` | `NUMERIC(12,2)` | not null | Giá trị giảm |
 | `max_discount_amount` | `NUMERIC(12,2)` | nullable | Mức giảm tối đa khi giảm theo phần trăm |
@@ -170,6 +174,20 @@ Lý do có bảng usage: promotion ảnh hưởng trực tiếp tới tiền, c�
 | `created_at` | `TIMESTAMPTZ` | not null | Thời điểm ghi log |
 
 Không nên xóa mềm hoặc xóa cứng bảng audit và usage vì đây là dữ liệu phục vụ truy vết nghiệp vụ.
+
+
+### 2.7 **Bảng `outbox_events`**
+
+| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| --- | --- | --- | --- |
+| id | UUID | PK, DEFAULT gen_random_uuid() | Định danh event |
+| topic | VARCHAR(100) | NOT NULL | Tên Kafka topic |
+| payload | JSONB | NOT NULL | Nội dung event |
+| published | BOOLEAN | NOT NULL, DEFAULT FALSE | Đã publish lên Kafka chưa |
+| created_at | TIMESTAMP | NOT NULL, DEFAULT NOW() | Thời điểm tạo event |
+| published_at | TIMESTAMP | NULL | Thời điểm publish thành công |
+| is_deleted | BOOLEAN | NOT NULL | Xóa mềm đối tượng |
+
 
 ## 3. ERD `promotion_db`
 
@@ -310,7 +328,8 @@ sequenceDiagram
     SVC->>DB: insert coupons if provided
     SVC->>DB: insert promotion_conditions
     SVC->>DB: insert promotion_audit_logs
-    SVC->>Kafka: publish PromotionCreated event
+    SVC->>DB: insert outbox_events (PromotionActiveCreated/CouponActiveCreated if ACTIVE)
+    SVC->>Kafka: OutboxPublisherService publishes to promotion-active-notification / coupon-active-notification
     SVC-->>API: PromotionResponse
     API-->>AdminOwner: 201 Created
 ```

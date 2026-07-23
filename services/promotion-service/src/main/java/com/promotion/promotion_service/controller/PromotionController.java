@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,7 +30,8 @@ public class PromotionController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PromotionResponse createPromotion(
-            @Valid @RequestBody CreatePromotionRequest request) {
+            @Valid @RequestBody CreatePromotionRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
 
         return promotionService.create(request);
     }
@@ -36,14 +39,16 @@ public class PromotionController {
     @PutMapping("/{id}")
     public PromotionResponse updatePromotion(
             @PathVariable UUID id,
-            @Valid @RequestBody UpdatePromotionRequest request) {
+            @Valid @RequestBody UpdatePromotionRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
 
         return promotionService.update(id, request);
     }
 
     @GetMapping("/{id}")
     public PromotionResponse getPromotion(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
 
         return promotionService.getById(id);
     }
@@ -52,7 +57,8 @@ public class PromotionController {
     public PromotionPageResponse getPromotions(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) PromotionStatus status,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal Jwt jwt) {
 
         return promotionService.getAll(keyword, status, pageable);
     }
@@ -60,15 +66,16 @@ public class PromotionController {
     @PatchMapping("/{id}/status")
     public PromotionResponse changeStatus(
             @PathVariable UUID id,
-            @Valid @RequestBody ChangePromotionStatusRequest request) {
-
+            @Valid @RequestBody ChangePromotionStatusRequest request
+      ) {
         return promotionService.changeStatus(id, request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deletePromotion(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
 
         promotionService.delete(id);
     }

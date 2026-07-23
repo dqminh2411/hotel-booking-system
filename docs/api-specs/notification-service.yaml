@@ -155,6 +155,54 @@ paths:
           description: Unexpected server error; device token not registered.
           $ref: '#/components/responses/InternalServerError'
 
+  /api/notifications/topics/subscribe:
+    post:
+      tags: [Device Tokens]
+      summary: Subscribe device token to an FCM notification topic
+      description: Subscribes an FCM registration token to a topic (e.g. promotion-active-notification or coupon-active-notification).
+      operationId: subscribeTopic
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fcmToken, topic]
+              properties:
+                fcmToken:
+                  type: string
+                topic:
+                  type: string
+      responses:
+        '200':
+          description: Subscribed successfully.
+
+  /api/notifications/topics/unsubscribe:
+    post:
+      tags: [Device Tokens]
+      summary: Unsubscribe device token from an FCM notification topic
+      description: Unsubscribes an FCM registration token from a topic.
+      operationId: unsubscribeTopic
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fcmToken, topic]
+              properties:
+                fcmToken:
+                  type: string
+                topic:
+                  type: string
+      responses:
+        '200':
+          description: Unsubscribed successfully.
+
   /api/notifications/my:
     get:
       tags: [My Notifications]
