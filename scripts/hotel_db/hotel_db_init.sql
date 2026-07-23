@@ -16,8 +16,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- hỗ trợ gen_random_uuid()
 -- ────────────────────────────────────────────────────────────
 CREATE TYPE hotel_status_enum   AS ENUM ('PENDING', 'APPROVED', 'SUSPENDED');
 CREATE TYPE scope_type_enum     AS ENUM ('HOTEL', 'ROOM_TYPE', 'BOTH');
-CREATE TYPE room_status_enum    AS ENUM ('AVAILOABLE', 'OCCUPIED', 'CLEANING', 'MAINTENANCE');
-CREATE TYPE pricing_type_enum   AS ENUM ('SEASNAL', 'WEEKEND', 'SPECIAL');
+CREATE TYPE room_status_enum    AS ENUM ('AVAILABLE', 'OCCUPIED', 'CLEANING', 'MAINTENANCE');
+CREATE TYPE pricing_type_enum   AS ENUM ('SEASONAL', 'WEEKEND', 'SPECIAL');
 CREATE TYPE adjustment_type_enum AS ENUM ('FIXED_PRICE', 'PERCENTAGE_INCREASE', 'AMOUNT_INCREASE');
 CREATE TYPE policy_type_enum    AS ENUM ('CANCELATION', 'CHECKIN', 'CHECKOUT', 'SMOKING', 'PAYMENT', 'PETS', 'CHILDREN');
 

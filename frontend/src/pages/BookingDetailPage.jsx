@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import useAuth from '../features/auth/hooks/useAuth';
 import { fetchBookingById } from '../features/booking/api/bookingApi';
 import ErrorState from '../shared/components/ErrorState';
 import PublicHeader from '../shared/components/PublicHeader';
@@ -41,6 +42,14 @@ const STATUS_CONFIG = {
 function normalizeBooking(rawBooking) {
   if (!rawBooking) return null;
   const details = rawBooking.details || rawBooking;
+  const originalAmount = Number(
+    details.originalAmount ?? details.price?.totalPrice ?? details.totalAmount ?? 0
+  );
+  const finalAmount = Number(
+    details.finalAmount ?? details.price?.finalPrice ?? details.totalAmount ?? originalAmount
+  );
+  const discountAmount = Math.max(0, originalAmount - finalAmount);
+
   return {
     bookingId: rawBooking.bookingId || details.bookingId,
     status: rawBooking.status || details.status || 'PENDING',
@@ -53,9 +62,9 @@ function normalizeBooking(rawBooking) {
     roomNum: details.roomNum,
     nights: details.nights,
     roomTypeList: details.roomTypeList || details.roomTypes || [],
-    totalAmount: details.totalAmount ?? details.price?.totalPrice ?? details.price?.finalPrice,
-    discount: details.discount ?? details.price?.discount ?? 0,
-    finalPrice: details.finalPrice ?? details.price?.finalPrice ?? details.totalAmount,
+    originalAmount,
+    discountAmount,
+    finalAmount,
     paymentMethod: details.paymentMethod || 'CREDIT_CARD',
     paymentStatus: details.paymentStatus || (rawBooking.status === 'CONFIRMED' ? 'PAID' : 'PENDING'),
   };
@@ -102,6 +111,9 @@ export default function BookingDetailPage() {
     loadBooking();
   }, [loadBooking]);
 
+  const { user } = useAuth();
+  const isHotelStaff = user?.roles?.includes('HOTEL_STAFF');
+
   const normalized = booking;
   const statusConfig = STATUS_CONFIG[normalized?.status] || {
     label: normalized?.status || 'Không xác định',
@@ -126,7 +138,7 @@ export default function BookingDetailPage() {
             <h1 className="text-2xl font-bold text-slate-900">Booking #{bookingId}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            {normalized?.status === 'CONFIRMED' && (
+            {isHotelStaff && normalized?.status === 'CONFIRMED' && (
               <Link
                 to={`/staff/bookings/${bookingId}/checkin`}
                 state={{ booking: normalized }}
@@ -135,7 +147,7 @@ export default function BookingDetailPage() {
                 Xác nhận checkin
               </Link>
             )}
-            {normalized?.status === 'CHECKEDIN' && (
+            {isHotelStaff && normalized?.status === 'CHECKEDIN' && (
               <Link
                 to={`/staff/bookings/${bookingId}/checkout`}
                 state={{ booking: normalized }}
@@ -269,15 +281,22 @@ export default function BookingDetailPage() {
                 <div className="mt-4 space-y-3 text-sm">
                   <div className="flex justify-between">
                     <span>Tạm tính</span>
-                    <span>{formatCurrency(normalized.totalAmount)}</span>
+                    <span>{formatCurrency(normalized.originalAmount)}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between font-medium text-green-700">
                     <span>Giảm giá</span>
-                    <span>{formatCurrency(normalized.discount)}</span>
+                    <span>{normalized.discountAmount > 0 ? `−${formatCurrency(normalized.discountAmount)}` : '0 ₫'}</span>
                   </div>
                   <div className="flex justify-between border-t border-blue-200 pt-3 text-xl font-bold text-blue-950">
                     <span>Thành tiền</span>
-                    <span>{formatCurrency(normalized.finalPrice ?? normalized.totalAmount)}</span>
+                    <div className="text-right">
+                      {normalized.discountAmount > 0 && (
+                        <p className="text-sm font-normal text-slate-400 line-through">
+                          {formatCurrency(normalized.originalAmount)}
+                        </p>
+                      )}
+                      <span>{formatCurrency(normalized.finalAmount)}</span>
+                    </div>
                   </div>
                   <div className="border-t border-blue-200 pt-3">
                     <p>Phương thức: {normalized.paymentMethod === 'CREDIT_CARD' ? 'Thẻ tín dụng' : normalized.paymentMethod}</p>

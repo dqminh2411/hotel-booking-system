@@ -103,7 +103,7 @@ export function buildBookingDetailFromDraft(draft, bookingId, status = 'PENDING'
 // checkout, numAdults và roomTypeList{roomTypeId,bookingQuantity} (đã sort theo
 // roomTypeId). Hàm này tách riêng phần "khoá theo nội dung" để CheckoutPage có
 // thể build lại đúng payload khi gửi kèm forceToken mà không sợ lệch hash.
-export function buildPlaceBookingPayload({ checkoutDraft, userId, idempotencyKey, forceToken }) {
+export function buildPlaceBookingPayload({ checkoutDraft, userId, idempotencyKey, forceToken, couponCode }) {
   const payload = {
     userId,
     hotelId: checkoutDraft.hotel.hotelId,
@@ -118,12 +118,16 @@ export function buildPlaceBookingPayload({ checkoutDraft, userId, idempotencyKey
     checkin: checkoutDraft.booking.checkinDate,
     checkout: checkoutDraft.booking.checkoutDate,
     numAdults: Number(checkoutDraft.booking.guestNum || 1),
-    totalAmount: Number(checkoutDraft.price.finalPrice ?? checkoutDraft.price.totalPrice),
+    totalAmount: Number(checkoutDraft.price.totalPrice),
     currency: 'VND',
     paymentMethod: 'CREDIT_CARD',
     paymentToken: createPaymentToken(),
     idempotencyKey,
   };
+
+  if (couponCode) {
+    payload.couponCode = couponCode;
+  }
 
   if (forceToken) {
     payload.forceToken = forceToken;

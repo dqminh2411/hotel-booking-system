@@ -4,8 +4,10 @@ import com.promotion.promotion_service.constant.promotions.PromotionStatus;
 import com.promotion.promotion_service.dto.request.ChangePromotionStatusRequest;
 import com.promotion.promotion_service.dto.request.CreatePromotionRequest;
 import com.promotion.promotion_service.dto.request.UpdatePromotionRequest;
+import com.promotion.promotion_service.dto.request.ValidatePromotionPreRequest;
+import com.promotion.promotion_service.dto.response.CouponDetailResponse;
 import com.promotion.promotion_service.dto.response.PromotionPageResponse;
-import com.promotion.promotion_service.dto.response.PromotionResponse;
+import com.promotion.promotion_service.dto.response.*;
 import com.promotion.promotion_service.service.PromotionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import java.util.UUID;
 
 @RestController
@@ -27,6 +31,7 @@ public class PromotionController {
 
     private final PromotionService promotionService;
 
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PromotionResponse createPromotion(
@@ -78,5 +83,21 @@ public class PromotionController {
             @AuthenticationPrincipal Jwt jwt) {
 
         promotionService.delete(id);
+    }
+
+    @PostMapping("/validate-pre")
+    public ValidatePromotionPreResponse validatePre(
+            @Valid @RequestBody ValidatePromotionPreRequest request) {
+
+        return promotionService.validatePre(request);
+    }
+
+    @GetMapping("/coupons/{code}")
+    public CouponDetailResponse getCouponByCode(
+            @PathVariable String code,
+            @RequestParam(required = false) java.math.BigDecimal totalAmount,
+            @RequestParam(required = false) UUID hotelId) {
+
+        return promotionService.getCouponDetail(code, totalAmount, hotelId);
     }
 }

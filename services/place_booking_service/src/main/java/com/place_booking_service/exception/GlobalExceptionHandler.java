@@ -40,6 +40,24 @@ public class GlobalExceptionHandler {
             .body(new ErrorResponse("VALIDATION_ERROR", ex.getMessage()));
     }
 
+    @ExceptionHandler(feign.FeignException.class)
+    public ResponseEntity<ErrorResponse> handleFeignException(feign.FeignException ex) {
+        int status = ex.status() > 0 ? ex.status() : 400;
+        String message = ex.getMessage();
+        if (ex.responseBody().isPresent()) {
+            try {
+                String bodyStr = new String(ex.responseBody().get().array(), java.nio.charset.StandardCharsets.UTF_8);
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(bodyStr);
+                if (node.has("message")) {
+                    message = node.get("message").asText();
+                }
+            } catch (Exception ignore) {}
+        }
+        return ResponseEntity.status(status)
+            .body(new ErrorResponse("PROMOTION_ERROR", message));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

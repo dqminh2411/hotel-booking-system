@@ -43,14 +43,16 @@ public class KafkaNotificationConsumerService {
     public void consume(String payloadJson) throws JsonProcessingException {
         EmailRequest command = objectMapper.readValue(payloadJson, EmailRequest.class);
 
-        try {
-            String content = templateService.buildContent(
-                EmailTemplate.valueOf(command.eventType()),
-                command
-            );
-            emailService.send(command.to(), "Notification", content);
-        } catch (Exception error) {
-            log.error("Could not send booking email for booking {}", command.bookingId(), error);
+        if (command.to() != null && !command.to().isBlank()) {
+            try {
+                String content = templateService.buildContent(
+                    EmailTemplate.valueOf(command.eventType()),
+                    command
+                );
+                emailService.send(command.to(), "Notification", content);
+            } catch (Exception error) {
+                log.error("Could not send booking email for booking {}", command.bookingId(), error);
+            }
         }
 
         sendPush(command);
@@ -131,7 +133,7 @@ public class KafkaNotificationConsumerService {
             String targetFcmTopic = resolveFcmTopic(topic, event);
             log.info("Dispatching FCM push notification to topic '{}' with title: '{}'", targetFcmTopic, title);
             
-            // fcmPushService.sendTopicNotification(targetFcmTopic, title, body, data);
+            fcmPushService.sendTopicNotification(targetFcmTopic, title, body, data);
         } catch (JsonProcessingException e) {
             log.error("Failed to parse promotion/coupon notification event from topic {}", topic, e);
         } catch (Exception e) {

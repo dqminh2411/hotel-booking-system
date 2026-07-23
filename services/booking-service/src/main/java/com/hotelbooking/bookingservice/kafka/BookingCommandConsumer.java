@@ -69,6 +69,7 @@ public class BookingCommandConsumer {
             // 5: wait time - đợi xin khóa tối đa 5s
             // -1: least time - thời gian nhả khóa (-1 là khi khóa hết hạn mà chưa xong thì tự động gia hạn)
             // có thể cho wait time lên 10s
+            // trong thực tế, dự định để leaseTime = 15s
             isLocked = multiLock.tryLock(5, -1, TimeUnit.SECONDS);
             if (!isLocked) {
                 // khóa lỗi thì trả về việc tạo booking false đi (tại 5-10s là cx đủ lâu để biết lỗi rồi)

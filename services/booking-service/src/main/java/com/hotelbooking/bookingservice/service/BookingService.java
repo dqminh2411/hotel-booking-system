@@ -292,7 +292,8 @@ public class BookingService {
         bookingEntity.setCheckinDate(command.checkin());
         bookingEntity.setCheckoutDate(command.checkout());
         bookingEntity.setNumAdults(command.numAdults());
-        bookingEntity.setTotalAmount(command.totalAmount());
+        bookingEntity.setOriginalAmount(command.effectiveOriginalAmount());
+        bookingEntity.setFinalAmount(command.effectiveFinalAmount());
         bookingEntity.setCurrency(command.currency());
         bookingEntity.setStatus(BookingStatus.PENDING);
         bookingEntity.setPaymentMethod(command.paymentMethod());
@@ -353,7 +354,7 @@ public class BookingService {
                 "BookingCreated",
                 command.bookingId(),
                 command.user().userId(),
-                command.totalAmount(),
+                command.effectiveFinalAmount(),
                 command.currency(),
                 command.paymentMethod(),
                 command.paymentToken()
@@ -429,7 +430,9 @@ public class BookingService {
         bookingDetail.setCheckin(command.checkin().toString());
         bookingDetail.setCheckout(command.checkout().toString());
         bookingDetail.setNumAdults(command.numAdults());
-        bookingDetail.setTotalAmount(command.totalAmount());
+        bookingDetail.setTotalAmount(command.effectiveFinalAmount());
+        bookingDetail.setOriginalAmount(command.effectiveOriginalAmount());
+        bookingDetail.setFinalAmount(command.effectiveFinalAmount());
         bookingDetail.setHotel(new BookingDetail.Hotel(
             command.hotel().hotelId(),
             command.hotel().name(),
@@ -464,7 +467,8 @@ public class BookingService {
             || command.checkin() == null
             || command.checkout() == null
             || command.numAdults() == null
-            || command.totalAmount() == null
+            || command.effectiveOriginalAmount() == null
+            || command.effectiveFinalAmount() == null
             || command.currency() == null
             || command.paymentMethod() == null) {
             throw new AppException("VALIDATION_ERROR", "CreateBooking payload is invalid", HttpStatus.BAD_REQUEST);

@@ -6,6 +6,6 @@ import axiosClient from '../../../shared/api/axiosClient';
 // as part of logout.
 export async function logoutUser(fcmToken) {
   if (!fcmToken) return null;
-  const { data } = await axiosClient.post('/api/auth/logout', { fcmToken });
+  const { data } = await axiosClient.post('/api/notifications/device-token/revoke', { fcmToken });
   return data;
 }

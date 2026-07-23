@@ -28,3 +28,9 @@ export async function unsubscribeTopic(fcmTokenOrUserId, topicOrFcmToken, topicN
   });
   return data;
 }
+
+export async function revokeDeviceToken(fcmToken) {
+  if (!fcmToken) return null;
+  const { data } = await axiosClient.post('/api/notifications/device-token/revoke', { fcmToken });
+  return data;
+}
