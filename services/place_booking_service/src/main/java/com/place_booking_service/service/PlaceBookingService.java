@@ -7,10 +7,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.dto.HotelSummaryResponse;
 import com.place_booking_service.dto.PlaceBookingRequest;
 import com.place_booking_service.dto.User;
+import com.place_booking_service.dto.ValidatePromotion;
 import com.place_booking_service.entity.SagaState;
 import com.place_booking_service.exception.PlaceBookingException;
 import com.place_booking_service.exception.SagaStateConflictException;
@@ -27,6 +30,7 @@ public class PlaceBookingService {
 
     SagaStateRepository sagaStateRepository;
     OutboxPublisherService outboxPublisherService;
+    ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public UUID startSaga(PlaceBookingRequest placeBookingRequest, User user, HotelSummaryResponse hotel,
@@ -60,14 +64,43 @@ public class PlaceBookingService {
         sagaState.setIdempotencyKey(placeBookingRequest.getIdempotencyKey());
         sagaState.setBookingId(bookingId);
         sagaState.setStatus("IN_PROGRESS");
-        sagaState.setCurrentStep("STARTED");
         sagaState.setCreatedAt(LocalDateTime.now());
         sagaState.setUpdatedAt(LocalDateTime.now());
         sagaState.setUserId(placeBookingRequest.getUserId());
         sagaState.setHashRequest(hashRequest);
-        sagaStateRepository.save(sagaState);
 
-        outboxPublisherService.saveOutboxMessage("booking-commands", createBooking, createBooking.getEventType());
+        boolean hasCoupon = placeBookingRequest.getCouponCode() != null && !placeBookingRequest.getCouponCode().isBlank();
+        if (hasCoupon) {
+            sagaState.setCouponCode(placeBookingRequest.getCouponCode().trim());
+            sagaState.setCurrentStep("VALIDATING_PROMOTION");
+            try {
+                sagaState.setPendingPayload(objectMapper.writeValueAsString(createBooking));
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Failed to serialize createBooking payload", e);
+            }
+            sagaStateRepository.save(sagaState);
+
+            ValidatePromotion validateCmd = ValidatePromotion.builder()
+                    .eventType("ValidatePromotion")
+                    .sagaId(sagaId)
+                    .bookingId(bookingId)
+                    .userId(placeBookingRequest.getUserId())
+                    .couponCode(placeBookingRequest.getCouponCode().trim())
+                    .hotelId(placeBookingRequest.getHotelId())
+                    .roomTypeIds(placeBookingRequest.getRoomTypeList() != null
+                            ? placeBookingRequest.getRoomTypeList().stream().map(r -> r.getRoomTypeId()).toList()
+                            : java.util.List.of())
+                    .checkin(placeBookingRequest.getCheckin())
+                    .checkout(placeBookingRequest.getCheckout())
+                    .totalAmount(placeBookingRequest.getTotalAmount())
+                    .build();
+
+            outboxPublisherService.saveOutboxMessage("promotion-commands", validateCmd, "ValidatePromotion");
+        } else {
+            sagaState.setCurrentStep("STARTED");
+            sagaStateRepository.save(sagaState);
+            outboxPublisherService.saveOutboxMessage("booking-commands", createBooking, createBooking.getEventType());
+        }
 
         return bookingId;
     }

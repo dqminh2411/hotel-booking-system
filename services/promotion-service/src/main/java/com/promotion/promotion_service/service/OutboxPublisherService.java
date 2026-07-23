@@ -52,7 +52,6 @@ public class OutboxPublisherService {
         try {
             String payload = objectMapper.writeValueAsString(message);
             OutboxEventEntity outboxEvent = OutboxEventEntity.builder()
-                    .id(UUID.randomUUID())
                     .topic(topic)
                     .payload(payload)
                     .published(false)

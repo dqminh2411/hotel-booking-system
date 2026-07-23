@@ -32,6 +32,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.validation.annotation.Validated;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 @RestController
 @Validated
 @RequiredArgsConstructor
@@ -59,6 +61,7 @@ public class BookingController {
         return bookingService.updateBookingStatus(bookingId, request.status());
     }
 
+    @PreAuthorize("hasRole('HOTEL_STAFF')")
     @PatchMapping("/checkin")
     public ApiResponse<Void> checkinBooking(@RequestBody CheckinRequest checkinRequest){
         bookingService.checkin(checkinRequest);
@@ -68,6 +71,7 @@ public class BookingController {
                             .build();
     }
 
+    @PreAuthorize("hasRole('HOTEL_STAFF')")
     @PatchMapping("/checkout/{bookingId}")
     public ApiResponse<Void> checkout(@PathVariable(name = "bookingId") UUID bookingId){
         bookingService.checkout(bookingId);
@@ -77,6 +81,7 @@ public class BookingController {
                             .build();
     }
 
+    @PreAuthorize("hasRole('HOTEL_STAFF')")
     @GetMapping("/today/{hotelId}")
     public ApiResponse<Page<BookingCheckinInfo>> getBookingCheckinToday(
         @PathVariable(name = "hotelId") UUID hotelId,
@@ -91,6 +96,7 @@ public class BookingController {
                         .build();
     }
 
+    @PreAuthorize("hasRole('HOTEL_STAFF')")
     @GetMapping("/{hotelId}/checkin")
     public ApiResponse<Page<BookingCheckinInfo>> getBookingIsCheckin(
         @PathVariable(name = "hotelId") UUID hotelId,

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useAuth from '../features/auth/hooks/useAuth';
 import { createBooking } from '../features/booking/api/bookingApi';
+import { fetchCouponDetail } from '../features/promotion/api/promotionApi';
 import useBookingNotifications from '../features/booking/hooks/useBookingNotifications';
 import DuplicateBookingModal from '../features/booking/components/DuplicateBookingModal';
 import {
@@ -83,6 +84,40 @@ export default function CheckoutPage() {
   // Cảnh báo trùng yêu cầu trong 5 phút (code=409 từ POST /place-booking, kèm forceToken).
   const [duplicateNotice, setDuplicateNotice] = useState(null);
   const [duplicateLoading, setDuplicateLoading] = useState(false);
+
+  // Promotion coupon states
+  const [couponInput, setCouponInput] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponError, setCouponError] = useState('');
+
+  const finalPrice = appliedCoupon?.finalAmount ?? checkoutDraft?.price?.totalPrice;
+
+  async function handleApplyCoupon() {
+    if (!couponInput.trim() || !checkoutDraft) return;
+    setCouponLoading(true);
+    setCouponError('');
+    setAppliedCoupon(null);
+    try {
+      const res = await fetchCouponDetail(
+        couponInput.trim().toUpperCase(),
+        checkoutDraft.price?.totalPrice,
+        checkoutDraft.hotel?.hotelId
+      );
+      const couponData = res?.data || res;
+      setAppliedCoupon(couponData);
+    } catch (err) {
+      setCouponError(err.response?.data?.message || err.message || 'Mã coupon không hợp lệ.');
+    } finally {
+      setCouponLoading(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError('');
+  }
 
   useEffect(() => {
     if (!checkoutDraft || bookingStatus === 'CONFIRMED') return undefined;
@@ -190,6 +225,7 @@ export default function CheckoutPage() {
         userId,
         idempotencyKey: idempotencyKeyRef.current,
         forceToken,
+        couponCode: appliedCoupon?.code || null,
       });
 
       try {
@@ -226,7 +262,7 @@ export default function CheckoutPage() {
         setDuplicateLoading(false);
       }
     },
-    [checkoutDraft, customer, user],
+    [appliedCoupon, checkoutDraft, customer, user],
   );
 
   async function handleSubmit(event) {
@@ -417,6 +453,55 @@ export default function CheckoutPage() {
                 </div>
               </section>
 
+              {/* SECTION MÃ GIẢM GIÁ */}
+              <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900">Mã giảm giá</h2>
+                <div className="mt-4 flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    placeholder="Nhập mã coupon..."
+                    disabled={!!appliedCoupon || couponLoading || isSubmitting}
+                    className="form-input flex-1"
+                  />
+                  {!appliedCoupon ? (
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      disabled={couponLoading || !couponInput.trim() || isSubmitting}
+                      className="accent-button"
+                    >
+                      {couponLoading ? <Spinner /> : 'Áp dụng'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCoupon}
+                      disabled={isSubmitting}
+                      className="text-sm font-semibold text-red-600 hover:text-red-700"
+                    >
+                      Xóa mã
+                    </button>
+                  )}
+                </div>
+
+                {couponError && (
+                  <p className="mt-2 text-sm text-red-600">✗ {couponError}</p>
+                )}
+
+                {appliedCoupon && (
+                  <div className="mt-3 rounded-md bg-green-50 p-3 text-sm text-green-800 border border-green-200">
+                    <p className="font-semibold">✓ {appliedCoupon.code} — {appliedCoupon.promotionName}</p>
+                    {appliedCoupon.remainingUsages != null && (
+                      <p className="mt-1 text-xs text-green-700">Còn {appliedCoupon.remainingUsages} lượt sử dụng</p>
+                    )}
+                    <p className="mt-1 font-medium">Giảm: {formatCurrency(appliedCoupon.discountAmount)}</p>
+                  </div>
+                )}
+              </section>
+
+              {/* SECTION TỔNG TIỀN */}
               <section className="rounded-lg border border-blue-200 bg-blue-50 p-5 shadow-sm">
                 <h2 className="text-lg font-semibold text-blue-950">Tổng tiền</h2>
                 <div className="mt-4 space-y-2 text-sm">
@@ -424,13 +509,24 @@ export default function CheckoutPage() {
                     <span>Tạm tính</span>
                     <span>{formatCurrency(checkoutDraft.price.totalPrice)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Giảm giá</span>
-                    <span>{formatCurrency(checkoutDraft.price.discount || 0)}</span>
-                  </div>
+
+                  {appliedCoupon && (
+                    <div className="flex justify-between font-medium text-green-700">
+                      <span>Giảm giá ({appliedCoupon.code})</span>
+                      <span>−{formatCurrency(appliedCoupon.discountAmount)}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between border-t border-blue-200 pt-3 text-xl font-bold text-blue-950">
                     <span>Thanh toán</span>
-                    <span>{formatCurrency(checkoutDraft.price.finalPrice)}</span>
+                    <div className="text-right">
+                      {appliedCoupon && (
+                        <p className="text-sm font-normal text-slate-400 line-through">
+                          {formatCurrency(checkoutDraft.price.totalPrice)}
+                        </p>
+                      )}
+                      <span>{formatCurrency(finalPrice)}</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -494,7 +590,7 @@ export default function CheckoutPage() {
                 <div className="mt-2 flex items-center gap-2 text-blue-700">
                   <Spinner />
                   <span>
-                    Hệ thống đang xử lý booking (kiểm tra phòng, thanh toán, xác nhận). Đang chờ kết quả qua thông
+                    Hệ thống đang xử lý booking (kiểm tra khuyến mãi, kiểm tra phòng, thanh toán, xác nhận). Đang chờ kết quả qua thông
                     báo FCM...
                   </span>
                 </div>

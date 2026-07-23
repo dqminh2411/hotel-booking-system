@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.place_booking_service.client.BookingServiceClient;
 import com.place_booking_service.client.HotelServiceClient;
+import com.place_booking_service.client.PromotionServiceClient;
 import com.place_booking_service.client.UserServiceClient;
 import com.place_booking_service.dto.CountBookingsResponse;
 import com.place_booking_service.dto.DuplicateRequestResult;
@@ -21,6 +22,7 @@ import com.place_booking_service.dto.HotelAndRoomTypesResponse;
 import com.place_booking_service.dto.PlaceBookingRequest;
 import com.place_booking_service.dto.RoomTypeQuantityResponse;
 import com.place_booking_service.dto.User;
+import com.place_booking_service.dto.ValidatePromotionPreRequest;
 import com.place_booking_service.exception.HotelNotFoundException;
 import com.place_booking_service.exception.InvalidBookingRequestException;
 import com.place_booking_service.exception.RoomTypeNotAvailableException;
@@ -46,6 +48,7 @@ public class PlaceBookingController {
     UserServiceClient userServiceClient;
     HotelServiceClient hotelServiceClient;
     BookingServiceClient bookingServiceClient;
+    PromotionServiceClient promotionServiceClient;
     Helpler helpler;
 
     @PostMapping
@@ -139,6 +142,21 @@ public class PlaceBookingController {
                 throw new RoomTypeNotAvailableException(roomType.getRoomTypeId());
             }
         });
+
+        // Bước 5.5: Pre-validate promotion nếu có couponCode (đồng bộ qua HTTP)
+        if (placeBookingRequest.getCouponCode() != null && !placeBookingRequest.getCouponCode().isBlank()) {
+            ValidatePromotionPreRequest preRequest = ValidatePromotionPreRequest.builder()
+                    .couponCode(placeBookingRequest.getCouponCode().trim())
+                    .userId(placeBookingRequest.getUserId())
+                    .hotelId(placeBookingRequest.getHotelId())
+                    .roomTypeIds(placeBookingRequest.getRoomTypeList().stream()
+                            .map(r -> r.getRoomTypeId()).toList())
+                    .checkin(placeBookingRequest.getCheckin())
+                    .checkout(placeBookingRequest.getCheckout())
+                    .totalAmount(placeBookingRequest.getTotalAmount())
+                    .build();
+            promotionServiceClient.validatePromotion(preRequest);
+        }
 
         // Bước 6: Khởi tạo saga đặt phòng và ghi command vào outbox để xử lý bất đồng bộ.
         bookingId = placeBookingService.startSaga(

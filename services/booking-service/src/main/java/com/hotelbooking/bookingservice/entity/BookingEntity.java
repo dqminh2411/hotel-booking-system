@@ -45,8 +45,15 @@ public class BookingEntity {
     @Column(name = "num_adults", nullable = false)
     private Integer numAdults;
 
-    @Column(name = "total_amount", nullable = false)
-    private BigDecimal totalAmount;
+    @Column(name = "original_amount", nullable = false)
+    private BigDecimal originalAmount;
+
+    @Column(name = "final_amount", nullable = false)
+    private BigDecimal finalAmount;
+
+    public BigDecimal getTotalAmount() {
+        return finalAmount != null ? finalAmount : originalAmount;
+    }
 
     @Column(name = "currency", nullable = false)
     private String currency;

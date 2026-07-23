@@ -42,4 +42,8 @@ public interface CouponRepository extends JpaRepository<CouponEntity, UUID> {
      */
     Optional<CouponEntity> findByCodeAndIsDeletedFalse(String code);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT c FROM CouponEntity c WHERE c.code = :code AND c.isDeleted = false")
+    Optional<CouponEntity> findByCodeForUpdate(@org.springframework.data.repository.query.Param("code") String code);
+
 }

@@ -42,4 +42,8 @@ public interface PromotionRepository extends JpaRepository<PromotionEntity, UUID
             @Param("status") PromotionStatus status,
             Pageable pageable);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM PromotionEntity p WHERE p.id = :id AND p.isDeleted = false")
+    Optional<PromotionEntity> findByIdForUpdate(@Param("id") UUID id);
+
 }
