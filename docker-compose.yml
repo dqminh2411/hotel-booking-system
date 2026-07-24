@@ -470,7 +470,7 @@ services:
     environment:
       DB_HOST: ${PROMOTION_DB_HOST:-promotion-db}
       DB_PORT: ${PROMOTION_DB_PORT:-5432}
-      DB_NAME: ${PROMOTION_DB_NAME:-promotion-db}
+      DB_NAME: ${PROMOTION_DB_NAME:-promotion_db}
       DB_USER: ${PROMOTION_DB_USER:-postgres}
       DB_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
       SERVER_PORT: 5000
