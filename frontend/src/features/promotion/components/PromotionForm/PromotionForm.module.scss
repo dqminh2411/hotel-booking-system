@@ -1,0 +1,140 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.card {
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $space-6;
+  margin-bottom: $space-5;
+}
+
+.cardTitle {
+  font-size: $font-size-lg;
+  color: $color-primary-800;
+  margin-bottom: $space-1;
+}
+
+.cardDesc {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+  margin-bottom: $space-5;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $space-4;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $space-4;
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr 1fr;
+  }
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fullSpan {
+  grid-column: 1 / -1;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  padding-top: $space-6;
+  font-size: $font-size-md;
+  font-weight: 600;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: $color-primary-500;
+}
+
+.scopeInfo {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+  background: $color-primary-50;
+  border: 1px dashed $color-primary-500;
+  border-radius: $radius-md;
+  padding: $space-4;
+  font-size: $font-size-sm;
+  color: $color-primary-800;
+}
+
+.rowList {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: $space-3;
+  align-items: flex-start;
+  background: $color-bg;
+  border: 1px solid $color-border;
+  border-radius: $radius-md;
+  padding: $space-3;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rowCoupon {
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.removeBtn {
+  align-self: center;
+  margin-top: $space-1;
+}
+
+.addBtn {
+  margin-top: $space-3;
+  align-self: flex-start;
+}
+
+.emptyRows {
+  font-size: $font-size-sm;
+  color: $color-text-muted;
+  padding: $space-4;
+  text-align: center;
+  border: 1px dashed $color-border-strong;
+  border-radius: $radius-md;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-3;
+  padding-top: $space-2;
+}
+
+.formError {
+  background: $color-danger-bg;
+  color: $color-danger;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $font-size-sm;
+  margin-bottom: $space-5;
+}

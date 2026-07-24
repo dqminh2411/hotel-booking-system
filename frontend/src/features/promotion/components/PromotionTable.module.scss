@@ -1,0 +1,13 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.name {
+  font-weight: 700;
+  color: $color-primary-800;
+}
+
+.actions {
+  display: flex;
+  gap: $space-2;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
