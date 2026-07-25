@@ -1,6 +1,8 @@
 package com.hotelbooking.bookingservice.exception;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.hotelbooking.bookingservice.dto.ErrorResponse;
+
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,7 +32,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
+        ex.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(new ErrorResponse("INTERNAL_SERVER_ERROR", "Unexpected server error"));
+    }
+
+    @ExceptionHandler(JsonProcessingException.class)
+    public ResponseEntity<ErrorResponse> handleJsonProcessingException(JsonProcessingException exception){
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(new ErrorResponse("INTERNAL_SERVER_ERROR", "Lỗi khi thực hiện thao tác chuyển đổi object <-> json"));
+    }
+
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ErrorResponse> handleExternalService(ExternalServiceException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
     }
 }

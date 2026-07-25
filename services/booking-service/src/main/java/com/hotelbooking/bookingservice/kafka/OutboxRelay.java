@@ -26,7 +26,8 @@ public class OutboxRelay {
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:100}")
     @Transactional
     public void relay() {
-        List<OutboxEventEntity> events = outboxEventRepository.findTop100ByPublishedFalseOrderByCreatedAtAsc();
+        List<OutboxEventEntity> events =
+            outboxEventRepository.findTop100ByPublishedFalseOrderByCreatedAtAsc();
         for (OutboxEventEntity event : events) {
             try {
                 JsonNode payloadNode = objectMapper.readTree(event.getPayload());
@@ -34,7 +35,9 @@ public class OutboxRelay {
                 if (bookingId == null || bookingId.isBlank()) {
                     bookingId = payloadNode.path("booking").path("bookingId").asText(null);
                 }
-                String topic = event.getTopic() == null || event.getTopic().isBlank() ? FALLBACK_TOPIC : event.getTopic();
+                String topic = event.getTopic() == null || event.getTopic().isBlank()
+                    ? FALLBACK_TOPIC
+                    : event.getTopic();
                 kafkaTemplate.send(topic, bookingId, event.getPayload()).get();
 
                 event.setPublished(Boolean.TRUE);

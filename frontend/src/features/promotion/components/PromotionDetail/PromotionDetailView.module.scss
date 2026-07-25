@@ -1,0 +1,99 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.card {
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $space-6;
+  margin-bottom: $space-5;
+}
+
+.cardTitle {
+  font-size: $font-size-lg;
+  color: $color-primary-800;
+  margin-bottom: $space-4;
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+}
+
+.headerCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: $space-4;
+  flex-wrap: wrap;
+}
+
+.name {
+  font-size: $font-size-xl;
+  color: $color-primary-800;
+  margin-bottom: $space-1;
+}
+
+.description {
+  color: $color-text-secondary;
+  font-size: $font-size-sm;
+  max-width: 640px;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: $space-4;
+  margin-top: $space-5;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaLabel {
+  font-size: $font-size-xs;
+  color: $color-text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.metaValue {
+  font-size: $font-size-md;
+  font-weight: 600;
+  color: $color-text;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: $space-3;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-3;
+  padding: $space-3 $space-4;
+  background: $color-bg;
+  border-radius: $radius-md;
+  border: 1px solid $color-border;
+  flex-wrap: wrap;
+}
+
+.listRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.listRowTitle {
+  font-weight: 700;
+  color: $color-text;
+}
+
+.listRowSub {
+  font-size: $font-size-xs;
+  color: $color-text-secondary;
+}

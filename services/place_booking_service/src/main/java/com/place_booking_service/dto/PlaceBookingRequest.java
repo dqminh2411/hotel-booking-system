@@ -7,17 +7,19 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.UUID;
+import java.math.BigDecimal;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class PlaceBookingRequest {
 
-    @NotBlank
-    private String userId;
+    @NotNull
+    private UUID userId;
 
-    @NotBlank
-    private String hotelId;
+    @NotNull
+    private UUID hotelId;
 
     @Valid
     @NotEmpty
@@ -33,7 +35,7 @@ public class PlaceBookingRequest {
     private int numAdults;
 
     @Positive
-    private double totalAmount;
+    private BigDecimal totalAmount;
 
     @NotBlank
     private String currency;
@@ -46,4 +48,8 @@ public class PlaceBookingRequest {
 
     @NotBlank
     private String paymentToken;
+
+    private String forceToken;
+
+    private String couponCode;
 }

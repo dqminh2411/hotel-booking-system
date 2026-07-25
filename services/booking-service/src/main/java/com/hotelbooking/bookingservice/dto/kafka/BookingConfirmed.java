@@ -1,9 +1,11 @@
 package com.hotelbooking.bookingservice.dto.kafka;
 
+import java.util.UUID;
+
 import com.hotelbooking.bookingservice.dto.BookingDetail;
 
 public record BookingConfirmed(
-    String sagaId,
+    UUID sagaId,
     String eventType,
     BookingDetail booking
 ) {

@@ -1,23 +1,21 @@
 package com.place_booking_service.dto;
 
-
-
-import jakarta.validation.constraints.NotBlank;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class BookingConfirmed {
-    @NotBlank
-    private String sagaId;
+    @NotNull
+    private UUID sagaId;
 
     private String eventType; // "BookingConfirmed"
     private BookingInfo booking;
-
-
 }

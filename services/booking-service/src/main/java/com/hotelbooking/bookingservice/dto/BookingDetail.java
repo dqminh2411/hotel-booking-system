@@ -6,21 +6,25 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 public class BookingDetail {
-    private String bookingId;
+    private UUID bookingId;
     private Customer customer;
     private String checkin;
     private String checkout;
     private int numAdults;
     private BigDecimal totalAmount;
+    private BigDecimal originalAmount;
+    private BigDecimal finalAmount;
     private Hotel hotel;
     private List<RoomType> roomTypeList;
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Customer {
+        private UUID userId;
         private String name;
         private String email;
     }
@@ -28,6 +32,7 @@ public class BookingDetail {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class Hotel{
+        private UUID hotelId;
         private String name;
         private String address;
     }
@@ -35,9 +40,11 @@ public class BookingDetail {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class RoomType{
+        private UUID roomTypeId;
         private String name;
         private int bedCount;
         private int bookingQuantity;
+        private int totalQuantity;
         private BigDecimal price;
     }
 }

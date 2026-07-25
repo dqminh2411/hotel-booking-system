@@ -1,0 +1,15 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-1;
+  font-size: $font-size-sm;
+  color: $color-primary-700;
+  font-weight: 600;
+  margin-bottom: $space-4;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

@@ -176,6 +176,7 @@ sequenceDiagram
     actor C as Customer
     participant GW as API Gateway
     participant PBS as Place Booking Service
+    participant Redis as Redis
     participant KK as Kafka
     participant BS as Booking Service
     participant PS as Promotion Service
@@ -201,110 +202,163 @@ sequenceDiagram
     GW-->>C: Hiển thị tổng tiền sau giảm giá
 
     %% ===== Bước 2: Khách hàng đặt phòng =====
-    C->>GW: POST /place-booking {PlaceBookingRequest, Idempotency-Key}
+    rect rgb(255, 247, 230)
+    Note over C,DB: CHỐNG DUPLICATE REQUEST (userId + hash payload, độc lập với idempotencyKey)
+    C->>GW: POST /place-booking {PlaceBookingRequest, idempotencyKey, forceToken?}
     GW->>PBS: Forward request
 
-    PBS->>PBS: Validate user, hotel, roomType, số lượng phòng
-    PBS->>DB: Kiểm tra Idempotency-Key trong SagaState
+    PBS->>PBS: hashRequest = SHA256(userId, hotelId, checkin, checkout, numAdults, roomTypeList đã sort)
 
-    alt Idempotency-Key đã tồn tại
-        PBS-->>GW: 202 Accepted {bookingId, status=PENDING}
-        GW-->>C: Hiển thị trạng thái đang xử lý
-    else Request mới
-        PBS->>DB: Lưu SagaState status=IN_PROGRESS
-        PBS->>KK: Publish CreateBooking command
-        PBS-->>GW: 202 Accepted {bookingId, status=PENDING}
-        GW-->>C: Hiển thị "Đơn đặt phòng đang được xử lý"
+    alt forceToken khớp SHA256(userId:hash:"confirmed")
+        PBS->>PBS: Coi như KHÔNG trùng (user đã bấm xác nhận đặt lại)
+    else Chưa có forceToken hoặc không khớp
+        PBS->>Redis: SETNX dup:booking-request:{userId}:{hash} "locked" EX 10s
+        alt Redis: key đã tồn tại
+            Redis-->>PBS: false (đã có request y hệt gần đây)
+        else Redis lỗi (mất kết nối)
+            PBS->>DB: SELECT SagaState WHERE userId+hash+createdAt>now-5p AND status NOT IN (FAILED,CANCELLED)
+            DB-->>PBS: Kết quả (DB là source of truth khi Redis sập)
+        end
+    end
 
-        %% ===== Bước 3: Booking Service giữ chỗ =====
-        KK->>BS: Consume CreateBooking
-        BS->>DB: Kiểm tra availability tránh race condition
+    alt Bị coi là trùng lặp
+        PBS-->>GW: 200 OK, body {code=409, message, forceToken mới, hint}
+        Note over PBS,GW: Lưu ý: HTTP status thật vẫn là 200,<br/>code 409 chỉ nằm trong body JSON
+        GW-->>C: Hiện cảnh báo "Có đơn tương tự trong 5 phút trước" + nút "Vẫn đặt phòng"
+        C->>GW: (nếu xác nhận) POST /place-booking lại, kèm forceToken vừa nhận
+        GW->>PBS: Forward request (rơi vào nhánh forceToken khớp ở trên)
+    else Không trùng
+        PBS->>PBS: Validate user, hotel, roomType, số lượng phòng (check sơ bộ, KHÔNG khóa gì)
+        PBS->>DB: existsSagaStateByIdempotencyKey(idempotencyKey)
+        alt idempotencyKey đã tồn tại VÀ hashRequest khớp
+            DB-->>PBS: SagaState cũ
+            PBS-->>GW: 202 Accepted {bookingId cũ, status=PENDING}
+            GW-->>C: Hiển thị trạng thái đang xử lý (không tạo saga mới)
+        else idempotencyKey đã tồn tại NHƯNG hashRequest KHÁC
+            PBS-->>GW: 409 SAGA_STATE_CONFLICT
+            GW-->>C: Báo lỗi rõ ràng (client tái sử dụng sai idempotencyKey)
+        else Request thật sự mới
+            PBS->>DB: Lưu SagaState{status=IN_PROGRESS, hashRequest, userId}
+            PBS->>DB: INSERT outbox_events(CreateBooking) -- cùng transaction với SagaState
+            PBS-->>GW: 202 Accepted {bookingId, status=PENDING}
+            GW-->>C: Hiển thị "Đơn đặt phòng đang được xử lý"
+            PBS->>KK: OutboxRelay (@Scheduled) publish CreateBooking command
+        end
+    end
+    end
+
+    %% ===== Bước 3: Booking Service giữ chỗ =====
+    rect rgb(230, 244, 255)
+    Note over KK,DB: CHỐNG RACE CONDITION (Redisson MultiLock + PostgreSQL SELECT FOR UPDATE)
+    KK->>BS: Consume CreateBooking
+
+    BS->>BS: sort roomTypeId (distinct + sort UUID) -- tránh deadlock khi 1 request khóa nhiều loại phòng
+    BS->>Redis: MultiLock.tryLock("lock:booking:{roomTypeId}"...) — wait=5s, lease=-1 (watchdog)
+
+    alt Không lấy được lock trong 5s
+        BS->>DB: INSERT outbox_events(BookingFailed, reason="Hệ thống đang bận/quá tải")
+        Note over BS: KHÔNG có transaction DB nào mở -- lock luôn thử TRƯỚC,<br/>không tốn connection pool lúc chờ
+    else Lấy được lock cho đủ mọi roomTypeId
+        Note over BS,DB: Bắt đầu @Transactional handleCreateBooking
+        loop Với mỗi roomTypeId (đúng thứ tự đã sort)
+            BS->>DB: SELECT roomtype_inventory WHERE room_type_id=? FOR UPDATE (PESSIMISTIC_WRITE)
+            DB-->>BS: Khóa dòng + trả totalQuantity (chặn mọi transaction khác đọc/ghi dòng này)
+        end
+        BS->>DB: COUNT active bookings (PENDING/CONFIRMED/CHECKEDIN) chồng lấn checkin-checkout
+        DB-->>BS: Số liệu TƯƠI (đã khóa dòng nên không ai chen ngang được)
+        BS->>BS: So sánh existingCount + requestedQuantity > totalQuantity ?
 
         alt Hết phòng
-            BS->>DB: Lưu booking status=FAILED
-            BS->>KK: Publish BookingFailed
+            BS->>DB: INSERT bookings(status=FAILED) + booked_roomtypes (vẫn lưu để audit)
+            BS->>DB: INSERT outbox_events(BookingFailed, reason="Loại phòng X đã hết")
+        else Còn đủ phòng
+            BS->>DB: INSERT bookings(status=PENDING) + booked_roomtypes
+            BS->>DB: INSERT outbox_events(BookingCreated)
+        end
+        Note over BS,DB: COMMIT -- row lock ở roomtype_inventory tự nhả theo transaction
+        BS->>Redis: multiLock.unlock() (trong finally)
+    end
+    BS->>KK: OutboxRelay (@Scheduled) publish BookingFailed hoặc BookingCreated
+    end
 
-            KK->>PBS: Consume BookingFailed
-            PBS->>DB: Cập nhật SagaState status=FAILED
+    alt Hết phòng / lock timeout
+        KK->>PBS: Consume BookingFailed
+        PBS->>DB: Cập nhật SagaState status=FAILED
+        PBS->>KK: Publish SendBookingFailed command
+
+        KK->>NS: Consume SendBookingFailed
+        NS->>DB: Insert notification + delivery_logs
+        NS->>DB: Lấy active FCM tokens của user
+        par Gửi push
+            NS->>FCM: Send push "Đặt phòng thất bại" (kèm reason)
+            FCM-->>C: Push notification
+        and Gửi email
+            NS->>SMTP: Send email thông báo hết phòng
+            SMTP-->>C: Email
+        end
+
+    else Còn phòng
+        %% ===== Bước 4: Thanh toán =====
+        KK->>PBS: Consume BookingCreated
+        PBS->>DB: Cập nhật SagaState currentStep=BOOKING_CREATED
+        PBS->>KK: Publish ProcessPayment command
+
+        KK->>PayS: Consume ProcessPayment
+        Note over PayS: Resilience4j CircuitBreaker<br/>Gọi cổng thanh toán ngoài như VNPay
+
+        alt Thanh toán thành công
+            PayS->>DB: Lưu Payment record
+            PayS->>KK: Publish PaymentSucceeded
+
+            KK->>PBS: Consume PaymentSucceeded
+            PBS->>DB: Cập nhật SagaState status=PAYMENT_SUCCEEDED
+            PBS->>KK: Publish ConfirmBooking command
+
+            KK->>BS: Consume ConfirmBooking
+            BS->>DB: Cập nhật booking status=CONFIRMED
+            BS->>KK: Publish BookingConfirmed
+
+            KK->>PBS: Consume BookingConfirmed
+            PBS->>DB: Cập nhật SagaState status=CONFIRMED, currentStep=COMPLETED
+            PBS->>KK: Publish SendBookingConfirmed command
+
+            KK->>NS: Consume SendBookingConfirmed
+            NS->>DB: Insert notification + delivery_logs
+            NS->>DB: Lấy active FCM tokens của user
+
+            par Gửi push
+                NS->>FCM: Send push "Đặt phòng thành công"
+                FCM-->>C: Push notification
+            and Gửi email
+                NS->>SMTP: Send email xác nhận đặt phòng
+                SMTP-->>C: Email
+            end
+
+        else Thanh toán thất bại
+            PayS->>KK: Publish PaymentFailed
+
+            KK->>PBS: Consume PaymentFailed
+            PBS->>DB: Cập nhật SagaState status=PAYMENT_FAILED
+            PBS->>KK: Publish CancelBooking command
+
+            KK->>BS: Consume CancelBooking
+            BS->>DB: Cập nhật booking status=CANCELLED, giải phóng phòng
+            BS->>KK: Publish BookingCancelled
+
+            KK->>PBS: Consume BookingCancelled
+            PBS->>DB: Cập nhật SagaState status=CANCELLED
             PBS->>KK: Publish SendBookingFailed command
 
             KK->>NS: Consume SendBookingFailed
             NS->>DB: Insert notification + delivery_logs
             NS->>DB: Lấy active FCM tokens của user
+
             par Gửi push
-                NS->>FCM: Send push "Đặt phòng thất bại"
+                NS->>FCM: Send push "Đặt phòng bị hủy do thanh toán thất bại"
                 FCM-->>C: Push notification
             and Gửi email
-                NS->>SMTP: Send email thông báo hết phòng
+                NS->>SMTP: Send email thông báo hủy booking
                 SMTP-->>C: Email
-            end
-
-        else Còn phòng
-            BS->>DB: Lưu booking status=PENDING + booked_roomtypes
-            BS->>KK: Publish BookingCreated
-
-            %% ===== Bước 4: Thanh toán =====
-            KK->>PBS: Consume BookingCreated
-            PBS->>DB: Cập nhật SagaState currentStep=BOOKING_CREATED
-            PBS->>KK: Publish ProcessPayment command
-
-            KK->>PayS: Consume ProcessPayment
-            Note over PayS: Resilience4j CircuitBreaker<br/>Gọi cổng thanh toán ngoài như VNPay
-
-            alt Thanh toán thành công
-                PayS->>DB: Lưu Payment record
-                PayS->>KK: Publish PaymentSucceeded
-
-                KK->>PBS: Consume PaymentSucceeded
-                PBS->>DB: Cập nhật SagaState status=PAYMENT_SUCCEEDED
-                PBS->>KK: Publish ConfirmBooking command
-
-                KK->>BS: Consume ConfirmBooking
-                BS->>DB: Cập nhật booking status=CONFIRMED
-                BS->>KK: Publish BookingConfirmed
-
-                KK->>PBS: Consume BookingConfirmed
-                PBS->>DB: Cập nhật SagaState status=CONFIRMED, currentStep=COMPLETED
-                PBS->>KK: Publish SendBookingConfirmed command
-
-                KK->>NS: Consume SendBookingConfirmed
-                NS->>DB: Insert notification + delivery_logs
-                NS->>DB: Lấy active FCM tokens của user
-
-                par Gửi push
-                    NS->>FCM: Send push "Đặt phòng thành công"
-                    FCM-->>C: Push notification
-                and Gửi email
-                    NS->>SMTP: Send email xác nhận đặt phòng
-                    SMTP-->>C: Email
-                end
-
-            else Thanh toán thất bại
-                PayS->>KK: Publish PaymentFailed
-
-                KK->>PBS: Consume PaymentFailed
-                PBS->>DB: Cập nhật SagaState status=PAYMENT_FAILED
-                PBS->>KK: Publish CancelBooking command
-
-                KK->>BS: Consume CancelBooking
-                BS->>DB: Cập nhật booking status=CANCELLED, giải phóng phòng
-                BS->>KK: Publish BookingCancelled
-
-                KK->>PBS: Consume BookingCancelled
-                PBS->>DB: Cập nhật SagaState status=CANCELLED
-                PBS->>KK: Publish SendBookingFailed command
-
-                KK->>NS: Consume SendBookingFailed
-                NS->>DB: Insert notification + delivery_logs
-                NS->>DB: Lấy active FCM tokens của user
-
-                par Gửi push
-                    NS->>FCM: Send push "Đặt phòng bị hủy do thanh toán thất bại"
-                    FCM-->>C: Push notification
-                and Gửi email
-                    NS->>SMTP: Send email thông báo hủy booking
-                    SMTP-->>C: Email
-                end
             end
         end
     end

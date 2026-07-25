@@ -1,0 +1,42 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: $space-1;
+  padding: 3px $space-3;
+  border-radius: $radius-pill;
+  font-size: $font-size-xs;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.success {
+  background: $color-success-bg;
+  color: $color-success;
+}
+.warning {
+  background: $color-warning-bg;
+  color: $color-warning;
+}
+.danger {
+  background: $color-danger-bg;
+  color: $color-danger;
+}
+.info {
+  background: $color-info-bg;
+  color: $color-info;
+}
+.neutral {
+  background: $color-neutral-bg;
+  color: $color-neutral-text;
+}

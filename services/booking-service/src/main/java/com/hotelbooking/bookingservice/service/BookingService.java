@@ -4,8 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotelbooking.bookingservice.dto.BookingDetail;
 import com.hotelbooking.bookingservice.dto.BookingResponse;
+import com.hotelbooking.bookingservice.dto.CheckinRequest;
 import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
+import com.hotelbooking.bookingservice.dto.RoomCheckinRequest;
+import com.hotelbooking.bookingservice.client.HotelServiceFiegnClient;
 import com.hotelbooking.bookingservice.dto.ActiveBookingRoomType;
+import com.hotelbooking.bookingservice.dto.BookingCheckinInfo;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCancelled;
 import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCreated;
@@ -15,40 +19,63 @@ import com.hotelbooking.bookingservice.entity.BookedRoomTypeEntity;
 import com.hotelbooking.bookingservice.entity.BookingEntity;
 import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
+import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
+import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
+import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
+
+import feign.FeignException;
+import feign.RetryableException;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class BookingService {
     private static final String OUTBOX_TOPIC = "booking-events";
-    private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED);
+    private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CHECKEDIN);
 
-    private final BookingRepository bookingRepository;
-    private final BookedRoomTypeRepository bookedRoomTypeRepository;
-    private final BookingInfoRepository bookingInfoRepository;
-    private final OutboxEventRepository outboxEventRepository;
-    private final ObjectMapper objectMapper;
+    BookingRepository bookingRepository;
+    BookedRoomTypeRepository bookedRoomTypeRepository;
+    BookingInfoRepository bookingInfoRepository;
+    OutboxEventRepository outboxEventRepository;
+    ObjectMapper objectMapper;
+    RoomTypeInventoryRepository roomTypeInventoryRepository;
+    StringRedisTemplate stringRedisTemplate;
+    HotelServiceFiegnClient hotelServiceFiegnClient;
+    CheckinCheckoutService checkinCheckoutService;
 
-    public BookingResponse getBookingById(String bookingId) {
+
+    public BookingResponse getBookingById(UUID bookingId) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
 
@@ -67,20 +94,20 @@ public class BookingService {
         return new BookingResponse(booking.getId(), booking.getStatus(), details);
     }
 
-    public CountBookingsResponse countBookings(String hotelId, List<String> roomTypeList, LocalDate checkin, LocalDate checkout) {
+    public CountBookingsResponse countBookings(UUID hotelId, List<UUID> roomTypeList, LocalDate checkin, LocalDate checkout) {
         if (checkin == null || checkout == null) {
             throw new AppException("VALIDATION_ERROR", "checkin and checkout are required", HttpStatus.BAD_REQUEST);
         }
         if (!checkout.isAfter(checkin)) {
             throw new AppException("VALIDATION_ERROR", "checkout must be after checkin", HttpStatus.BAD_REQUEST);
         }
-        if ((hotelId == null || hotelId.isBlank()) && (roomTypeList == null || roomTypeList.isEmpty())) {
+        if ((hotelId == null || hotelId.toString().isBlank()) && (roomTypeList == null || roomTypeList.isEmpty())) {
             throw new AppException("VALIDATION_ERROR", "hotelId or roomTypeList is required", HttpStatus.BAD_REQUEST);
         }
 
-        List<String> safeRoomTypeList = roomTypeList == null ? List.of() : roomTypeList;
+        List<UUID> safeRoomTypeList = roomTypeList == null ? List.of() : roomTypeList;
         List<ActiveBookingRoomType> activeBookingCount = bookingRepository.countActiveBookingsByRoomType(
-            blankToNull(hotelId),
+            hotelId,
             safeRoomTypeList,
             safeRoomTypeList.isEmpty(),
             checkin,
@@ -91,8 +118,111 @@ public class BookingService {
         return new CountBookingsResponse(hotelId, checkin, checkout, activeBookingCount);
     }
 
+    /*------checkin------*/
+    /* Lý do tại sao tách sang service kia (tại ban đầu t code gộp chung vào 1 hàm luôn)
+    1. Để  feign client trong @Transactional thấy bảo cạn kiệt connection db khi mà bị timeout các thứ
+    2. Nếu tách thành các method trong cùng 1 class này thì đều 0 chạy được đặc trưng @Transactional
+        vì cơ chế Proxy gì đó của Spring boot
+    3. Rủi ro dữ liệu 0 đồng nhất do gọi qua service khác */
+    public void checkin(CheckinRequest checkinRequest){
+        RoomCheckinRequest roomCheckinRequest = checkinCheckoutService.validateAndGetCheckinData(checkinRequest);
+        callHotelFeignService(roomCheckinRequest);
+        
+
+        try {
+            checkinCheckoutService.updateBookingStatusCheckin(checkinRequest);
+        } catch (Exception e) {
+            rollBackRoomStatus(roomCheckinRequest);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkin------*/
+
+    /*------checkout------*/
+    public void checkout(UUID bookingId){
+        RoomCheckinRequest requestCheckout = checkinCheckoutService.validateCheckoutAndGetData(bookingId);
+        callHotelFeignService(requestCheckout);
+
+        try {
+            checkinCheckoutService.updateBookingStatusCheckout(bookingId);
+        } catch (Exception e) {
+            rollBackRoomStatus(requestCheckout);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi hệ thống khi cập nhật booking", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*------checkout------*/
+
+    private void callHotelFeignService(RoomCheckinRequest request){
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(request);
+        } catch (RetryableException ex) {
+            log.error("Hotel-service timeout or connection issue: {}", ex.getMessage(), ex);
+            throw new ExternalServiceException("HOTEL_SERVICE_UNAVAILABLE", "Hotel service is unavailable");
+        } catch (FeignException ex) {
+            log.warn("Hotel-service returned error status {} while update status rooms", ex.status());
+            throw new ExternalServiceException("HOTEL_SERVICE_ERROR", "Hotel service returned an error");
+        }
+    }
+
+    private void rollBackRoomStatus(RoomCheckinRequest oldRequest){
+        RoomCheckinRequest rollBack = new RoomCheckinRequest(oldRequest.roomIds(),
+                                            oldRequest.roomTypeQuantities(),
+                                            oldRequest.newStatus(),
+                                            oldRequest.oldStatus());
+        
+        try {
+            hotelServiceFiegnClient.updateRoomStatus(rollBack);
+        } catch (Exception e) {
+            log.error("ROLLBACK FAILED for rooms: {}", e.getMessage());
+        }
+    }
+    /*-------*/
+    
+    @Transactional(readOnly = true)
+    public Page<BookingCheckinInfo> getBookingToday(UUID hotelId, LocalDate today, BookingStatus status, Pageable pageable){
+
+        Page<BookingEntity> bookingEntities = bookingRepository.findByHotelIdAndCheckinDateAndStatus(hotelId, today, status, pageable);
+
+        List<UUID> bookingIds = bookingEntities.getContent().stream()
+                                            .map(BookingEntity::getId)
+                                            .toList();
+
+        Map<UUID, BookingInfoEntity> bookingInfoEntities = bookingInfoRepository.findAllById(bookingIds).stream()
+                                                .collect(Collectors.toMap(
+                                                    BookingInfoEntity::getBookingId,
+                                                    info -> info));
+                                                    
+        return bookingEntities.map(booking -> {
+            BookingInfoEntity bookingInfoEntity = bookingInfoEntities.get(booking.getId());
+            if(bookingInfoEntity == null){
+                throw new AppException("BOOKING_DETAIL_NOT_FOUND", "Booking detail does not exist", HttpStatus.NOT_FOUND);
+            }
+            BookingDetail bookingDetail = toBookingDetail(bookingInfoEntity);
+            
+            return new BookingCheckinInfo(
+                    booking.getId(),
+                    booking.getStatus(),
+                    bookingDetail.getCustomer().getName(),
+                    bookingDetail.getCustomer().getEmail(),
+                    booking.getCheckinDate(),
+                    booking.getCheckoutDate(),
+                    booking.getNumAdults(),
+                    booking.getTotalAmount()
+            );
+        });
+    }
+
+    private BookingDetail toBookingDetail(BookingInfoEntity bookingInfoEntity){
+        try {
+            return objectMapper.readValue(bookingInfoEntity.getBookingDetail(), BookingDetail.class);
+        } catch (Exception ex) {
+            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to parse booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    /*-------*/
+
     @Transactional
-    public BookingResponse updateBookingStatus(String bookingId, BookingStatus newStatus) {
+    public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
 
@@ -112,78 +242,86 @@ public class BookingService {
             );
         }
 
-        booking.setStatus(newStatus);
-        bookingRepository.save(booking);
-        BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
-        if (newStatus == BookingStatus.CONFIRMED) {
-            saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
-        } else {
-            saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
-        }
+        // booking.setStatus(newStatus);
+        // bookingRepository.save(booking);
+        // BookingDetail bookingDetail = getBookingDetailByBookingId(booking.getId());
+        // if (newStatus == BookingStatus.CONFIRMED) {
+        //     saveOutboxEvent(new BookingConfirmed(null, "BookingConfirmed", bookingDetail));
+        // } else {
+        //     saveOutboxEvent(new BookingCancelled(null, "BookingCancelled", bookingDetail, "Booking cancelled"));
+        // }
+        String eventType = (newStatus == BookingStatus.CONFIRMED) ? "BookingConfirmed" : "BookingCancelled";
+        String reason = (newStatus == BookingStatus.CONFIRMED) ? "" : "Booking cancelled";
+        updateStatusFromCommand(null, bookingId, newStatus, eventType, reason);
         return getBookingById(bookingId);
     }
 
     @Transactional
-    public void handleCreateBooking(CreateBookingCommand command) {
+    public void handleCreateBooking(CreateBookingCommand command, List<UUID> sortedRoomTypeId){
         validateCreateCommand(command);
-        if (bookingRepository.existsById(command.bookingId())) {
+        if(bookingRepository.existsById(command.bookingId())){
             return;
         }
 
-        Map<String, CreateBookingCommand.RoomTypeItem> roomTypeMap = command.roomTypeList().stream()
-            .collect(Collectors.toMap(CreateBookingCommand.RoomTypeItem::roomTypeId, Function.identity()));
+        Map<UUID, RoomTypeInventory> inventories = new LinkedHashMap<>();
+        for(UUID roomTypeId : sortedRoomTypeId){
+            RoomTypeInventory roomTypeInventory = roomTypeInventoryRepository.findByIdForTruth(roomTypeId)
+                                .orElseThrow(() -> new AppException("ROOMTYPE_INVENTORY_NOT_FOUND", "Không tìm thấy roomTypeInventory có id: " + roomTypeId, HttpStatus.NOT_FOUND));
 
-        List<ActiveBookingRoomType> activeRows = bookingRepository.countActiveBookingsByRoomType(
-            command.hotel().hotelId(),
-            new ArrayList<>(roomTypeMap.keySet()),
-            roomTypeMap.isEmpty(),
-            command.checkin(),
-            command.checkout(),
-            ACTIVE_STATUSES
-        );
-        Map<String, Long> activeByRoomType = activeRows.stream()
-            .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
-
-
-        BookingDetail bookingDetail = toBookingDetail(command);
-
-        BookingEntity booking = new BookingEntity();
-        booking.setId(command.bookingId());
-        booking.setCustomerId(command.user().userId());
-        booking.setHotelId(command.hotel().hotelId());
-        booking.setCreatedAt(Instant.now());
-        booking.setCheckinDate(command.checkin());
-        booking.setCheckoutDate(command.checkout());
-        booking.setNumAdults(command.numAdults());
-        booking.setTotalAmount(command.totalAmount());
-        booking.setCurrency(command.currency());
-        booking.setPaymentMethod(command.paymentMethod());
-        booking.setStatus(BookingStatus.PENDING);
-        bookingRepository.save(booking);
-
-        boolean isBookingFailed = false;
-        List<String> unavailableRoomTypes = new ArrayList<>();
-
-        long nights = ChronoUnit.DAYS.between(command.checkin(), command.checkout());
-        for (CreateBookingCommand.RoomTypeItem item : command.roomTypeList()) {
-            long existing = activeByRoomType.getOrDefault(item.roomTypeId(), 0L);
-            long expected = existing + item.bookingQuantity();
-            if(expected > item.totalQuantity()) {
-                isBookingFailed = true;
-                unavailableRoomTypes.add(item.name());
-            }
-            BookedRoomTypeEntity entity = new BookedRoomTypeEntity();
-            entity.setId("BR-" + UUID.randomUUID());
-            entity.setBookingId(command.bookingId());
-            entity.setRoomTypeId(item.roomTypeId());
-            entity.setQuantity(item.bookingQuantity());
-            entity.setPricePerNight(item.price());
-            entity.setNights((int) nights);
-            entity.setSubtotal(item.price().multiply(BigDecimal.valueOf(item.bookingQuantity())).multiply(BigDecimal.valueOf(nights)));
-            bookedRoomTypeRepository.save(entity);
+            inventories.put(roomTypeId, roomTypeInventory);
         }
 
+        List<ActiveBookingRoomType> activeBookings = bookingRepository.countActiveBookingsByRoomType(
+                    command.hotel().hotelId(),
+                    sortedRoomTypeId,
+                    sortedRoomTypeId.isEmpty(),
+                    command.checkin(),
+                    command.checkout(),
+                    ACTIVE_STATUSES);
         
+        Map<UUID, Long> activeByRoomType = activeBookings.stream()
+                .collect(Collectors.toMap(ActiveBookingRoomType::roomTypeId, ActiveBookingRoomType::bookingCount));
+        
+        BookingDetail bookingDetail = toBookingDetail(command);
+
+        BookingEntity bookingEntity = new BookingEntity();
+        bookingEntity.setId(command.bookingId());
+        bookingEntity.setCustomerId(command.user().userId());
+        bookingEntity.setHotelId(command.hotel().hotelId());
+        bookingEntity.setCreatedAt(Instant.now());
+        bookingEntity.setCheckinDate(command.checkin());
+        bookingEntity.setCheckoutDate(command.checkout());
+        bookingEntity.setNumAdults(command.numAdults());
+        bookingEntity.setOriginalAmount(command.effectiveOriginalAmount());
+        bookingEntity.setFinalAmount(command.effectiveFinalAmount());
+        bookingEntity.setCurrency(command.currency());
+        bookingEntity.setStatus(BookingStatus.PENDING);
+        bookingEntity.setPaymentMethod(command.paymentMethod());
+        bookingRepository.save(bookingEntity);
+
+        boolean isRoomTypeNotEnough = false;
+        long nights = ChronoUnit.DAYS.between(command.checkin(), command.checkout());
+        List<UUID> unAvailable = new ArrayList<>();
+
+        for(CreateBookingCommand.RoomTypeItem roomTypeItem : command.roomTypeList()){
+            long totalBooking = activeByRoomType.getOrDefault(roomTypeItem.roomTypeId(), 0L);
+            long expected = totalBooking + roomTypeItem.bookingQuantity();
+
+            if(expected > ((RoomTypeInventory)inventories.get(roomTypeItem.roomTypeId())).getTotalQuantity()){
+                isRoomTypeNotEnough = true;
+                unAvailable.add(roomTypeItem.roomTypeId());
+            }
+
+            BookedRoomTypeEntity bookedRoomTypeEntity = new BookedRoomTypeEntity();
+            bookedRoomTypeEntity.setId(UUID.randomUUID());
+            bookedRoomTypeEntity.setBookingId(command.bookingId());
+            bookedRoomTypeEntity.setRoomTypeId(roomTypeItem.roomTypeId());
+            bookedRoomTypeEntity.setQuantity(roomTypeItem.bookingQuantity());
+            bookedRoomTypeEntity.setPricePerNight(roomTypeItem.price());
+            bookedRoomTypeEntity.setNights((int)nights);
+            bookedRoomTypeEntity.setSubtotal(roomTypeItem.price().multiply(BigDecimal.valueOf(roomTypeItem.bookingQuantity())).multiply(BigDecimal.valueOf(nights)));
+            bookedRoomTypeRepository.save(bookedRoomTypeEntity);
+        }
 
         try {
             BookingInfoEntity info = new BookingInfoEntity();
@@ -195,13 +333,16 @@ public class BookingService {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to persist booking detail", HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        if(isBookingFailed){
+        if(isRoomTypeNotEnough){
+            bookingEntity.setStatus(BookingStatus.FAILED);
+            bookingRepository.save(bookingEntity);
             saveOutboxEvent(
                     new BookingFailed(
                         command.sagaId(),
                         "BookingFailed",
                         toBookingDetail(command),
-                        "Room " + String.join(", ", unavailableRoomTypes) + " not available"
+                        "Có vẻ bạn đặt chậm tay mất rồi. Hãy quay lại và chọn lại phòng khác nhé.\n" 
+                            + "Các loại phòng đã hết: " + unAvailable.toString()
                     )
                 );
                 return;
@@ -213,25 +354,32 @@ public class BookingService {
                 "BookingCreated",
                 command.bookingId(),
                 command.user().userId(),
-                command.totalAmount(),
+                command.effectiveFinalAmount(),
                 command.currency(),
                 command.paymentMethod(),
                 command.paymentToken()
             )
         );
+
+        try {
+            clearHotelDetailCache(command.hotel().hotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
+        
     }
 
     @Transactional
-    public void handleConfirmBooking(String sagaId, String bookingId) {
+    public void handleConfirmBooking(UUID sagaId, UUID bookingId) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CONFIRMED, "BookingConfirmed","");
     }
 
     @Transactional
-    public void handleCancelBooking(String sagaId, String bookingId, String reason) {
+    public void handleCancelBooking(UUID sagaId, UUID bookingId, String reason) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CANCELLED, "BookingCancelled", reason);
     }
 
-    private void updateStatusFromCommand(String sagaId, String bookingId, BookingStatus targetStatus, String eventType, String reason) {
+    private void updateStatusFromCommand(UUID sagaId, UUID bookingId, BookingStatus targetStatus, String eventType, String reason) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
         booking.setStatus(targetStatus);
@@ -244,9 +392,14 @@ public class BookingService {
         }
 
         saveOutboxEvent(new BookingCancelled(sagaId, eventType, bookingDetail, reason));
+        try {
+            clearHotelDetailCache(bookingDetail.getHotel().getHotelId());
+        } catch (Exception e) {
+            log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
+        }
     }
 
-    private void saveOutboxEvent(Object event) {
+    public void saveOutboxEvent(Object event) {
         try {
             OutboxEventEntity outbox = new OutboxEventEntity();
             outbox.setId(UUID.randomUUID());
@@ -260,7 +413,7 @@ public class BookingService {
         }
     }
 
-    private BookingDetail getBookingDetailByBookingId(String bookingId) {
+    private BookingDetail getBookingDetailByBookingId(UUID bookingId) {
         BookingInfoEntity bookingInfo = bookingInfoRepository.findById(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_DETAIL_NOT_FOUND", "Booking detail does not exist", HttpStatus.NOT_FOUND));
 
@@ -271,18 +424,35 @@ public class BookingService {
         }
     }
 
-    private BookingDetail toBookingDetail(CreateBookingCommand command) {
+    public BookingDetail toBookingDetail(CreateBookingCommand command) {
         BookingDetail bookingDetail = new BookingDetail();
         bookingDetail.setBookingId(command.bookingId());
         bookingDetail.setCheckin(command.checkin().toString());
         bookingDetail.setCheckout(command.checkout().toString());
         bookingDetail.setNumAdults(command.numAdults());
-        bookingDetail.setTotalAmount(command.totalAmount());
-        bookingDetail.setHotel(new BookingDetail.Hotel(command.hotel().name(), command.hotel().address()));
-        bookingDetail.setCustomer(new BookingDetail.Customer(command.user().name(), command.user().email()));
+        bookingDetail.setTotalAmount(command.effectiveFinalAmount());
+        bookingDetail.setOriginalAmount(command.effectiveOriginalAmount());
+        bookingDetail.setFinalAmount(command.effectiveFinalAmount());
+        bookingDetail.setHotel(new BookingDetail.Hotel(
+            command.hotel().hotelId(),
+            command.hotel().name(),
+            command.hotel().address()
+        ));
+        bookingDetail.setCustomer(new BookingDetail.Customer(
+            command.user().userId(),
+            command.user().name(),
+            command.user().email()
+        ));
         bookingDetail.setRoomTypeList(
             command.roomTypeList().stream()
-                .map(item -> new BookingDetail.RoomType(item.name(), item.bedCount(), item.bookingQuantity(), item.price()))
+                .map(item -> new BookingDetail.RoomType(
+                    item.roomTypeId(),
+                    item.name(),
+                    item.bedCount(),
+                    item.bookingQuantity(),
+                    item.totalQuantity(),
+                    item.price()
+                ))
                 .toList()
         );
         return bookingDetail;
@@ -297,7 +467,8 @@ public class BookingService {
             || command.checkin() == null
             || command.checkout() == null
             || command.numAdults() == null
-            || command.totalAmount() == null
+            || command.effectiveOriginalAmount() == null
+            || command.effectiveFinalAmount() == null
             || command.currency() == null
             || command.paymentMethod() == null) {
             throw new AppException("VALIDATION_ERROR", "CreateBooking payload is invalid", HttpStatus.BAD_REQUEST);
@@ -319,7 +490,13 @@ public class BookingService {
         }
     }
 
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+    private void clearHotelDetailCache(UUID hotelId){
+        String keyPattern = "hotel-detail-availability::" + hotelId.toString() + "::*";
+
+        Set<String> keys = stringRedisTemplate.keys(keyPattern);
+
+        if(keys != null && !keys.isEmpty()){
+            stringRedisTemplate.delete(keys);
+        }
     }
 }

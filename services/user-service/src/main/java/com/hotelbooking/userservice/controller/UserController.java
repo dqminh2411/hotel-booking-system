@@ -7,10 +7,13 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.server.ResponseStatusException;
 
 @Validated
 @RestController
-@RequestMapping({"/api/users", "/users"})
+@RequestMapping({"/api/users"})
 public class UserController {
     private final UserService userService;
 
@@ -20,28 +23,20 @@ public class UserController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
-        return userService.register(request);
-    }
-
-    @PostMapping({"/verify-email"})
-    public UserResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        return userService.verifyEmail(request.token());
-    }
-
-    @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-        return userService.login(request);
-    }
-
-    @PostMapping("/refresh-token")
-    public AccessTokenResponse refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
-        return userService.refreshAccessToken(request.refreshToken());
+    public UserResponse register(@Valid @RequestBody CreateUserRequest request,
+        @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID keycloakId = UUID.fromString(jwt.getSubject());
+        return userService.createUser(keycloakId, request);
     }
 
     @GetMapping("/me")
-    public UserResponse getCurrentUser(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        return userService.getCurrentUser(authorization);
+    public UserResponse getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
+        if (jwt == null || jwt.getSubject() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication token");
+        }
+        UUID userId = UUID.fromString(jwt.getSubject());
+        return userService.getUserById(userId);
     }
 
     @GetMapping("/{userId}")

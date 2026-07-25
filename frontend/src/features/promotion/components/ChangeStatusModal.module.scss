@@ -1,0 +1,20 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.hint {
+  font-size: $font-size-xs;
+  color: $color-text-muted;
+}
+
+.error {
+  background: $color-danger-bg;
+  color: $color-danger;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $font-size-sm;
+}

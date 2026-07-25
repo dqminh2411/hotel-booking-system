@@ -4,7 +4,6 @@ import com.notification_service.dto.EmailRequest;
 import com.notification_service.dto.EmailTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 
 @Service
 public class TemplateService {
@@ -24,13 +23,13 @@ public class TemplateService {
 
                 Tổng tiền: %s VND
                 """.formatted(
-                data.getBooking().getCustomer().getName(),
-                data.getBooking().getBookingId(),
-                data.getBooking().getHotel().getName(),
-                data.getBooking().getRoomTypeList(),
-                data.getBooking().getCheckin(),
-                data.getBooking().getCheckout(),
-                data.getBooking().getTotalAmount()
+                data.booking().customer().name(),
+                data.booking().bookingId(),
+                data.booking().hotel().name(),
+                data.booking().roomTypeList(),
+                data.booking().checkin(),
+                data.booking().checkout(),
+                data.booking().totalAmount()
             );
 
             case BOOKING_CANCELLED, SendBookingFailed -> """
@@ -41,10 +40,10 @@ public class TemplateService {
                 Khách sạn: %s
                 Lý do: %s
                 """.formatted(
-                data.getBooking().getCustomer().getName(),
-                data.getBooking().getBookingId(),
-                data.getBooking().getHotel().getName(),
-                data.getReason()
+                data.booking().customer().name(),
+                data.booking().bookingId(),
+                data.booking().hotel().name(),
+                data.reason()
             );
         };
     }

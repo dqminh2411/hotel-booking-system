@@ -31,3 +31,4 @@ build/
 
 ### VS Code ###
 .vscode/
+google_oauth_client_id.json

@@ -1,23 +1,31 @@
 package com.hotelbooking.hotelservice.service;
 
-import com.hotelbooking.hotelservice.dto.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.HotelSummaryResponse;
-import com.hotelbooking.hotelservice.dto.PagedResponse;
-import com.hotelbooking.hotelservice.dto.RoomTypeResponse;
-import com.hotelbooking.hotelservice.dto.HotelAndRoomTypesResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
+import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
+
+import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
+import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
+import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
+import com.hotelbooking.hotelservice.dto.response.*;
+
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 public interface HotelService {
 
-    PagedResponse<HotelSummaryResponse> searchHotels(String name, String address, int page, int size);
+    HotelDetailsResponse getHotelDetail(UUID hotelId, LocalDate checkinDate, LocalDate checkoutDate, Integer guestNum, Integer roomNum);
+    List<RoomTypeResponse> getListRoomTypeByHotelId(UUID hotelId);
 
-    HotelDetailsResponse getHotelById(String hotelId);
+    HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList);
 
-    List<RoomTypeResponse> getRoomTypesByHotel(String hotelId, LocalDate checkin, LocalDate checkout);
+    // List<RoomTypeResponse> getRoomTypesByHotel(UUID hotelId, LocalDate checkin, LocalDate checkout);
 
-    RoomTypeResponse getRoomTypeById(String hotelId, String roomTypeId, LocalDate checkin, LocalDate checkout);
+    // RoomTypeResponse getRoomTypeById(UUID hotelId, UUID roomTypeId, LocalDate checkin, LocalDate checkout);
 
-    HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(String hotelId, List<String> roomTypeList);
+
+    public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) ;
+
+    void updateRoomStatus(RoomCheckinRequest request);
 }
 

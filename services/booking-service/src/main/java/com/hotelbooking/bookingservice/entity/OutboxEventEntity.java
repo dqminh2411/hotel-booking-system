@@ -35,4 +35,7 @@ public class OutboxEventEntity {
 
     @Column(name = "published_at")
     private Instant publishedAt;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 }

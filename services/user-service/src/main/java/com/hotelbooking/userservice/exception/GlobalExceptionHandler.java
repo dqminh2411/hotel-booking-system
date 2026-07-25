@@ -2,6 +2,7 @@ package com.hotelbooking.userservice.exception;
 
 import com.hotelbooking.userservice.dto.ErrorResponse;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.ws.rs.BadRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -30,7 +31,8 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException.class,
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class,
-            IllegalArgumentException.class
+            IllegalArgumentException.class,
+            BadRequestException.class
     })
     public ResponseEntity<ErrorResponse> handleValidation(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

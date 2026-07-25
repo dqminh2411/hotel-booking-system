@@ -1,0 +1,10 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.errorBanner {
+  background: $color-danger-bg;
+  color: $color-danger;
+  border-radius: $radius-md;
+  padding: $space-3 $space-4;
+  font-size: $font-size-sm;
+  margin-bottom: $space-4;
+}

@@ -1,5 +1,7 @@
 package com.place_booking_service.repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,7 +14,14 @@ public interface SagaStateRepository extends JpaRepository<SagaState, UUID> {
 
     SagaState findSagaStateByIdempotencyKey(String idempotencyKey);
 
-    Optional<SagaState> findByBookingId(String bookingId);
+    Optional<SagaState> findByBookingId(UUID bookingId);
 
-    Optional<SagaState> findSagaStateById(String id);
+    Optional<SagaState> findSagaStateById(UUID id);
+
+    Optional<SagaState> findFirstByUserIdAndHashRequestAndCreatedAtAfterAndStatusNotInOrderByCreatedAtDesc(
+            UUID userId, 
+            String hashRequest, 
+            LocalDateTime sinceTime, 
+            List<String> statuses
+    );
 }

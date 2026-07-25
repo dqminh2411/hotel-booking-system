@@ -7,6 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.payment_service.entity.OutboxMessage;
 
-public interface OutboxMessageRepository extends JpaRepository<OutboxMessage, String> {
+public interface OutboxMessageRepository extends JpaRepository<OutboxMessage, UUID> {
     List<OutboxMessage> findTop50ByStatusOrderByCreatedAtAsc(String status);
 }

@@ -11,6 +11,8 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
+
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcType;
@@ -23,13 +25,13 @@ import org.hibernate.dialect.PostgreSQLEnumJdbcType;
 public class BookingEntity {
     @Id
     @Column(name = "id")
-    private String id;
+    private UUID id;
 
     @Column(name = "customer_id", nullable = false)
-    private String customerId;
+    private UUID customerId;
 
     @Column(name = "hotel_id", nullable = false)
-    private String hotelId;
+    private UUID hotelId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -43,8 +45,15 @@ public class BookingEntity {
     @Column(name = "num_adults", nullable = false)
     private Integer numAdults;
 
-    @Column(name = "total_amount", nullable = false)
-    private BigDecimal totalAmount;
+    @Column(name = "original_amount", nullable = false)
+    private BigDecimal originalAmount;
+
+    @Column(name = "final_amount", nullable = false)
+    private BigDecimal finalAmount;
+
+    public BigDecimal getTotalAmount() {
+        return finalAmount != null ? finalAmount : originalAmount;
+    }
 
     @Column(name = "currency", nullable = false)
     private String currency;
@@ -61,4 +70,7 @@ public class BookingEntity {
 
     @Column(name = "idempotency_key")
     private String idempotencyKey;
+
+    @Column(name = "is_deleted", nullable = false)
+    private Boolean isDeleted = false;
 }

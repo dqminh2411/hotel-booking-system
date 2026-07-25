@@ -29,6 +29,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
+!frontend/package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
@@ -114,3 +115,21 @@ bugs.md
 business_rules.md
 notes.md
 TODO.md
+meeting_minutes.md
+
+fcm.js
+google_oauth_client_id.json
+firebase-admin-service-account.json
+UI-desc.md
+deploy.md
+google-login.md
+FCM.md
+frontend-2/
+keycloak-theme/
+*.zip
+Test Plan.jmx
+usersId.csv
+promotion_management_js/
+prompt_merge_promotion.md
+promotion_service_guide.md
+

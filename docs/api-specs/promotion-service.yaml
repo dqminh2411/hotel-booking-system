@@ -379,7 +379,6 @@ paths:
                 value:
                   userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
                   hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
-                  roomTypeId: 7c882d07-38a5-4ac8-873a-149bc00231b9
                   couponCode: SUMMER2026
                   checkInDate: '2026-07-20'
                   checkOutDate: '2026-07-23'
@@ -571,7 +570,6 @@ components:
             status: 400
             code: BAD_REQUEST
             message: Invalid request.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     Unauthorized:
       description: Missing, expired, or invalid JWT.
@@ -584,7 +582,6 @@ components:
             status: 401
             code: UNAUTHORIZED
             message: Authentication is required.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     Forbidden:
       description: Authenticated principal does not have the required role or tenant/hotel permission.
@@ -597,7 +594,6 @@ components:
             status: 403
             code: FORBIDDEN
             message: You are not allowed to manage this promotion.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     NotFound:
       description: Requested promotion, coupon, usage, hotel scope, or user context was not found.
@@ -610,7 +606,6 @@ components:
             status: 404
             code: PROMOTION_NOT_FOUND
             message: Promotion was not found.
-            path: /api/promotions/4fd7bdf0-69f8-4db7-8353-2f444d543c0a
             traceId: 9f4a3310b32c4fd0
     Conflict:
       description: Business conflict, duplicate coupon code, immutable money-impacting update, duplicate usage, or usage limit exceeded.
@@ -623,7 +618,6 @@ components:
             status: 409
             code: COUPON_CODE_ALREADY_EXISTS
             message: Coupon code already exists.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
     UnprocessableEntity:
       description: Request is syntactically valid but violates validation or business rules.
@@ -636,7 +630,6 @@ components:
             status: 422
             code: PROMOTION_NOT_APPLICABLE
             message: Promotion cannot be applied to this booking.
-            path: /api/promotions/validate
             traceId: 9f4a3310b32c4fd0
             details:
               - field: bookingAmount
@@ -652,7 +645,6 @@ components:
             status: 500
             code: INTERNAL_SERVER_ERROR
             message: Unexpected server error.
-            path: /api/promotions
             traceId: 9f4a3310b32c4fd0
 
   schemas:
@@ -769,7 +761,7 @@ components:
     PromotionConditionInput:
       type: object
       additionalProperties: false
-      required: [conditionType, operator, conditionValue]
+      required: [ conditionType, operator, conditionValue ]
       properties:
         conditionType:
           $ref: '#/components/schemas/ConditionType'
