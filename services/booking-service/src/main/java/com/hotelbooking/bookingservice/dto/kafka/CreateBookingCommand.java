@@ -17,10 +17,23 @@ public record CreateBookingCommand(
     LocalDate checkout,
     Integer numAdults,
     BigDecimal totalAmount,
+    BigDecimal originalAmount,
+    BigDecimal finalAmount,
     String currency,
     PaymentMethod paymentMethod,
     String paymentToken
 ) {
+    public BigDecimal effectiveOriginalAmount() {
+        if (originalAmount != null) return originalAmount;
+        return totalAmount;
+    }
+
+    public BigDecimal effectiveFinalAmount() {
+        if (finalAmount != null) return finalAmount;
+        if (totalAmount != null) return totalAmount;
+        return originalAmount;
+    }
+
     public record User(UUID userId, String name, String email) {
     }
 

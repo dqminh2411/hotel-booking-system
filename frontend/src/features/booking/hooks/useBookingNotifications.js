@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listenForegroundMessages, requestFcmToken } from '../../../firebase';
 import { setStoredFcmToken } from '../../auth/services/authStorage';
-import { upsertDeviceToken } from '../api/notificationApi';
+import { subscribeTopic, upsertDeviceToken } from '../api/notificationApi';
 import {
   getBookingFailureReason,
   getBookingNotificationBody,
@@ -34,8 +34,17 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
 
     try {
       const fcmToken = await requestFcmToken();
-      await upsertDeviceToken(userId, fcmToken);
+      await upsertDeviceToken(fcmToken);
       setStoredFcmToken(fcmToken);
+
+      // Auto-subscribe user to system-wide active promotion & coupon topics
+      try {
+        await subscribeTopic(fcmToken, 'promotion-active-notification');
+        await subscribeTopic(fcmToken, 'coupon-active-notification');
+      } catch (subErr) {
+        console.warn('Failed to subscribe FCM token to promotion/coupon topics:', subErr);
+      }
+
       setPushStatus('ENABLED');
     } catch (error) {
       setPushStatus('ERROR');
@@ -45,18 +54,22 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
 
   const handleBookingPayload = useCallback(async (payload, { showNotification = false } = {}) => {
     const data = payload?.data || {};
-    const notificationStatus = getBookingStatusFromNotification(payload);
-    const title = getBookingNotificationTitle(payload, notificationStatus);
-    const body = getBookingNotificationBody(payload, notificationStatus);
-    // reason: nguyên nhân thất bại do BE gửi kèm (vd: race condition hết phòng
-    // khi booking-service xác nhận, hoặc thanh toán thất bại). Xem
-    // place-booking-service KafkaConsumerService#handleBookingFailed /
-    // #handleBookingCancelled -> SendBookingFailed.reason.
+    const isPromotionEvent = data.promotionId || data.couponId || (data.eventType && (data.eventType.includes('Promotion') || data.eventType.includes('Coupon')));
+    
+    let title = payload?.notification?.title || data.title;
+    let body = payload?.notification?.body || data.body;
+
+    if (!isPromotionEvent) {
+      const notificationStatus = getBookingStatusFromNotification(payload);
+      title = title || getBookingNotificationTitle(payload, notificationStatus);
+      body = body || getBookingNotificationBody(payload, notificationStatus);
+    }
+
     const reason = getBookingFailureReason(payload);
     const currentBookingId = activeBookingIdRef.current;
     const isActiveBooking = data.bookingId ? data.bookingId === currentBookingId : true;
 
-    if (showNotification) {
+    if (showNotification && title && body) {
       try {
         await showBrowserNotification(title, body, data);
       } catch (error) {
@@ -64,17 +77,19 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
       }
     }
 
-    if (!isActiveBooking) return;
+    if (!isActiveBooking && !isPromotionEvent) return;
 
     setForegroundMessage({ title, body, reason, data });
-    onBookingUpdateRef.current?.({
-      bookingId: data.bookingId,
-      status: notificationStatus,
-      reason,
-      data,
-      title,
-      body,
-    });
+    if (!isPromotionEvent) {
+      onBookingUpdateRef.current?.({
+        bookingId: data.bookingId,
+        status: getBookingStatusFromNotification(payload),
+        reason,
+        data,
+        title,
+        body,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -101,7 +116,7 @@ export default function useBookingNotifications({ user, activeBookingId, onBooki
     if (!user || !('serviceWorker' in navigator)) return undefined;
 
     const handleServiceWorkerMessage = (event) => {
-      if (event.data?.type !== 'FCM_BOOKING_UPDATE') return;
+      if (event.data?.type !== 'FCM_BOOKING_UPDATE' && event.data?.type !== 'FCM_PROMOTION_UPDATE') return;
       handleBookingPayload(event.data.payload);
     };
 

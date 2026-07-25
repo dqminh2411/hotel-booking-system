@@ -50,4 +50,6 @@ public class PlaceBookingRequest {
     private String paymentToken;
 
     private String forceToken;
+
+    private String couponCode;
 }

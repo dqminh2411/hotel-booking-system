@@ -379,7 +379,6 @@ paths:
                 value:
                   userId: 2ebbf8ad-b8f5-4bd4-a0be-7f26f334e001
                   hotelId: 8ec1dfc7-d5d3-4e79-bc4c-c3f1c3f7f001
-                  roomTypeId: 7c882d07-38a5-4ac8-873a-149bc00231b9
                   couponCode: SUMMER2026
                   checkInDate: '2026-07-20'
                   checkOutDate: '2026-07-23'

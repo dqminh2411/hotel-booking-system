@@ -1,21 +1,29 @@
 package com.promotion.promotion_service.service.impl;
 
+import com.promotion.promotion_service.constant.coupons.CouponStatus;
 import com.promotion.promotion_service.constant.promotions.PromotionDiscountType;
 import com.promotion.promotion_service.constant.promotions.PromotionStatus;
 import com.promotion.promotion_service.constant.scope.ScopeType;
+import com.promotion.promotion_service.dto.event.CouponActiveNotificationEvent;
+import com.promotion.promotion_service.dto.event.PromotionActiveNotificationEvent;
 import com.promotion.promotion_service.dto.request.*;
 import com.promotion.promotion_service.dto.response.*;
 import com.promotion.promotion_service.entity.CouponEntity;
 import com.promotion.promotion_service.entity.PromotionConditionEntity;
 import com.promotion.promotion_service.entity.PromotionEntity;
 import com.promotion.promotion_service.entity.PromotionScopeEntity;
+import com.promotion.promotion_service.exception.ResourceNotFoundException;
 import com.promotion.promotion_service.exception.BusinessException;
+import com.promotion.promotion_service.constant.promotion_usage.PromotionUsageStatus;
+import com.promotion.promotion_service.dto.kafka.*;
+import com.promotion.promotion_service.entity.PromotionUsageEntity;
 import com.promotion.promotion_service.repository.CouponRepository;
 import com.promotion.promotion_service.repository.PromotionConditionRepository;
 import com.promotion.promotion_service.repository.PromotionRepository;
 import com.promotion.promotion_service.repository.PromotionScopeRepository;
+import com.promotion.promotion_service.repository.PromotionUsageRepository;
+import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
-import com.promotion.promotion_service.exception.ResourceNotFoundException;
 import jakarta.ws.rs.BadRequestException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -38,10 +48,13 @@ import java.util.stream.Collectors;
 @Transactional
 public class PromotionServiceImpl implements PromotionService {
 
-    private CouponRepository couponRepository;
-    private PromotionScopeRepository promotionScopeRepository;
-    private PromotionConditionRepository promotionConditionRepository;
-    private PromotionRepository promotionRepository;
+    private final CouponRepository couponRepository;
+    private final PromotionScopeRepository promotionScopeRepository;
+    private final PromotionConditionRepository promotionConditionRepository;
+    private final PromotionRepository promotionRepository;
+    private final PromotionUsageRepository promotionUsageRepository;
+    private final OutboxPublisherService outboxPublisherService;
+
 
     @Override
     @Transactional
@@ -63,7 +76,10 @@ public class PromotionServiceImpl implements PromotionService {
         // 5. Lưu Coupon
         saveCoupons(promotion, request.getCoupons());
 
-        // 6. Trả về chi tiết Promotion
+        // 6. Gửi outbox event nếu status == ACTIVE
+        publishPromotionActiveEvent(promotion, true);
+
+        // 7. Trả về chi tiết Promotion
         return getById(promotion.getId());
     }
 
@@ -127,7 +143,10 @@ public class PromotionServiceImpl implements PromotionService {
         // 6. Sync Coupon
         syncCoupons(promotion, request.getCoupons());
 
-        // 7. Trả về chi tiết
+        // 7. Gửi outbox event nếu status == ACTIVE
+        publishPromotionActiveEvent(promotion, false);
+
+        // 8. Trả về chi tiết
         return getById(id);
     }
 
@@ -232,8 +251,8 @@ public class PromotionServiceImpl implements PromotionService {
     @Override
     @Transactional(readOnly = true)
     public PromotionPageResponse getAll(String keyword,
-                                        PromotionStatus status,
-                                        Pageable pageable) {
+                                         PromotionStatus status,
+                                         Pageable pageable) {
 
         // XỬ LÝ CHUỖI RỖNG
         keyword = StringUtils.hasText(keyword)
@@ -279,6 +298,7 @@ public class PromotionServiceImpl implements PromotionService {
         promotionRepository.delete(promotion);
     }
 
+    @Override
     @Transactional
     public PromotionResponse changeStatus(UUID id, ChangePromotionStatusRequest request) {
 
@@ -290,7 +310,9 @@ public class PromotionServiceImpl implements PromotionService {
 
         promotion.setStatus(request.getStatus());
 
-        promotionRepository.save(promotion);
+        promotion = promotionRepository.save(promotion);
+
+        publishPromotionActiveEvent(promotion, false);
 
         return getById(id);
     }
@@ -360,6 +382,8 @@ public class PromotionServiceImpl implements PromotionService {
                     "Percentage discount must not exceed 100.");
         }
     }
+
+
 
     private void validateScopes(List<PromotionScopeInput> scopes) {
 
@@ -535,7 +559,11 @@ public class PromotionServiceImpl implements PromotionService {
             entities.add(entity);
         }
 
-        couponRepository.saveAll(entities);
+        entities = couponRepository.saveAll(entities);
+
+        for (CouponEntity entity : entities) {
+            publishCouponActiveEvent(promotion, entity, true);
+        }
     }
 
     private void updatePromotionEntity(PromotionEntity promotion,
@@ -603,10 +631,16 @@ public class PromotionServiceImpl implements PromotionService {
                 if (existing != null) {
 
                     // Update coupon hiện có
+                    CouponStatus oldStatus = existing.getStatus();
                     existing.setStatus(input.getStatus());
                     existing.setUsageLimit(input.getUsageLimit());
 
-                    couponRepository.save(existing);
+                    existing = couponRepository.save(existing);
+
+                    if (input.getStatus() == CouponStatus.ACTIVE) {
+                        boolean isNewActive = oldStatus != CouponStatus.ACTIVE;
+                        publishCouponActiveEvent(promotion, existing, isNewActive);
+                    }
 
                 } else {
 
@@ -618,7 +652,9 @@ public class PromotionServiceImpl implements PromotionService {
                     coupon.setStatus(input.getStatus());
                     coupon.setUsageLimit(input.getUsageLimit());
 
-                    couponRepository.save(coupon);
+                    coupon = couponRepository.save(coupon);
+
+                    publishCouponActiveEvent(promotion, coupon, true);
                 }
             }
         }
@@ -626,6 +662,48 @@ public class PromotionServiceImpl implements PromotionService {
         // Soft delete coupon không còn trong request
         existingCouponMap.values()
                 .forEach(couponRepository::delete);
+    }
+
+    private void publishPromotionActiveEvent(PromotionEntity promotion, boolean isNew) {
+        if (promotion.getStatus() == PromotionStatus.ACTIVE) {
+            String eventType = isNew ? "PromotionActiveCreated" : "PromotionActiveUpdated";
+            PromotionActiveNotificationEvent event = PromotionActiveNotificationEvent.builder()
+                    .eventId(UUID.randomUUID())
+                    .eventType(eventType)
+                    .promotionId(promotion.getId())
+                    .name(promotion.getName())
+                    .description(promotion.getDescription())
+                    .type(promotion.getType())
+                    .discountType(promotion.getDiscountType())
+                    .discountValue(promotion.getDiscountValue())
+                    .maxDiscountAmount(promotion.getMaxDiscountAmount())
+                    .startAt(promotion.getStartAt())
+                    .endAt(promotion.getEndAt())
+                    .scopeType(ScopeType.SYSTEM.name())
+                    .occurredAt(OffsetDateTime.now())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("promotion-active-notification", event, eventType);
+        }
+    }
+
+    private void publishCouponActiveEvent(PromotionEntity promotion, CouponEntity coupon, boolean isNew) {
+        if (coupon.getStatus() == CouponStatus.ACTIVE) {
+            String eventType = isNew ? "CouponActiveCreated" : "CouponActiveUpdated";
+            CouponActiveNotificationEvent event = CouponActiveNotificationEvent.builder()
+                    .eventId(UUID.randomUUID())
+                    .eventType(eventType)
+                    .couponId(coupon.getId())
+                    .promotionId(promotion.getId())
+                    .code(coupon.getCode())
+                    .promotionName(promotion.getName())
+                    .promotionDescription(promotion.getDescription())
+                    .discountType(promotion.getDiscountType())
+                    .discountValue(promotion.getDiscountValue())
+                    .usageLimit(coupon.getUsageLimit())
+                    .occurredAt(OffsetDateTime.now())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("coupon-active-notification", event, eventType);
+        }
     }
 
     /*
@@ -667,4 +745,340 @@ public class PromotionServiceImpl implements PromotionService {
         return response;
     }
 
+    private BigDecimal calculateDiscount(PromotionEntity promotion, BigDecimal totalAmount) {
+        if (totalAmount == null || totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal discount = BigDecimal.ZERO;
+        if (promotion.getDiscountType() == PromotionDiscountType.PERCENTAGE) {
+            discount = totalAmount.multiply(promotion.getDiscountValue()).divide(BigDecimal.valueOf(100));
+            if (promotion.getMaxDiscountAmount() != null && discount.compareTo(promotion.getMaxDiscountAmount()) > 0) {
+                discount = promotion.getMaxDiscountAmount();
+            }
+        } else if (promotion.getDiscountType() == PromotionDiscountType.FIXED_AMOUNT) {
+            discount = promotion.getDiscountValue();
+            if (discount.compareTo(totalAmount) > 0) {
+                discount = totalAmount;
+            }
+        }
+        return discount;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ValidatePromotionPreResponse validatePre(ValidatePromotionPreRequest request) {
+        CouponEntity coupon = couponRepository.findByCodeAndIsDeletedFalse(request.getCouponCode())
+                .orElseThrow(() -> new BusinessException("Coupon không tồn tại"));
+
+        if (!CouponStatus.ACTIVE.equals(coupon.getStatus())) {
+            throw new BusinessException("Coupon không còn hoạt động");
+        }
+
+        PromotionEntity promotion = coupon.getPromotion();
+        if (promotion.isDeleted() || promotion.getStatus() != PromotionStatus.ACTIVE) {
+            throw new BusinessException("Chương trình khuyến mãi không còn hoạt động");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (now.isBefore(promotion.getStartAt()) || now.isAfter(promotion.getEndAt())) {
+            throw new BusinessException("Chương trình khuyến mãi đã hết hạn hoặc chưa bắt đầu");
+        }
+
+        if (promotion.getMinBookingAmount() != null && request.getTotalAmount().compareTo(promotion.getMinBookingAmount()) < 0) {
+            throw new BusinessException("Tổng tiền không đủ điều kiện áp dụng mã giảm giá");
+        }
+
+        validateScope(promotion, request.getHotelId(), request.getRoomTypeIds());
+
+        if (promotion.getMinNights() != null && request.getCheckin() != null && request.getCheckout() != null) {
+            try {
+                LocalDate checkinDate = LocalDate.parse(request.getCheckin());
+                LocalDate checkoutDate = LocalDate.parse(request.getCheckout());
+                long nights = ChronoUnit.DAYS.between(checkinDate, checkoutDate);
+                if (nights < promotion.getMinNights()) {
+                    throw new BusinessException("Số đêm lưu trú tối thiểu là " + promotion.getMinNights() + " đêm");
+                }
+            } catch (Exception e) {
+                if (e instanceof BusinessException) throw e;
+            }
+        }
+
+        List<PromotionUsageStatus> activeStatuses = List.of(PromotionUsageStatus.RESERVED, PromotionUsageStatus.CONFIRMED);
+        if (coupon.getUsageLimit() != null) {
+            long couponUsages = promotionUsageRepository.countByCouponIdAndStatusIn(coupon.getId(), activeStatuses);
+            if (couponUsages >= coupon.getUsageLimit()) {
+                throw new BusinessException("Coupon đã hết lượt sử dụng");
+            }
+        }
+
+        if (promotion.getTotalUsageLimit() != null) {
+            long promoUsages = promotionUsageRepository.countByPromotionIdAndStatusIn(promotion.getId(), activeStatuses);
+            if (promoUsages >= promotion.getTotalUsageLimit()) {
+                throw new BusinessException("Mã khuyến mãi đã hết lượt sử dụng");
+            }
+        }
+
+        if (promotion.getPerUserUsageLimit() != null && request.getUserId() != null) {
+            long userUsages = promotionUsageRepository.countByUserIdAndPromotionIdAndStatusIn(request.getUserId(), promotion.getId(), activeStatuses);
+            if (userUsages >= promotion.getPerUserUsageLimit()) {
+                throw new BusinessException("Bạn đã dùng hết lượt cho mã giảm giá này");
+            }
+        }
+
+        BigDecimal discountAmount = calculateDiscount(promotion, request.getTotalAmount());
+        BigDecimal finalAmount = request.getTotalAmount().subtract(discountAmount).max(BigDecimal.ZERO);
+
+        String desc = promotion.getDiscountType() == PromotionDiscountType.PERCENTAGE
+                ? "Giảm " + promotion.getDiscountValue() + "%"
+                : "Giảm " + promotion.getDiscountValue() + " VNĐ";
+
+        return ValidatePromotionPreResponse.builder()
+                .promotionId(promotion.getId())
+                .couponId(coupon.getId())
+                .couponCode(coupon.getCode())
+                .promotionName(promotion.getName())
+                .discountAmount(discountAmount)
+                .finalAmount(finalAmount)
+                .discountDescription(desc)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CouponDetailResponse getCouponDetail(String code, BigDecimal totalAmount, UUID hotelId) {
+        CouponEntity coupon = couponRepository.findByCodeAndIsDeletedFalse(code)
+                .orElseThrow(() -> new ResourceNotFoundException("Coupon không tồn tại"));
+
+        PromotionEntity promotion = coupon.getPromotion();
+
+        Integer remainingUsages = null;
+        if (coupon.getUsageLimit() != null) {
+            remainingUsages = Math.max(0, coupon.getUsageLimit() - coupon.getCurrentUsageCount());
+        }
+
+        BigDecimal discountAmount = null;
+        BigDecimal finalAmount = null;
+        if (totalAmount != null && totalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            discountAmount = calculateDiscount(promotion, totalAmount);
+            finalAmount = totalAmount.subtract(discountAmount).max(BigDecimal.ZERO);
+        }
+
+        return CouponDetailResponse.builder()
+                .couponId(coupon.getId())
+                .code(coupon.getCode())
+                .status(coupon.getStatus())
+                .usageLimit(coupon.getUsageLimit())
+                .currentUsageCount(coupon.getCurrentUsageCount())
+                .remainingUsages(remainingUsages)
+                .promotionId(promotion.getId())
+                .promotionName(promotion.getName())
+                .promotionDescription(promotion.getDescription())
+                .discountType(promotion.getDiscountType())
+                .discountValue(promotion.getDiscountValue())
+                .maxDiscountAmount(promotion.getMaxDiscountAmount())
+                .discountAmount(discountAmount)
+                .finalAmount(finalAmount)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void handleValidatePromotion(ValidatePromotionCommand command) {
+        String idempotencyKey = command.getSagaId() + ":" + command.getBookingId();
+        // nếu có yêu cầu dùng promotion bị trùng
+        if (promotionUsageRepository.existsByIdempotencyKey(idempotencyKey)) {
+            Optional<PromotionUsageEntity> existing = promotionUsageRepository.findByBookingId(command.getBookingId());
+            
+            if (existing.isPresent() && existing.get().getStatus() != PromotionUsageStatus.CANCELLED) {
+                PromotionUsageEntity u = existing.get();
+                BigDecimal finalAmt = command.getTotalAmount().subtract(u.getDiscountAmount()).max(BigDecimal.ZERO);
+                PromotionValidatedEvent event = PromotionValidatedEvent.builder()
+                        .sagaId(command.getSagaId())
+                        .bookingId(command.getBookingId())
+                        .promotionId(u.getPromotion().getId())
+                        .couponId(u.getCoupon() != null ? u.getCoupon().getId() : null)
+                        .discountAmount(u.getDiscountAmount())
+                        .finalAmount(finalAmt)
+                        .build();
+                outboxPublisherService.saveOutboxMessage("promotion-events", event, "PromotionValidated");
+                return;
+            }
+        }
+
+        try {
+            CouponEntity coupon = couponRepository.findByCodeForUpdate(command.getCouponCode())
+                    .orElseThrow(() -> new BusinessException("Coupon không tồn tại: " + command.getCouponCode()));
+
+            if (!CouponStatus.ACTIVE.equals(coupon.getStatus())) {
+                throw new BusinessException("Coupon không còn hoạt động");
+            }
+
+            PromotionEntity promotion = promotionRepository.findByIdForUpdate(coupon.getPromotion().getId())
+                    .orElseThrow(() -> new BusinessException("Promotion không tồn tại"));
+
+            if (promotion.isDeleted() || promotion.getStatus() != PromotionStatus.ACTIVE) {
+                throw new BusinessException("Chương trình khuyến mãi không còn hoạt động");
+            }
+
+            OffsetDateTime now = OffsetDateTime.now();
+            if (now.isBefore(promotion.getStartAt()) || now.isAfter(promotion.getEndAt())) {
+                throw new BusinessException("Chương trình khuyến mãi đã hết hạn");
+            }
+
+            if (promotion.getMinBookingAmount() != null && command.getTotalAmount().compareTo(promotion.getMinBookingAmount()) < 0) {
+                throw new BusinessException("Tổng tiền không đủ điều kiện tối thiểu");
+            }
+
+            validateScope(promotion, command.getHotelId(), command.getRoomTypeIds());
+
+            List<PromotionUsageStatus> activeStatuses = List.of(PromotionUsageStatus.RESERVED, PromotionUsageStatus.CONFIRMED);
+            if (coupon.getUsageLimit() != null) {
+                long count = promotionUsageRepository.countByCouponIdAndStatusIn(coupon.getId(), activeStatuses);
+                if (count >= coupon.getUsageLimit()) {
+                    throw new BusinessException("Coupon đã hết lượt sử dụng");
+                }
+            }
+
+            if (promotion.getTotalUsageLimit() != null) {
+                long count = promotionUsageRepository.countByPromotionIdAndStatusIn(promotion.getId(), activeStatuses);
+                if (count >= promotion.getTotalUsageLimit()) {
+                    throw new BusinessException("Chương trình khuyến mãi đã hết lượt sử dụng");
+                }
+            }
+
+            if (promotion.getPerUserUsageLimit() != null && command.getUserId() != null) {
+                long count = promotionUsageRepository.countByUserIdAndPromotionIdAndStatusIn(command.getUserId(), promotion.getId(), activeStatuses);
+                if (count >= promotion.getPerUserUsageLimit()) {
+                    throw new BusinessException("Bạn đã dùng hết lượt cho mã giảm giá này");
+                }
+            }
+
+            BigDecimal discountAmount = calculateDiscount(promotion, command.getTotalAmount());
+            BigDecimal finalAmount = command.getTotalAmount().subtract(discountAmount).max(BigDecimal.ZERO);
+
+            PromotionUsageEntity usage = new PromotionUsageEntity();
+            usage.setPromotion(promotion);
+            usage.setCoupon(coupon);
+            usage.setBookingId(command.getBookingId());
+            usage.setUserId(command.getUserId());
+            usage.setHotelId(command.getHotelId() != null ? command.getHotelId() : UUID.randomUUID());
+            usage.setDiscountAmount(discountAmount);
+            usage.setBookingAmount(command.getTotalAmount());
+            usage.setUsedAt(OffsetDateTime.now());
+            usage.setStatus(PromotionUsageStatus.RESERVED);
+            usage.setIdempotencyKey(idempotencyKey);
+            promotionUsageRepository.save(usage);
+
+            PromotionValidatedEvent event = PromotionValidatedEvent.builder()
+                    .sagaId(command.getSagaId())
+                    .bookingId(command.getBookingId())
+                    .promotionId(promotion.getId())
+                    .couponId(coupon.getId())
+                    .discountAmount(discountAmount)
+                    .finalAmount(finalAmount)
+                    .build();
+            outboxPublisherService.saveOutboxMessage("promotion-events", event, "PromotionValidated");
+
+        } catch (Exception e) {
+            PromotionRejectedEvent rejectedEvent = PromotionRejectedEvent.builder()
+                    .sagaId(command.getSagaId())
+                    .bookingId(command.getBookingId())
+                    .reason(e.getMessage())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("promotion-events", rejectedEvent, "PromotionRejected");
+        }
+    }
+
+    @Override
+    @Transactional
+    public void handleConfirmPromotionUsage(ConfirmPromotionUsageCommand command) {
+        Optional<PromotionUsageEntity> usageOpt = promotionUsageRepository.findByBookingIdAndStatus(command.getBookingId(), PromotionUsageStatus.RESERVED);
+        if (usageOpt.isPresent()) {
+            PromotionUsageEntity usage = usageOpt.get();
+
+            CouponEntity coupon = couponRepository.findByCodeForUpdate(usage.getCoupon().getCode()).orElse(null);
+            PromotionEntity promotion = promotionRepository.findByIdForUpdate(usage.getPromotion().getId()).orElse(null);
+
+            usage.setStatus(PromotionUsageStatus.CONFIRMED);
+            promotionUsageRepository.save(usage);
+
+            if (promotion != null) {
+                promotion.setCurrentUsageCount((promotion.getCurrentUsageCount() == null ? 0 : promotion.getCurrentUsageCount()) + 1);
+                promotionRepository.save(promotion);
+            }
+            if (coupon != null) {
+                coupon.setCurrentUsageCount((coupon.getCurrentUsageCount() == null ? 0 : coupon.getCurrentUsageCount()) + 1);
+                couponRepository.save(coupon);
+            }
+
+            PromotionUsageConfirmedEvent event = PromotionUsageConfirmedEvent.builder()
+                    .sagaId(command.getSagaId())
+                    .bookingId(command.getBookingId())
+                    .build();
+            outboxPublisherService.saveOutboxMessage("promotion-events", event, "PromotionUsageConfirmed");
+        } else {
+            Optional<PromotionUsageEntity> existing = promotionUsageRepository.findByBookingId(command.getBookingId());
+            if (existing.isPresent() && existing.get().getStatus() == PromotionUsageStatus.CONFIRMED) {
+                PromotionUsageConfirmedEvent event = PromotionUsageConfirmedEvent.builder()
+                        .sagaId(command.getSagaId())
+                        .bookingId(command.getBookingId())
+                        .build();
+                outboxPublisherService.saveOutboxMessage("promotion-events", event, "PromotionUsageConfirmed");
+            } else {
+                PromotionUsageFailedEvent event = PromotionUsageFailedEvent.builder()
+                        .sagaId(command.getSagaId())
+                        .bookingId(command.getBookingId())
+                        .reason("No reserved promotion usage found for bookingId: " + command.getBookingId())
+                        .build();
+                outboxPublisherService.saveOutboxMessage("promotion-events", event, "PromotionUsageFailed");
+            }
+        }
+    }
+
+    @Override
+    @Transactional
+    public void handleReleasePromotionUsage(ReleasePromotionUsageCommand command) {
+        Optional<PromotionUsageEntity> usageOpt = promotionUsageRepository.findByBookingIdAndStatus(command.getBookingId(), PromotionUsageStatus.RESERVED);
+        if (usageOpt.isPresent()) {
+            PromotionUsageEntity usage = usageOpt.get();
+            usage.setStatus(PromotionUsageStatus.CANCELLED);
+            promotionUsageRepository.save(usage);
+        }
+    }
+
+    private void validateScope(PromotionEntity promotion, UUID hotelId, List<UUID> roomTypeIds) {
+        List<PromotionScopeEntity> scopes = promotionScopeRepository.findAllByPromotionId(promotion.getId());
+        if (scopes == null || scopes.isEmpty()) {
+            return;
+        }
+
+        boolean hasSystemScope = scopes.stream().anyMatch(s -> s.getScopeType() == ScopeType.SYSTEM);
+        if (hasSystemScope) {
+            return;
+        }
+
+        List<PromotionScopeEntity> hotelScopes = scopes.stream()
+                .filter(s -> s.getScopeType() == ScopeType.HOTEL)
+                .toList();
+        if (!hotelScopes.isEmpty() && hotelId != null) {
+            boolean matchHotel = hotelScopes.stream()
+                    .anyMatch(s -> hotelId.equals(s.getScopeRefId()));
+            if (!matchHotel) {
+                throw new BusinessException("Mã giảm giá không áp dụng cho khách sạn này");
+            }
+        }
+
+        List<PromotionScopeEntity> roomTypeScopes = scopes.stream()
+                .filter(s -> s.getScopeType() == ScopeType.ROOM_TYPE)
+                .toList();
+        if (!roomTypeScopes.isEmpty() && roomTypeIds != null && !roomTypeIds.isEmpty()) {
+            Set<UUID> allowedRoomTypeIds = roomTypeScopes.stream()
+                    .map(PromotionScopeEntity::getScopeRefId)
+                    .collect(Collectors.toSet());
+            boolean matchRoomType = roomTypeIds.stream().anyMatch(allowedRoomTypeIds::contains);
+            if (!matchRoomType) {
+                throw new BusinessException("Mã giảm giá không áp dụng cho loại phòng đã chọn");
+            }
+        }
+    }
 }

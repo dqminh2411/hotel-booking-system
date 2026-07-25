@@ -27,9 +27,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CreatePromotionRequest {
 
-    /**
-     * Ignored in current sprint.
-     */
+    
     private UUID tenantId;
 
     @NotBlank

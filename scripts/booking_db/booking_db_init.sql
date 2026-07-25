@@ -42,15 +42,17 @@ CREATE TABLE IF NOT EXISTS bookings (
     checkin_date     DATE                 NOT NULL,
     checkout_date    DATE                 NOT NULL,
     num_adults       INTEGER              NOT NULL,
-    total_amount     NUMERIC              NOT NULL,
+    original_amount  NUMERIC              NOT NULL,
+    final_amount     NUMERIC              NOT NULL,
     currency         VARCHAR(255)         NOT NULL DEFAULT 'VND',
     status           booking_status_enum  NOT NULL DEFAULT 'PENDING',
     payment_method   payment_method_enum,
     idempotency_key  VARCHAR(255)         UNIQUE,
     is_deleted       BOOLEAN              NOT NULL DEFAULT false,
-    CONSTRAINT chk_bookings_dates      CHECK (checkout_date > checkin_date),
-    CONSTRAINT chk_bookings_num_adults CHECK (num_adults > 0),
-    CONSTRAINT chk_bookings_amount     CHECK (total_amount > 0)
+    CONSTRAINT chk_bookings_dates           CHECK (checkout_date > checkin_date),
+    CONSTRAINT chk_bookings_num_adults      CHECK (num_adults > 0),
+    CONSTRAINT chk_bookings_original_amount CHECK (original_amount > 0),
+    CONSTRAINT chk_bookings_final_amount    CHECK (final_amount > 0)
 );
 
 

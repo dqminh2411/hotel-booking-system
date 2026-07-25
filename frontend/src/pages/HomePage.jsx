@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import useAuth from '../features/auth/hooks/useAuth';
+import useBookingNotifications from '../features/booking/hooks/useBookingNotifications';
 import PublicHeader from '../shared/components/PublicHeader';
 
 function toDateInputValue(date) {
@@ -29,11 +31,23 @@ const features = [
 ];
 
 export default function HomePage() {
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
+  const isHotelStaff = user?.roles?.includes('HOTEL_STAFF');
   const [searchMessage, setSearchMessage] = useState('');
+  const { pushStatus, pushError, enablePushNotifications } = useBookingNotifications({ user });
 
   function handleSearch(event) {
     event.preventDefault();
     setSearchMessage('Tính năng tìm kiếm khách sạn sẽ được kết nối ở bước tiếp theo.');
+  }
+
+  function handleSubscribeNotifications() {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: '/' } });
+      return;
+    }
+    enablePushNotifications();
   }
 
   return (
@@ -106,23 +120,70 @@ export default function HomePage() {
             >
               Xem chi tiết khách sạn demo
             </Link>
-            <Link
-              to={`/staff/hotels/${DEMO_HOTEL_ID}/today-checkins`}
-              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
-            >
-              Xem check-in hôm nay (demo)
-            </Link>
-            <Link
-              to={`/staff/hotels/${DEMO_HOTEL_ID}/checkins`}
-              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
-            >
-              Check-out (demo)
-            </Link>
+
+            {isHotelStaff && (
+              <>
+                <Link
+                  to={`/staff/hotels/${DEMO_HOTEL_ID}/today-checkins`}
+                  className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                >
+                  Xem check-in hôm nay (demo)
+                </Link>
+                <Link
+                  to={`/staff/hotels/${DEMO_HOTEL_ID}/checkins`}
+                  className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                >
+                  Check-out (demo)
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
 
-      <main className="mx-auto max-w-7xl px-4 py-10 md:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl px-4 py-10 md:px-6 lg:px-8 space-y-8">
+        {/* PROMOTION NOTIFICATION SUBSCRIPTION CARD */}
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🎁</span>
+                <h2 className="text-lg font-bold text-amber-950">Đăng ký nhận ưu đãi &amp; khuyến mãi mới</h2>
+              </div>
+              <p className="mt-1 text-sm text-amber-800">
+                Nhận thông báo push realtime ngay khi có mã giảm giá hoặc chương trình ưu đãi đặc biệt từ khách sạn.
+              </p>
+              {pushStatus === 'ENABLED' && (
+                <p className="mt-2 text-xs font-semibold text-green-700">
+                  ✓ Đã đăng ký nhận tin thành công! Bạn sẽ nhận thông báo đẩy FCM ngay khi có ưu đãi mới.
+                </p>
+              )}
+              {pushError && (
+                <p className="mt-2 text-xs font-medium text-red-600">
+                  ✗ Lỗi đăng ký: {pushError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              {pushStatus === 'ENABLED' ? (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-100 px-4 py-2.5 text-sm font-semibold text-green-800">
+                  ✓ Đã đăng ký thông báo
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubscribeNotifications}
+                  disabled={pushStatus === 'REGISTERING'}
+                  className="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-60"
+                >
+                  {pushStatus === 'REGISTERING' ? 'Đang đăng ký FCM...' : 'Bật thông báo ưu đãi ngay'}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section id="benefits">
           <h2 className="text-xl font-semibold text-slate-900">Vì sao chọn HotelHub?</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">

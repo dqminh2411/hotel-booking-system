@@ -34,6 +34,8 @@ public class CreateBooking {
     private int numAdults;
     @NotNull
     private BigDecimal totalAmount;
+    private BigDecimal originalAmount;
+    private BigDecimal finalAmount;
     @NotBlank
     private String currency;
     @NotBlank
@@ -46,7 +48,9 @@ public class CreateBooking {
         this.checkout = placeBookingRequest.getCheckout();
         this.currency = placeBookingRequest.getCurrency();
         this.numAdults = placeBookingRequest.getNumAdults();
-        this.totalAmount= placeBookingRequest.getTotalAmount();
+        this.totalAmount = placeBookingRequest.getTotalAmount();
+        this.originalAmount = placeBookingRequest.getTotalAmount();
+        this.finalAmount = placeBookingRequest.getTotalAmount();
         this.paymentMethod = placeBookingRequest.getPaymentMethod();
         this.paymentToken = placeBookingRequest.getPaymentToken();
         this.roomTypeList = placeBookingRequest.getRoomTypeList();

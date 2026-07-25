@@ -34,4 +34,9 @@ public class SagaState {
     private String hashRequest;
     private UUID userId;
 
+    private String couponCode;
+
+    @jakarta.persistence.Column(columnDefinition = "TEXT")
+    private String pendingPayload;
+
 }

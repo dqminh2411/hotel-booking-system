@@ -16,6 +16,8 @@ public class BookingDetail {
     private String checkout;
     private int numAdults;
     private BigDecimal totalAmount;
+    private BigDecimal originalAmount;
+    private BigDecimal finalAmount;
     private Hotel hotel;
     private List<RoomType> roomTypeList;
     @Data

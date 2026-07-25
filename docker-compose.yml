@@ -353,6 +353,8 @@ services:
       OUTBOX_RELAY_INTERVAL_MS: ${OUTBOX_RELAY_INTERVAL_MS:-100}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8085/realms/hotel-booking-system}
+      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs}
     command:
       - mvn
       - spring-boot:run
@@ -544,11 +546,11 @@ services:
     container_name: keycloak-db
 
     ports:
-      - "${KEYCLOAK_DB_EXTERNAL_PORT:-5437}:${KEYCLOAK_DB_PORT:-5432}"
+      - "${KEYCLOAK_DB_EXTERNAL_PORT:-5439}:${KEYCLOAK_DB_PORT:-5432}"
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak_db}
       POSTGRES_USER: ${KEYCLOAK_DB_USER:-db}
-      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-1}
 
     volumes:
       - keycloak-db-data:/var/lib/postgresql/data
@@ -565,7 +567,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.0
     container_name: keycloak
-    command: start-dev
+    command: start-dev --import-realm
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -583,6 +585,7 @@ services:
       - "8085:8080"
     volumes:
       - ./keycloak/theme/hotelhub:/opt/keycloak/themes/hotelhub
+      - ./keycloak/import:/opt/keycloak/data/import
     networks:
       - app-network
 networks:

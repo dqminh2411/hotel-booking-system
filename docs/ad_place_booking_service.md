@@ -12,7 +12,7 @@
 | booking_id | VARCHAR(255) | NOT NULL | ID booking đang được xử lý trong saga |
 | idempotency_key | VARCHAR(255) | UNIQUE, NULL | Khoá idempotency tránh khởi chạy saga trùng |
 | status | VARCHAR(255) | NOT NULL | Trạng thái tổng thể của saga (`IN_PROGRESS`, `CONFIRMED`, `FAILED`, `CANCELLED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED`) |
-| current_step | VARCHAR(255) | NOT NULL | Bước hiện tại đang thực thi trong saga (`STARTED`, `COMPLETED`, `BOOKING_FAILED`, `BOOKING_CANCELLED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED`) |
+| current_step | VARCHAR(255) | NOT NULL | Bước hiện tại đang thực thi trong saga (`STARTED`, `COMPLETED`, `BOOKING_FAILED`, `BOOKING_CANCELLED`, `PAYMENT_SUCCEEDED`, `PAYMENT_FAILED`, `PROMOTION_VALIDATED`, `PROMOTION_REJECTED`, `PROMOTION_USAGE_CONFIRMED`, `PROMOTION_USAGE_FAILED`) |
 | created_at | TIMESTAMP | NOT NULL | Thời điểm khởi tạo saga |
 | updated_at | TIMESTAMP | NOT NULL | Thời điểm cập nhật gần nhất |
 | is_deleted | BOOLEAN | NOT NULL | Xóa mềm đối tượng |

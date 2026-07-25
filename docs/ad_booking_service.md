@@ -173,7 +173,6 @@ erDiagram
 
 ```mermaid
 sequenceDiagram
-    sequenceDiagram
     actor C as Customer
     participant GW as API Gateway
     participant PBS as Place Booking Service
