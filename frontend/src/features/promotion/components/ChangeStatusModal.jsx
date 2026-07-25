@@ -30,7 +30,6 @@ export function ChangeStatusModal({
       setStatus(currentStatus);
       setReason('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentStatus]);
 
   return (

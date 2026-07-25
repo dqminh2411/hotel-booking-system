@@ -66,10 +66,15 @@ export function toRequestPayload(values) {
     // Sprint hien tai backend chi chap nhan scope SYSTEM va scopeRefId = null
     // (xem PromotionServiceImpl#validateScopes) - FE luon gui dung 1 scope co dinh.
     scopes: [{ scopeType: 'SYSTEM', scopeRefId: null }],
-    conditions: values.conditions.map(({ rowId: _rowId, ...rest }) => rest),
-    coupons: values.coupons.map(({ rowId: _rowId, ...rest }) => ({
-      ...rest,
-      usageLimit: rest.usageLimit || undefined,
+    conditions: values.conditions.map((item) => ({
+      conditionType: item.conditionType,
+      operator: item.operator,
+      conditionValue: item.conditionValue,
+    })),
+    coupons: values.coupons.map((item) => ({
+      code: item.code,
+      status: item.status,
+      usageLimit: item.usageLimit || undefined,
     })),
   };
 }

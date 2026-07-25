@@ -220,9 +220,9 @@ services:
     ports:
       - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
     environment:
-      POSTGRES_DB: ${PROMOTION_DB_NAME}
-      POSTGRES_USER: ${PROMOTION_DB_USER}
-      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD}
+      POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
+      POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
     volumes:
       - promotion-db-data:/var/lib/postgresql/data
       - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
@@ -466,11 +466,11 @@ services:
     env_file:
       - .env
     environment:
-      DB_HOST: ${PROMOTION_DB_HOST}
-      DB_PORT: ${PROMOTION_DB_PORT}
-      DB_NAME: ${PROMOTION_DB_NAME}
-      DB_USER: ${PROMOTION_DB_USER}
-      DB_PASSWORD: ${PROMOTION_DB_PASSWORD}
+      DB_HOST: ${PROMOTION_DB_HOST:-promotion-db}
+      DB_PORT: ${PROMOTION_DB_PORT:-5432}
+      DB_NAME: ${PROMOTION_DB_NAME:-promotion_db}
+      DB_USER: ${PROMOTION_DB_USER:-postgres}
+      DB_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
       SERVER_PORT: 5000
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
       KAFKA_CONSUMER_GROUP: promotion-group

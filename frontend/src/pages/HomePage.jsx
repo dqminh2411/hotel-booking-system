@@ -95,6 +95,12 @@ export default function HomePage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <Link
+              to="/promotions"
+              className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+            >
+              Quản lý Promotion
+            </Link>
+            <Link
               to={`/hotels/${DEMO_HOTEL_ID}?checkinDate=${today}&checkoutDate=${tomorrow}&guestNum=2&roomNum=1`}
               className="inline-flex items-center justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
             >

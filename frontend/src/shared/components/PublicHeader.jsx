@@ -11,7 +11,7 @@ export default function PublicHeader() {
         <BrandLogo inverse />
         <nav className="hidden items-center gap-6 text-sm font-medium md:flex" aria-label="Điều hướng chính">
           <a href="#search" className="hover:text-blue-100">Lưu trú</a>
-          <a href="#benefits" className="hover:text-blue-100">Ưu đãi</a>
+          <Link to="/promotions" className="hover:text-blue-100">Khuyến mãi</Link>
           <a href="#support" className="hover:text-blue-100">Hỗ trợ</a>
         </nav>
         {isAuthenticated ? (

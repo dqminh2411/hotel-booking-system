@@ -1,0 +1,31 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.wrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $space-4;
+  margin-bottom: $space-6;
+  flex-wrap: wrap;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.title {
+  font-size: $font-size-2xl;
+}
+
+.subtitle {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.actions {
+  display: flex;
+  gap: $space-3;
+  flex-wrap: wrap;
+}

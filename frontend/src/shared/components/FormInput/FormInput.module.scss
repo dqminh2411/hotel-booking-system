@@ -1,0 +1,64 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.label {
+  font-size: $font-size-sm;
+  font-weight: 600;
+  color: $color-text;
+}
+
+.required {
+  color: $color-danger;
+  margin-left: 2px;
+}
+
+.input {
+  height: 40px;
+  padding: 0 $space-3;
+  border-radius: $radius-sm;
+  border: 1px solid $color-border-strong;
+  background: $color-white;
+  color: $color-text;
+  font-size: $font-size-md;
+  transition: border-color $transition-fast, box-shadow $transition-fast;
+
+  &:focus {
+    outline: none;
+    border-color: $color-primary-500;
+    box-shadow: 0 0 0 3px $color-primary-100;
+  }
+
+  &::placeholder {
+    color: $color-text-muted;
+  }
+
+  &:disabled {
+    background: $color-bg;
+    color: $color-text-muted;
+    cursor: not-allowed;
+  }
+}
+
+.hasError {
+  border-color: $color-danger;
+
+  &:focus {
+    border-color: $color-danger;
+    box-shadow: 0 0 0 3px $color-danger-bg;
+  }
+}
+
+.errorText {
+  font-size: $font-size-xs;
+  color: $color-danger;
+}
+
+.helpText {
+  font-size: $font-size-xs;
+  color: $color-text-muted;
+}

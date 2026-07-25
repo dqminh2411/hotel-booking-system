@@ -127,3 +127,7 @@ FCM.md
 frontend-2/
 keycloak-theme/
 *.zip
+Test Plan.jmx
+usersId.csv
+promotion_management_js/
+prompt_merge_promotion.md

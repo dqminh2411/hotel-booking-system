@@ -1,4 +1,4 @@
-import { axiosClient } from '@/shared/api/axiosClient';
+import axiosClient from '@/shared/api/axiosClient';
 
 /**
  * Lop goi API "tho" cho Promotion - CHI goi dung 6 endpoint backend da cong bo.
