@@ -1,0 +1,31 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: $space-3;
+  padding: $space-8;
+  color: $color-text-muted;
+}
+
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: $color-primary-50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.message {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.action {
+  margin-top: $space-1;
+}

@@ -1,0 +1,55 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  padding: $space-4 0;
+  flex-wrap: wrap;
+}
+
+.info {
+  font-size: $font-size-sm;
+  color: $color-text-secondary;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: $space-1;
+}
+
+.pageBtn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 $space-2;
+  border-radius: $radius-sm;
+  border: 1px solid $color-border-strong;
+  background: $color-white;
+  color: $color-text;
+  font-size: $font-size-sm;
+  font-weight: 600;
+  transition: background $transition-fast, border-color $transition-fast;
+
+  &:hover:not(:disabled) {
+    border-color: $color-primary-500;
+    color: $color-primary-700;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.active {
+  background: $color-primary-500;
+  border-color: $color-primary-500;
+  color: $color-white;
+
+  &:hover {
+    background: $color-primary-500;
+    color: $color-white;
+  }
+}
