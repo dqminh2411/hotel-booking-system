@@ -21,26 +21,26 @@ export function ConditionFieldArray({ rows, errors, onChange }) {
   return (
     <div>
       {rows.length === 0 ? (
-        <div className={styles.emptyRows}>Chua co dieu kien nao. Nhan &quot;Them dieu kien&quot; neu can.</div>
+        <div className={styles.emptyRows}>Chưa có điều kiện nào. Nhấn &quot;+ Thêm điều kiện&quot; nếu cần.</div>
       ) : (
         <div className={styles.rowList}>
           {rows.map((row) => (
             <div className={styles.row} key={row.rowId}>
               <Select
-                label="Loai dieu kien"
+                label="Loại điều kiện"
                 options={CONDITION_TYPE_OPTIONS}
                 value={row.conditionType}
                 onChange={(e) => updateRow(row.rowId, { conditionType: e.target.value })}
               />
               <Select
-                label="Toan tu"
+                label="Toán tử"
                 options={CONDITION_OPERATOR_OPTIONS}
                 value={row.operator}
                 onChange={(e) => updateRow(row.rowId, { operator: e.target.value })}
               />
               <FormInput
-                label="Gia tri"
-                placeholder="Vi du: 3"
+                label="Giá trị"
+                placeholder="Ví dụ: 3"
                 value={row.conditionValue}
                 error={errors?.[row.rowId]?.conditionValue}
                 onChange={(e) => updateRow(row.rowId, { conditionValue: e.target.value })}
@@ -52,7 +52,7 @@ export function ConditionFieldArray({ rows, errors, onChange }) {
                 className={styles.removeBtn}
                 onClick={() => removeRow(row.rowId)}
               >
-                Xoa
+                Xóa
               </Button>
             </div>
           ))}
@@ -66,7 +66,7 @@ export function ConditionFieldArray({ rows, errors, onChange }) {
         className={styles.addBtn}
         onClick={() => onChange([...rows, createEmptyConditionRow()])}
       >
-        + Them dieu kien
+        + Thêm điều kiện
       </Button>
     </div>
   );

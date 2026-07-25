@@ -20,12 +20,12 @@ export function PromotionCreatePage() {
 
   return (
     <div>
-      <PageHeader title="Tao Promotion" subtitle="Tao moi chuong trinh khuyen mai pham vi He thong (SYSTEM)." />
+      <PageHeader title="Tạo Promotion" subtitle="Tạo mới chương trình khuyến mãi phạm vi Hệ thống (SYSTEM)." />
       <PromotionForm
         initialValues={createEmptyFormValues()}
         isSubmitting={isSubmitting}
         submitError={error}
-        submitLabel="Tao promotion"
+        submitLabel="Tạo promotion"
         onSubmit={handleSubmit}
         onCancel={() => navigate(ROUTES.promotions.list)}
       />

@@ -1,6 +1,6 @@
 import styles from './EmptyState.module.scss';
 
-export function EmptyState({ message = 'Khong co du lieu', icon, action }) {
+export function EmptyState({ message = 'Không có dữ liệu', icon, action }) {
   return (
     <div className={styles.wrap}>
       <div className={styles.icon}>{icon ?? 'Ø'}</div>

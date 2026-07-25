@@ -47,22 +47,22 @@ export function PromotionDetailPage() {
   return (
     <div>
       <Link to={ROUTES.promotions.list} className={styles.backLink}>
-        ‹ Quay lai danh sach
+        ‹ Quay lại danh sách
       </Link>
 
       <PageHeader
-        title="Chi tiet Promotion"
+        title="Chi tiết Promotion"
         actions={
           data && (
             <>
               <Button variant="secondary" onClick={() => navigate(ROUTES.promotions.edit(data.id))}>
-                Sua
+                Sửa
               </Button>
               <Button variant="ghost" onClick={handleOpenStatusModal}>
-                Doi trang thai
+                Đổi trạng thái
               </Button>
               <Button variant="danger" onClick={deleteDialog.open}>
-                Xoa
+                Xóa
               </Button>
             </>
           )
@@ -72,16 +72,16 @@ export function PromotionDetailPage() {
       {isLoading && <Loading />}
 
       {!isLoading && error && (
-        <EmptyState message={`${error.status ? `Loi ${error.status}: ` : ''}${error.message}`} />
+        <EmptyState message={`${error.status ? `Lỗi ${error.status}: ` : ''}${error.message}`} />
       )}
 
       {!isLoading && data && <PromotionDetailView promotion={data} />}
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
-        title="Xoa promotion"
-        message={`Ban co chac muon xoa promotion "${data?.name}"? Hanh dong nay se xoa mem (soft delete).`}
-        confirmLabel="Xoa"
+        title="Xóa promotion"
+        message={`Bạn có chắc muốn xóa promotion "${data?.name}"? Hành động này sẽ xóa mềm (soft delete).`}
+        confirmLabel="Xóa"
         danger
         isLoading={mutations.isSubmitting}
         onConfirm={handleConfirmDelete}

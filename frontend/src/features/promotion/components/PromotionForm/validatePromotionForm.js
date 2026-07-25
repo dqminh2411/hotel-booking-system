@@ -7,54 +7,54 @@ export function validatePromotionForm(values) {
   const errors = {};
 
   if (!values.name.trim()) {
-    errors.name = 'Vui long nhap ten promotion';
+    errors.name = 'Vui lòng nhập tên promotion';
   } else if (values.name.trim().length > 150) {
-    errors.name = 'Ten khong duoc vuot qua 150 ky tu';
+    errors.name = 'Tên không được vượt quá 150 ký tự';
   }
 
   if (values.description && values.description.length > 2000) {
-    errors.description = 'Mo ta khong duoc vuot qua 2000 ky tu';
+    errors.description = 'Mô tả không được vượt quá 2000 ký tự';
   }
 
   if (!values.discountValue.trim()) {
-    errors.discountValue = 'Vui long nhap gia tri giam gia';
+    errors.discountValue = 'Vui lòng nhập giá trị giảm giá';
   } else if (!isValidNumber(values.discountValue)) {
-    errors.discountValue = 'Gia tri giam gia phai la so';
+    errors.discountValue = 'Giá trị giảm giá phải là số';
   }
 
   if (values.maxDiscountAmount && !isValidNumber(values.maxDiscountAmount)) {
-    errors.maxDiscountAmount = 'Phai la so';
+    errors.maxDiscountAmount = 'Phải là số';
   }
 
   if (values.minBookingAmount && !isValidNumber(values.minBookingAmount)) {
-    errors.minBookingAmount = 'Phai la so';
+    errors.minBookingAmount = 'Phải là số';
   }
 
   if (values.minNights && !isValidInteger(values.minNights)) {
-    errors.minNights = 'Phai la so nguyen';
+    errors.minNights = 'Phải là số nguyên';
   }
 
   if (!values.startAt) {
-    errors.startAt = 'Vui long chon ngay bat dau';
+    errors.startAt = 'Vui lòng chọn ngày bắt đầu';
   }
 
   if (!values.endAt) {
-    errors.endAt = 'Vui long chon ngay ket thuc';
+    errors.endAt = 'Vui lòng chọn ngày kết thúc';
   }
 
   if (values.totalUsageLimit && !isValidInteger(values.totalUsageLimit)) {
-    errors.totalUsageLimit = 'Phai la so nguyen';
+    errors.totalUsageLimit = 'Phải là số nguyên';
   }
 
   if (values.perUserUsageLimit && !isValidInteger(values.perUserUsageLimit)) {
-    errors.perUserUsageLimit = 'Phai la so nguyen';
+    errors.perUserUsageLimit = 'Phải là số nguyên';
   }
 
   const conditionErrors = {};
   values.conditions.forEach((row) => {
     const rowErrors = {};
     if (!row.conditionValue.trim()) {
-      rowErrors.conditionValue = 'Bat buoc nhap gia tri';
+      rowErrors.conditionValue = 'Bắt buộc nhập giá trị';
     }
     if (Object.keys(rowErrors).length > 0) conditionErrors[row.rowId] = rowErrors;
   });
@@ -64,10 +64,10 @@ export function validatePromotionForm(values) {
   values.coupons.forEach((row) => {
     const rowErrors = {};
     if (!row.code.trim()) {
-      rowErrors.code = 'Bat buoc nhap coupon code';
+      rowErrors.code = 'Bắt buộc nhập coupon code';
     }
     if (row.usageLimit !== undefined && row.usageLimit !== null && !isValidInteger(String(row.usageLimit))) {
-      rowErrors.usageLimit = 'Phai la so nguyen';
+      rowErrors.usageLimit = 'Phải là số nguyên';
     }
     if (Object.keys(rowErrors).length > 0) couponErrors[row.rowId] = rowErrors;
   });

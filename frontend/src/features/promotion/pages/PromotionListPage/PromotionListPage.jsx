@@ -56,11 +56,11 @@ export function PromotionListPage() {
   return (
     <div>
       <PageHeader
-        title="Promotion"
-        subtitle="Quan ly cac chuong trinh khuyen mai pham vi He thong (SYSTEM)."
+        title="Chương trình khuyến mãi"
+        subtitle="Quản lý các chương trình khuyến mãi phạm vi Hệ thống (SYSTEM)."
         actions={
           <Button variant="primary" onClick={() => navigate(ROUTES.promotions.create)}>
-            + Tao promotion
+            + Tạo promotion
           </Button>
         }
       />
@@ -74,7 +74,7 @@ export function PromotionListPage() {
 
       {list.error && (
         <div className={styles.errorBanner}>
-          {list.error.status ? `Loi ${list.error.status}: ` : ''}
+          {list.error.status ? `Lỗi ${list.error.status}: ` : ''}
           {list.error.message}
         </div>
       )}
@@ -97,9 +97,9 @@ export function PromotionListPage() {
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
-        title="Xoa promotion"
-        message={`Ban co chac muon xoa promotion "${selectedRow?.name}"? Hanh dong nay se xoa mem (soft delete).`}
-        confirmLabel="Xoa"
+        title="Xóa promotion"
+        message={`Bạn có chắc muốn xóa promotion "${selectedRow?.name}"? Hành động này sẽ xóa mềm (soft delete).`}
+        confirmLabel="Xóa"
         danger
         isLoading={mutations.isSubmitting}
         onConfirm={handleConfirmDelete}

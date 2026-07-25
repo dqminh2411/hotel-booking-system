@@ -31,12 +31,12 @@ export function PromotionEditPage() {
 
   return (
     <div>
-      <PageHeader title="Chinh sua Promotion" subtitle={data ? data.name : undefined} />
+      <PageHeader title="Chỉnh sửa Promotion" subtitle={data ? data.name : undefined} />
 
       {isLoading && <Loading />}
 
       {!isLoading && error && (
-        <EmptyState message={`${error.status ? `Loi ${error.status}: ` : ''}${error.message}`} />
+        <EmptyState message={`${error.status ? `Lỗi ${error.status}: ` : ''}${error.message}`} />
       )}
 
       {!isLoading && data && (
@@ -44,7 +44,7 @@ export function PromotionEditPage() {
           initialValues={fromResponseToFormValues(data)}
           isSubmitting={isSubmitting}
           submitError={submitError}
-          submitLabel="Luu thay doi"
+          submitLabel="Lưu thay đổi"
           onSubmit={handleSubmit}
           onCancel={() => navigate(ROUTES.promotions.detail(id ?? ''))}
         />

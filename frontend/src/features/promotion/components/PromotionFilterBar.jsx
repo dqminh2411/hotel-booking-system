@@ -17,16 +17,16 @@ export function PromotionFilterBar({
     <div className={styles.bar}>
       <div className={styles.searchField}>
         <FormInput
-          label="Tim kiem"
-          placeholder="Tim theo ten promotion..."
+          label="Tìm kiếm"
+          placeholder="Tìm theo tên promotion..."
           value={keyword}
           onChange={(e) => onKeywordChange(e.target.value)}
         />
       </div>
       <div className={styles.statusField}>
         <Select
-          label="Trang thai"
-          placeholder="Tat ca trang thai"
+          label="Trạng thái"
+          placeholder="Tất cả trạng thái"
           options={PROMOTION_STATUS_OPTIONS}
           value={status}
           onChange={(e) => onStatusChange(e.target.value)}

@@ -23,29 +23,29 @@ export function CouponFieldArray({ rows, errors, onChange }) {
   return (
     <div>
       {rows.length === 0 ? (
-        <div className={styles.emptyRows}>Chua co coupon nao. Nhan &quot;Them coupon&quot; neu can.</div>
+        <div className={styles.emptyRows}>Chưa có coupon nào. Nhấn &quot;+ Thêm coupon&quot; nếu cần.</div>
       ) : (
         <div className={styles.rowList}>
           {rows.map((row) => (
             <div className={[styles.row, styles.rowCoupon].join(' ')} key={row.rowId}>
               <FormInput
-                label="Coupon code"
+                label="Mã coupon"
                 placeholder="VD: SUMMER2026"
                 value={row.code}
                 error={errors?.[row.rowId]?.code}
                 onChange={(e) => updateRow(row.rowId, { code: e.target.value.toUpperCase() })}
               />
               <Select
-                label="Trang thai"
+                label="Trạng thái"
                 options={COUPON_STATUS_OPTIONS}
                 value={row.status}
                 onChange={(e) => updateRow(row.rowId, { status: e.target.value })}
               />
               <FormInput
-                label="Gioi han su dung"
+                label="Giới hạn sử dụng"
                 type="number"
                 min={1}
-                placeholder="Khong gioi han"
+                placeholder="Không giới hạn"
                 value={row.usageLimit ?? ''}
                 error={errors?.[row.rowId]?.usageLimit}
                 onChange={(e) =>
@@ -61,7 +61,7 @@ export function CouponFieldArray({ rows, errors, onChange }) {
                 className={styles.removeBtn}
                 onClick={() => removeRow(row.rowId)}
               >
-                Xoa
+                Xóa
               </Button>
             </div>
           ))}
@@ -75,7 +75,7 @@ export function CouponFieldArray({ rows, errors, onChange }) {
         className={styles.addBtn}
         onClick={() => onChange([...rows, createEmptyCouponRow()])}
       >
-        + Them coupon
+        + Thêm coupon
       </Button>
     </div>
   );

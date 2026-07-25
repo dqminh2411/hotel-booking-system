@@ -12,7 +12,7 @@ export function Pagination({ page, totalPages, totalElements, onPageChange }) {
   return (
     <div className={styles.wrap}>
       <span className={styles.info}>
-        Trang {page + 1}/{totalPages} - {totalElements} ket qua
+        Trang {page + 1}/{totalPages} - {totalElements} kết quả
       </span>
       <div className={styles.controls}>
         <button

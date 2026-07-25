@@ -33,36 +33,36 @@ export function PromotionDetailView({ promotion }) {
       </div>
 
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Thong tin Promotion</h3>
+        <h3 className={styles.cardTitle}>Thông tin Promotion</h3>
         <div className={styles.metaGrid}>
-          <Meta label="Loai" value={PROMOTION_TYPE_LABEL[promotion.type]} />
-          <Meta label="Loai giam gia" value={DISCOUNT_TYPE_LABEL[promotion.discountType]} />
+          <Meta label="Loại" value={PROMOTION_TYPE_LABEL[promotion.type]} />
+          <Meta label="Loại giảm giá" value={DISCOUNT_TYPE_LABEL[promotion.discountType]} />
           <Meta
-            label="Gia tri giam"
+            label="Giá trị giảm"
             value={
               promotion.discountType === 'PERCENTAGE'
                 ? `${formatNumber(promotion.discountValue)}%`
                 : formatNumber(promotion.discountValue)
             }
           />
-          <Meta label="Giam toi da" value={formatNumber(promotion.maxDiscountAmount)} />
-          <Meta label="Booking toi thieu" value={formatNumber(promotion.minBookingAmount)} />
-          <Meta label="So dem toi thieu" value={formatNumber(promotion.minNights)} />
-          <Meta label="Ngay bat dau" value={formatDate(promotion.startAt)} />
-          <Meta label="Ngay ket thuc" value={formatDate(promotion.endAt)} />
-          <Meta label="Tong luot su dung toi da" value={formatNumber(promotion.totalUsageLimit)} />
-          <Meta label="Luot su dung / user" value={formatNumber(promotion.perUserUsageLimit)} />
-          <Meta label="Da su dung" value={formatNumber(promotion.currentUsageCount)} />
-          <Meta label="Cong don (stackable)" value={promotion.stackable ? 'Co' : 'Khong'} />
-          <Meta label="Ngay tao" value={formatDateTime(promotion.createdAt)} />
-          <Meta label="Cap nhat gan nhat" value={formatDateTime(promotion.updatedAt)} />
+          <Meta label="Giảm tối đa" value={formatNumber(promotion.maxDiscountAmount)} />
+          <Meta label="Booking tối thiểu" value={formatNumber(promotion.minBookingAmount)} />
+          <Meta label="Số đêm tối thiểu" value={formatNumber(promotion.minNights)} />
+          <Meta label="Ngày bắt đầu" value={formatDate(promotion.startAt)} />
+          <Meta label="Ngày kết thúc" value={formatDate(promotion.endAt)} />
+          <Meta label="Tổng lượt sử dụng tối đa" value={formatNumber(promotion.totalUsageLimit)} />
+          <Meta label="Lượt sử dụng / người dùng" value={formatNumber(promotion.perUserUsageLimit)} />
+          <Meta label="Đã sử dụng" value={formatNumber(promotion.currentUsageCount)} />
+          <Meta label="Cộng dồn (stackable)" value={promotion.stackable ? 'Có' : 'Không'} />
+          <Meta label="Ngày tạo" value={formatDateTime(promotion.createdAt)} />
+          <Meta label="Cập nhật gần nhất" value={formatDateTime(promotion.updatedAt)} />
         </div>
       </div>
 
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Pham vi ap dung (Scopes)</h3>
+        <h3 className={styles.cardTitle}>Phạm vi áp dụng (Scopes)</h3>
         {!promotion.scopes || promotion.scopes.length === 0 ? (
-          <EmptyState message="Chua co scope nao" />
+          <EmptyState message="Chưa có scope nào" />
         ) : (
           <div className={styles.list}>
             {promotion.scopes.map((scope, idx) => (
@@ -78,9 +78,9 @@ export function PromotionDetailView({ promotion }) {
       </div>
 
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Dieu kien (Conditions)</h3>
+        <h3 className={styles.cardTitle}>Điều kiện (Conditions)</h3>
         {!promotion.conditions || promotion.conditions.length === 0 ? (
-          <EmptyState message="Chua co dieu kien nao" />
+          <EmptyState message="Chưa có điều kiện nào" />
         ) : (
           <div className={styles.list}>
             {promotion.conditions.map((cond, idx) => (
@@ -98,9 +98,9 @@ export function PromotionDetailView({ promotion }) {
       </div>
 
       <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Coupon</h3>
+        <h3 className={styles.cardTitle}>Mã giảm giá (Coupon)</h3>
         {!promotion.coupons || promotion.coupons.length === 0 ? (
-          <EmptyState message="Chua co coupon nao" />
+          <EmptyState message="Chưa có coupon nào" />
         ) : (
           <div className={styles.list}>
             {promotion.coupons.map((coupon, idx) => (
@@ -108,7 +108,7 @@ export function PromotionDetailView({ promotion }) {
                 <div className={styles.listRowMain}>
                   <span className={styles.listRowTitle}>{coupon.code}</span>
                   <span className={styles.listRowSub}>
-                    Da dung: {formatNumber(coupon.currentUsageCount)} / {formatNumber(coupon.usageLimit) || 'Khong gioi han'}
+                    Đã dùng: {formatNumber(coupon.currentUsageCount)} / {formatNumber(coupon.usageLimit) || 'Không giới hạn'}
                   </span>
                 </div>
                 <StatusBadge label={coupon.status} tone={COUPON_STATUS_TONE[coupon.status]} />

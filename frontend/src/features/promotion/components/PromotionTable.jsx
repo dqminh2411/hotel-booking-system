@@ -24,7 +24,7 @@ export function PromotionTable({ data, isLoading, onView, onEdit, onDelete, onCh
   const columns = [
     {
       key: 'name',
-      header: 'Ten',
+      header: 'Tên',
       render: (row) => (
         <button type="button" className={styles.name} onClick={() => onView(row.id)}>
           {row.name}
@@ -33,12 +33,12 @@ export function PromotionTable({ data, isLoading, onView, onEdit, onDelete, onCh
     },
     {
       key: 'type',
-      header: 'Loai',
+      header: 'Loại',
       render: (row) => PROMOTION_TYPE_LABEL[row.type],
     },
     {
       key: 'discount',
-      header: 'Giam gia',
+      header: 'Giảm giá',
       render: (row) =>
         row.discountType === 'PERCENTAGE'
           ? `${formatNumber(row.discountValue)}% (${DISCOUNT_TYPE_LABEL[row.discountType]})`
@@ -46,17 +46,17 @@ export function PromotionTable({ data, isLoading, onView, onEdit, onDelete, onCh
     },
     {
       key: 'status',
-      header: 'Trang thai',
+      header: 'Trạng thái',
       render: (row) => <StatusBadge label={PROMOTION_STATUS_LABEL[row.status]} tone={PROMOTION_STATUS_TONE[row.status]} />,
     },
     {
       key: 'startAt',
-      header: 'Ngay bat dau',
+      header: 'Ngày bắt đầu',
       render: (row) => formatDate(row.startAt),
     },
     {
       key: 'endAt',
-      header: 'Ngay ket thuc',
+      header: 'Ngày kết thúc',
       render: (row) => formatDate(row.endAt),
     },
     {
@@ -70,13 +70,13 @@ export function PromotionTable({ data, isLoading, onView, onEdit, onDelete, onCh
             Xem
           </Button>
           <Button size="sm" variant="secondary" onClick={() => onEdit(row.id)}>
-            Sua
+            Sửa
           </Button>
           <Button size="sm" variant="ghost" onClick={() => onChangeStatus(row)}>
-            Doi trang thai
+            Đổi trạng thái
           </Button>
           <Button size="sm" variant="danger" onClick={() => onDelete(row)}>
-            Xoa
+            Xóa
           </Button>
         </div>
       ),
@@ -89,7 +89,7 @@ export function PromotionTable({ data, isLoading, onView, onEdit, onDelete, onCh
       data={data}
       rowKey={(row) => row.id}
       isLoading={isLoading}
-      emptyMessage="Chua co promotion nao"
+      emptyMessage="Chưa có chương trình khuyến mãi nào"
     />
   );
 }

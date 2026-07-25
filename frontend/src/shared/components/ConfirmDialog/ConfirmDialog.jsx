@@ -4,10 +4,10 @@ import { Button } from '@/shared/components/Button/Button';
 /** Dialog xac nhan dung chung, vi du: xoa Promotion. */
 export function ConfirmDialog({
   isOpen,
-  title = 'Xac nhan',
+  title = 'Xác nhận',
   message,
-  confirmLabel = 'Dong y',
-  cancelLabel = 'Huy',
+  confirmLabel = 'Đồng ý',
+  cancelLabel = 'Hủy',
   isLoading,
   danger,
   onConfirm,

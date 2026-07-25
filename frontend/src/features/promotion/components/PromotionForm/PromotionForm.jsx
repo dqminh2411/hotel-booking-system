@@ -48,19 +48,19 @@ export function PromotionForm({
     <form onSubmit={handleSubmit} noValidate>
       {submitError && (
         <div className={styles.formError}>
-          {submitError.status ? `Loi ${submitError.status}: ` : ''}
+          {submitError.status ? `Lỗi ${submitError.status}: ` : ''}
           {submitError.message}
         </div>
       )}
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Thong tin Promotion</h3>
-        <p className={styles.cardDesc}>Thong tin co ban cua chuong trinh khuyen mai.</p>
+        <h3 className={styles.cardTitle}>Thông tin Promotion</h3>
+        <p className={styles.cardDesc}>Thông tin cơ bản của chương trình khuyến mãi.</p>
 
         <div className={styles.grid2}>
           <div className={styles.fullSpan}>
             <FormInput
-              label="Ten promotion"
+              label="Tên promotion"
               required
               value={values.name}
               error={errors.name}
@@ -71,7 +71,7 @@ export function PromotionForm({
 
           <div className={styles.fullSpan}>
             <Textarea
-              label="Mo ta"
+              label="Mô tả"
               value={values.description}
               error={errors.description}
               maxLength={2000}
@@ -80,7 +80,7 @@ export function PromotionForm({
           </div>
 
           <Select
-            label="Loai promotion"
+            label="Loại promotion"
             required
             options={PROMOTION_TYPE_OPTIONS}
             value={values.type}
@@ -88,7 +88,7 @@ export function PromotionForm({
           />
 
           <Select
-            label="Trang thai"
+            label="Trạng thái"
             required
             options={PROMOTION_STATUS_OPTIONS}
             value={values.status}
@@ -96,7 +96,7 @@ export function PromotionForm({
           />
 
           <FormInput
-            label="Ngay bat dau"
+            label="Ngày bắt đầu"
             type="date"
             required
             value={values.startAt}
@@ -105,7 +105,7 @@ export function PromotionForm({
           />
 
           <FormInput
-            label="Ngay ket thuc"
+            label="Ngày kết thúc"
             type="date"
             required
             value={values.endAt}
@@ -116,19 +116,19 @@ export function PromotionForm({
       </section>
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Giam gia &amp; Gioi han</h3>
-        <p className={styles.cardDesc}>Cach tinh giam gia va cac gioi han su dung.</p>
+        <h3 className={styles.cardTitle}>Giảm giá &amp; Giới hạn</h3>
+        <p className={styles.cardDesc}>Cách tính giảm giá và các giới hạn sử dụng.</p>
 
         <div className={styles.grid3}>
           <Select
-            label="Loai giam gia"
+            label="Loại giảm giá"
             required
             options={DISCOUNT_TYPE_OPTIONS}
             value={values.discountType}
             onChange={(e) => setField('discountType', e.target.value)}
           />
           <FormInput
-            label={values.discountType === 'PERCENTAGE' ? 'Gia tri giam (%)' : 'Gia tri giam'}
+            label={values.discountType === 'PERCENTAGE' ? 'Giá trị giảm (%)' : 'Giá trị giảm'}
             type="number"
             required
             min={0}
@@ -138,7 +138,7 @@ export function PromotionForm({
             onChange={(e) => setField('discountValue', e.target.value)}
           />
           <FormInput
-            label="Giam toi da"
+            label="Giảm tối đa"
             type="number"
             min={0}
             step="0.01"
@@ -147,7 +147,7 @@ export function PromotionForm({
             onChange={(e) => setField('maxDiscountAmount', e.target.value)}
           />
           <FormInput
-            label="Gia tri booking toi thieu"
+            label="Giá trị booking tối thiểu"
             type="number"
             min={0}
             step="0.01"
@@ -156,7 +156,7 @@ export function PromotionForm({
             onChange={(e) => setField('minBookingAmount', e.target.value)}
           />
           <FormInput
-            label="So dem toi thieu"
+            label="Số đêm tối thiểu"
             type="number"
             min={1}
             value={values.minNights}
@@ -164,7 +164,7 @@ export function PromotionForm({
             onChange={(e) => setField('minNights', e.target.value)}
           />
           <FormInput
-            label="Tong luot su dung toi da"
+            label="Tổng lượt sử dụng tối đa"
             type="number"
             min={1}
             value={values.totalUsageLimit}
@@ -172,7 +172,7 @@ export function PromotionForm({
             onChange={(e) => setField('totalUsageLimit', e.target.value)}
           />
           <FormInput
-            label="Luot su dung / user"
+            label="Lượt sử dụng / người dùng"
             type="number"
             min={1}
             value={values.perUserUsageLimit}
@@ -186,23 +186,23 @@ export function PromotionForm({
               checked={values.stackable}
               onChange={(e) => setField('stackable', e.target.checked)}
             />
-            Cho phep cong don (stackable)
+            Cho phép cộng dồn (stackable)
           </label>
         </div>
       </section>
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Pham vi ap dung (Scope)</h3>
-        <p className={styles.cardDesc}>Sprint hien tai chi ho tro pham vi He thong.</p>
+        <h3 className={styles.cardTitle}>Phạm vi áp dụng (Scope)</h3>
+        <p className={styles.cardDesc}>Sprint hiện tại chỉ hỗ trợ phạm vi Hệ thống.</p>
         <div className={styles.scopeInfo}>
-          Promotion nay ap dung o pham vi <strong>&nbsp;He thong (SYSTEM)&nbsp;</strong> - cac pham vi
-          Hotel / Room Type / User Segment se duoc ho tro o sprint sau.
+          Promotion này áp dụng ở phạm vi <strong>&nbsp;Hệ thống (SYSTEM)&nbsp;</strong> - các phạm vi
+          Khách sạn / Loại phòng / Nhóm người dùng sẽ được hỗ trợ ở sprint sau.
         </div>
       </section>
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Dieu kien (Condition)</h3>
-        <p className={styles.cardDesc}>Tuy chon - co the them nhieu dieu kien ap dung promotion.</p>
+        <h3 className={styles.cardTitle}>Điều kiện áp dụng (Condition)</h3>
+        <p className={styles.cardDesc}>Tùy chọn - có thể thêm nhiều điều kiện áp dụng promotion.</p>
         <ConditionFieldArray
           rows={values.conditions}
           errors={errors.conditions}
@@ -211,8 +211,8 @@ export function PromotionForm({
       </section>
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Coupon</h3>
-        <p className={styles.cardDesc}>Tuy chon - co the them nhieu coupon cho promotion nay.</p>
+        <h3 className={styles.cardTitle}>Mã giảm giá (Coupon)</h3>
+        <p className={styles.cardDesc}>Tùy chọn - có thể thêm nhiều coupon cho promotion này.</p>
         <CouponFieldArray
           rows={values.coupons}
           errors={errors.coupons}
@@ -222,7 +222,7 @@ export function PromotionForm({
 
       <div className={styles.formActions}>
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isSubmitting}>
-          Huy
+          Hủy
         </Button>
         <Button type="submit" variant="primary" isLoading={isSubmitting}>
           {submitLabel}

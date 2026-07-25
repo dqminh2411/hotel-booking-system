@@ -14,10 +14,10 @@ import {
  */
 
 export const PROMOTION_TYPE_LABEL = {
-  SYSTEM: 'He thong (SYSTEM)',
-  HOTEL: 'Khach san (HOTEL)',
-  ROOM_TYPE: 'Loai phong (ROOM_TYPE)',
-  COUPON: 'Coupon (COUPON)',
+  SYSTEM: 'Hệ thống (SYSTEM)',
+  HOTEL: 'Khách sạn (HOTEL)',
+  ROOM_TYPE: 'Loại phòng (ROOM_TYPE)',
+  COUPON: 'Mã giảm giá (COUPON)',
 };
 export const PROMOTION_TYPE_OPTIONS = Object.values(PromotionType).map((v) => ({
   value: v,
@@ -25,8 +25,8 @@ export const PROMOTION_TYPE_OPTIONS = Object.values(PromotionType).map((v) => ({
 }));
 
 export const DISCOUNT_TYPE_LABEL = {
-  PERCENTAGE: 'Theo phan tram (%)',
-  FIXED_AMOUNT: 'So tien co dinh',
+  PERCENTAGE: 'Theo phần trăm (%)',
+  FIXED_AMOUNT: 'Số tiền cố định',
 };
 export const DISCOUNT_TYPE_OPTIONS = Object.values(PromotionDiscountType).map((v) => ({
   value: v,
@@ -34,10 +34,10 @@ export const DISCOUNT_TYPE_OPTIONS = Object.values(PromotionDiscountType).map((v
 }));
 
 export const PROMOTION_STATUS_LABEL = {
-  DRAFT: 'Nhap',
-  ACTIVE: 'Dang hoat dong',
-  PAUSED: 'Tam dung',
-  EXPIRED: 'Het han',
+  DRAFT: 'Nháp',
+  ACTIVE: 'Đang hoạt động',
+  PAUSED: 'Tạm dừng',
+  EXPIRED: 'Hết hạn',
 };
 export const PROMOTION_STATUS_OPTIONS = Object.values(PromotionStatus).map((v) => ({
   value: v,
@@ -52,20 +52,20 @@ export const PROMOTION_STATUS_TONE = {
 
 // Sprint hien tai backend chi chap nhan SYSTEM (xem PromotionServiceImpl#validateScopes).
 export const SCOPE_TYPE_LABEL = {
-  SYSTEM: 'He thong (SYSTEM)',
-  HOTEL: 'Khach san (HOTEL) - chua ho tro',
-  ROOM_TYPE: 'Loai phong (ROOM_TYPE) - chua ho tro',
-  USER_SEGMENT: 'Nhom nguoi dung (USER_SEGMENT) - chua ho tro',
+  SYSTEM: 'Hệ thống (SYSTEM)',
+  HOTEL: 'Khách sạn (HOTEL) - chưa hỗ trợ',
+  ROOM_TYPE: 'Loại phòng (ROOM_TYPE) - chưa hỗ trợ',
+  USER_SEGMENT: 'Nhóm người dùng (USER_SEGMENT) - chưa hỗ trợ',
 };
 export const SCOPE_TYPE_OPTIONS_CURRENT_SPRINT = [
   { value: ScopeType.SYSTEM, label: SCOPE_TYPE_LABEL.SYSTEM },
 ];
 
 export const CONDITION_TYPE_LABEL = {
-  FIRST_BOOKING: 'Dat phong lan dau',
-  EARLY_BIRD_DAYS: 'So ngay dat truoc (Early bird)',
-  LAST_MINUTE_DAYS: 'So ngay dat can (Last minute)',
-  MIN_GUESTS: 'So khach toi thieu',
+  FIRST_BOOKING: 'Đặt phòng lần đầu',
+  EARLY_BIRD_DAYS: 'Số ngày đặt trước (Early bird)',
+  LAST_MINUTE_DAYS: 'Số ngày đặt cận (Last minute)',
+  MIN_GUESTS: 'Số khách tối thiểu',
 };
 export const CONDITION_TYPE_OPTIONS = Object.values(ConditionType).map((v) => ({
   value: v,
@@ -73,9 +73,9 @@ export const CONDITION_TYPE_OPTIONS = Object.values(ConditionType).map((v) => ({
 }));
 
 export const CONDITION_OPERATOR_LABEL = {
-  EQ: 'Bang (=)',
-  GTE: 'Lon hon hoac bang (>=)',
-  LTE: 'Nho hon hoac bang (<=)',
+  EQ: 'Bằng (=)',
+  GTE: 'Lớn hơn hoặc bằng (>=)',
+  LTE: 'Nhỏ hơn hoặc bằng (<=)',
 };
 export const CONDITION_OPERATOR_OPTIONS = Object.values(ConditionOperator).map((v) => ({
   value: v,
@@ -83,9 +83,9 @@ export const CONDITION_OPERATOR_OPTIONS = Object.values(ConditionOperator).map((
 }));
 
 export const COUPON_STATUS_LABEL = {
-  ACTIVE: 'Dang hoat dong',
-  PAUSED: 'Tam dung',
-  EXPIRED: 'Het han',
+  ACTIVE: 'Đang hoạt động',
+  PAUSED: 'Tạm dừng',
+  EXPIRED: 'Hết hạn',
 };
 export const COUPON_STATUS_OPTIONS = Object.values(CouponStatus).map((v) => ({
   value: v,

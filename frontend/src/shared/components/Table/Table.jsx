@@ -41,7 +41,7 @@ export function Table({ columns, data, rowKey, isLoading, emptyMessage }) {
             ) : data.length === 0 ? (
               <tr className={styles.emptyRow}>
                 <td colSpan={columns.length}>
-                  <EmptyState message={emptyMessage ?? 'Khong co du lieu'} />
+                  <EmptyState message={emptyMessage ?? 'Không có dữ liệu'} />
                 </td>
               </tr>
             ) : (
