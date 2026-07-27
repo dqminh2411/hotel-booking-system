@@ -1,0 +1,77 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $space-2;
+  height: 40px;
+  padding: 0 $space-4;
+  border-radius: $radius-sm;
+  border: 1px solid transparent;
+  font-size: $font-size-md;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background $transition-fast, border-color $transition-fast, color $transition-fast, box-shadow $transition-fast;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.sm {
+  height: 32px;
+  padding: 0 $space-3;
+  font-size: $font-size-sm;
+}
+
+.lg {
+  height: 46px;
+  padding: 0 $space-5;
+  font-size: $font-size-lg;
+}
+
+.primary {
+  background: $color-primary-500;
+  color: $color-white;
+
+  &:hover:not(:disabled) {
+    background: $color-primary-600;
+  }
+}
+
+.secondary {
+  background: $color-white;
+  color: $color-primary-700;
+  border-color: $color-border-strong;
+
+  &:hover:not(:disabled) {
+    background: $color-primary-50;
+    border-color: $color-primary-500;
+  }
+}
+
+.danger {
+  background: $color-white;
+  color: $color-danger;
+  border-color: $color-border-strong;
+
+  &:hover:not(:disabled) {
+    background: $color-danger-bg;
+    border-color: $color-danger;
+  }
+}
+
+.ghost {
+  background: transparent;
+  color: $color-primary-700;
+
+  &:hover:not(:disabled) {
+    background: $color-primary-50;
+  }
+}
+
+.fullWidth {
+  width: 100%;
+}

@@ -1,0 +1,23 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.bar {
+  display: flex;
+  align-items: flex-end;
+  gap: $space-4;
+  background: $color-surface;
+  border: 1px solid $color-border;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  padding: $space-4 $space-5;
+  margin-bottom: $space-5;
+  flex-wrap: wrap;
+}
+
+.searchField {
+  flex: 1;
+  min-width: 220px;
+}
+
+.statusField {
+  min-width: 200px;
+}

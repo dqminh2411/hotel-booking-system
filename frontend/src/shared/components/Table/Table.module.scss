@@ -1,0 +1,60 @@
+@use '@/shared/styles/variables.scss' as *;
+
+.wrapper {
+  background: $color-surface;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+  border: 1px solid $color-border;
+  overflow: hidden;
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  min-width: 640px;
+}
+
+.table thead th {
+  text-align: left;
+  font-size: $font-size-xs;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $color-text-secondary;
+  background: $color-primary-50;
+  padding: $space-3 $space-4;
+  border-bottom: 1px solid $color-border;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: $space-4;
+  border-bottom: 1px solid $color-border;
+  font-size: $font-size-md;
+  color: $color-text;
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr {
+  transition: background $transition-fast;
+}
+
+.table tbody tr:hover {
+  background: $color-primary-50;
+}
+
+.alignRight {
+  text-align: right;
+}
+
+.loadingRow td,
+.emptyRow td {
+  padding: $space-10;
+  text-align: center;
+}
