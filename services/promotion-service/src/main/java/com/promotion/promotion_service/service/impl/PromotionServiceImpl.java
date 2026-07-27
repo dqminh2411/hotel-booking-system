@@ -24,7 +24,6 @@ import com.promotion.promotion_service.repository.PromotionScopeRepository;
 import com.promotion.promotion_service.repository.PromotionUsageRepository;
 import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
-import com.promotion.promotion_service.exception.ResourceNotFoundException;
 import jakarta.ws.rs.BadRequestException;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
