@@ -51,16 +51,9 @@ public class InventoryWarnUpSchedule {
 
     @Scheduled(cron = "0 0 2 * * *")
     public void setNewDay(){
-        LocalDate newDay = LocalDate.now().plusDays(WARM_UP_DAYS);
-
         clearKeys(LocalDate.now().minusDays(1));
 
-        warnUpWindow(newDay, newDay.plusDays(1));
-        // nếu như chỉ xóa ngày cũ và thêm ngày thứ 181 thì cũng ok
-        // nhưng sợ trường hợp kiểu giá trị của mấy ngày từ 61->... nó bị cũ quá không
-        // vì mình chỉ làm mới khoảng 60 ngày mỗi 15p vì dễ được đặt hơn
-        // xem xong có gì bảo thêm t nhé
-        
+        warnUpWindow(LocalDate.now(), LocalDate.now().plusDays(WARM_UP_DAYS));
     }
 
     private void warnUpWindow(LocalDate from, LocalDate to){
