@@ -11,6 +11,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
+import com.hotelbooking.bookingservice.enums.ReserveResult;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -23,34 +25,42 @@ import lombok.extern.slf4j.Slf4j;
 public class RoomInventoryRedisService {
     StringRedisTemplate stringRedisTemplate;
 
-    public boolean tryReserve(Map<UUID, Integer> roomTypeQuantities, LocalDate checkin, LocalDate checkout){
+    private static final DefaultRedisScript<Long> RESERVE_SCRIPT = loadScript("redis/reserve_inventory.lua");
+    private static final DefaultRedisScript<Long> RELEASE_SCRIPT = loadScript("redis/release_inventory.lua");
+ 
+    private static DefaultRedisScript<Long> loadScript(String classpathLocation) {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource(classpathLocation));
+        script.setResultType(Long.class);
+        return script;
+    }
+
+    public ReserveResult tryReserve(UUID bookingId, Map<UUID, Integer> roomTypeQuantities, LocalDate checkin, LocalDate checkout){
         List<String> keys = new ArrayList<>();
         List<String> args = new ArrayList<>();
 
+        keys.add("reserved:booking:" + bookingId.toString());
+        args.add(String.valueOf(-1));
+
         buildKeysAndArgs(roomTypeQuantities, checkin, checkout, keys, args);
 
-        DefaultRedisScript<Long> defaultRedisScript = new DefaultRedisScript<>();
-        defaultRedisScript.setLocation(new ClassPathResource("redis/reserve_inventory.lua"));
-        defaultRedisScript.setResultType(Long.class);
+        Long result = stringRedisTemplate.execute(RESERVE_SCRIPT, keys, args.toArray());
 
-        Long result = stringRedisTemplate.execute(defaultRedisScript, keys, args.toArray());
-
-        return result != null && result == 1L;
+        if (result == null || result == -1L) return ReserveResult.UNKNOWN;
+        return result == 1L ? ReserveResult.RESERVED : ReserveResult.REJECTED;
     }
 
-    public void release(Map<UUID, Integer> roomTypeQuantities, LocalDate checkin, LocalDate checkout){
+    public void release(UUID bookingId, Map<UUID, Integer> roomTypeQuantities, LocalDate checkin, LocalDate checkout){
         try {
             List<String> keys = new ArrayList<>();
             List<String> args = new ArrayList<>();
 
+            keys.add("reserved:booking:" + bookingId.toString());
+            args.add(String.valueOf(-1));
+
             buildKeysAndArgs(roomTypeQuantities, checkin, checkout, keys, args);
 
-            
-            DefaultRedisScript<Long> defaultRedisScript = new DefaultRedisScript<>();
-            defaultRedisScript.setLocation(new ClassPathResource("redis/release_inventory.lua"));
-            defaultRedisScript.setResultType(Long.class);
-
-            stringRedisTemplate.execute(defaultRedisScript, keys, args.toArray());
+            stringRedisTemplate.execute(RELEASE_SCRIPT, keys, args.toArray());
             
             log.info("Đã trả phòng thành công");
         } catch (Exception e) {
@@ -70,9 +80,9 @@ public class RoomInventoryRedisService {
 
             LocalDate date = checkin;
             while (date.isBefore(checkout)) {
-                keys.add("avail:" + roomTypeId + ":" + date.toString());
+                keys.add("avail:" + roomTypeId.toString() + ":" + date.toString());
                 args.add(String.valueOf(quantity));
-                date.plusDays(1);
+                date = date.plusDays(1);
             }
         }
     }
