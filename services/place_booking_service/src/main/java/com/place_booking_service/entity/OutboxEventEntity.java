@@ -1,4 +1,4 @@
-package com.hotelbooking.bookingservice.entity;
+package com.place_booking_service.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,5 +44,4 @@ public class OutboxEventEntity {
 
     @Column(name = "published_at")
     private Instant publishedAt;
-
 }

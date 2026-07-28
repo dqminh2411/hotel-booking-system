@@ -14,6 +14,7 @@ import com.hotelbooking.bookingservice.dto.kafka.BookingCancelled;
 import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
 import com.hotelbooking.bookingservice.dto.kafka.BookingCreated;
 import com.hotelbooking.bookingservice.dto.kafka.BookingFailed;
+import com.hotelbooking.bookingservice.dto.OutboxEventPublishEvent;
 import com.hotelbooking.bookingservice.dto.kafka.CreateBookingCommand;
 import com.hotelbooking.bookingservice.entity.BookedRoomTypeEntity;
 import com.hotelbooking.bookingservice.entity.BookingEntity;
@@ -21,6 +22,7 @@ import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
+import com.hotelbooking.bookingservice.enums.OutboxEventStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
 import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
@@ -42,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
@@ -49,10 +52,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -63,6 +68,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BookingService {
     private static final String OUTBOX_TOPIC = "booking-events";
     private static final List<BookingStatus> ACTIVE_STATUSES = List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.CHECKEDIN);
+    private static final Integer MAX_RETRIES = 5;
 
     BookingRepository bookingRepository;
     BookedRoomTypeRepository bookedRoomTypeRepository;
@@ -73,6 +79,10 @@ public class BookingService {
     StringRedisTemplate stringRedisTemplate;
     HotelServiceFiegnClient hotelServiceFiegnClient;
     CheckinCheckoutService checkinCheckoutService;
+
+    private final KafkaTemplate<String, String> kafkaTemplate;
+
+    ApplicationEventPublisher eventPublisher;
 
 
     public BookingResponse getBookingById(UUID bookingId) {
@@ -405,12 +415,74 @@ public class BookingService {
             outbox.setId(UUID.randomUUID());
             outbox.setTopic(OUTBOX_TOPIC);
             outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setPublished(Boolean.FALSE);
+            outbox.setStatus(OutboxEventStatus.PENDING.toString());
             outbox.setCreatedAt(Instant.now());
+            outbox.setRetryCount(0);
             outboxEventRepository.save(outbox);
+
+            eventPublisher.publishEvent(new OutboxEventPublishEvent());
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    /***
+     * lấy Outbox event, 
+     * nếu status hiện tại là PENDING thì đánh dấu status = PROCESSING
+     * nếu status hiện tại là PROCESSING thì 
+     * - nếu retry_count >= MAX_RETRIES thì đánh dấu status = DEAD_LETTER
+     * - nếu retry_count < MAX_RETRIES thì tính thời gian retry lần kế tiếp nếu lần gửi này thất bại sử dụng exponential backoff và jitter.
+     * set thời gian lock timeout: locked_until = current_time + TIMEOUT_IN_SECONDS
+     */
+    
+    @Transactional
+    public List<OutboxEventEntity> getAndProcessOutboxEvents(){
+
+        int TIMEOUT_IN_SECONDS = 30;
+        List<OutboxEventEntity> events = outboxEventRepository.findEventsToPublish();
+        events.stream().forEach(event -> {
+
+            if(OutboxEventStatus.PENDING.toString().equals(event.getStatus())){
+                event.setStatus(OutboxEventStatus.PROCESSING.toString());
+            }else {
+                event.setRetryCount(event.getRetryCount() + 1);
+                if(event.getRetryCount() >= MAX_RETRIES) {
+                    event.setStatus(OutboxEventStatus.DEAD_LETTER.toString());
+                } else {
+                    long baseDelay = (long) Math.pow(2, event.getRetryCount());
+                    long jitter = ThreadLocalRandom.current().nextLong(baseDelay / 2 + 1); // 0 - 50% of baseDelay
+                    event.setNextRetryAt(Instant.now().plusSeconds(baseDelay + jitter));
+                }
+            }
+            event.setLockedUntil(Instant.now().plusSeconds(TIMEOUT_IN_SECONDS));
+        });
+
+        return outboxEventRepository.saveAll(events);
+    }
+
+    // gửi outbox event tới Kafka
+
+    public void sendOutboxEventToKafka(List<OutboxEventEntity> events){
+        for (OutboxEventEntity event : events) {
+            try {
+                JsonNode payloadNode = objectMapper.readTree(event.getPayload());
+                String bookingId = payloadNode.path("bookingId").asText(null);
+                if (bookingId == null || bookingId.isBlank()) {
+                    bookingId = payloadNode.path("booking").path("bookingId").asText(null);
+                }
+                String topic = event.getTopic() == null || event.getTopic().isBlank()
+                    ? OUTBOX_TOPIC
+                    : event.getTopic();
+                kafkaTemplate.send(topic, bookingId, event.getPayload()).get();
+
+                event.setStatus(OutboxEventStatus.PUBLISHED.toString());
+                event.setPublishedAt(Instant.now());
+                outboxEventRepository.save(event);
+            } catch (Exception ex) {
+                log.error("Failed to relay outbox event id={}", event.getId(), ex);
+            }
+        }
+        
     }
 
     private BookingDetail getBookingDetailByBookingId(UUID bookingId) {

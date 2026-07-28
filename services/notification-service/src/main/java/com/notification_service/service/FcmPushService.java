@@ -12,10 +12,12 @@ import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.SendResponse;
+import com.notification_service.dto.RevokeDeviceTokenRequest;
 import com.notification_service.entity.DeviceTokenEntity;
 import com.notification_service.repository.DeviceTokenRepository;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,6 +136,7 @@ public class FcmPushService {
                         response.getFailureCount());
                 for (int i = 0; i < response.getResponses().size(); i++) {
                     SendResponse sendResponse = response.getResponses().get(i);
+                    
                     if (!sendResponse.isSuccessful()) {
                         FirebaseMessagingException ex = sendResponse.getException();
                         log.warn("FCM token failed. userId={}, tokenIndex={}, errorCode={}, message={}, token={}",
@@ -142,7 +145,19 @@ public class FcmPushService {
                                 ex.getMessagingErrorCode(),
                                 ex.getMessage(),
                                 tokens.get(i));
+                        
+                        if("UNREGISTERED".equals(ex.getMessagingErrorCode().toString())){
+                            Instant now = Instant.now();
+                            deviceTokenRepository.findByUserIdAndFcmTokenAndActiveTrue(userId, tokens.get(i))
+                                    .ifPresent(token -> {
+                                        token.setActive(false);
+                                        token.setInvalidatedAt(now);
+                                        token.setUpdatedAt(now);
+                                        deviceTokenRepository.save(token);
+                                    });
+                        }
                     }
+                    
                 }
             }
         } catch (Exception error) {
