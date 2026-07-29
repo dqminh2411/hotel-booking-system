@@ -1,0 +1,707 @@
+openapi: 3.0.3
+info:
+  title: Audit Service API — HotelHub SaaS Platform
+  description: |
+    API quản lý và truy vấn Business Audit Log cho hệ thống HotelHub.
+    
+    Audit Service thu nhận các sự kiện nghiệp vụ từ tất cả microservices qua Kafka,
+    lưu trữ vào MongoDB (append-only, immutable), và cung cấp REST API để truy vấn.
+    
+    **Phân quyền:**
+    - Platform Admin: xem toàn bộ log mọi tenant
+    - Hotel Owner: xem log trong phạm vi tenant của mình
+    - Hotel Staff: xem log booking/check-in/check-out tại khách sạn được gán
+  version: 1.0.0
+  contact:
+    name: HotelHub Development Team
+
+servers:
+  - url: http://localhost:8080
+    description: API Gateway (development)
+
+tags:
+  - name: Audit Logs
+    description: Truy vấn và tìm kiếm audit log
+  - name: Entity History
+    description: Xem lịch sử thay đổi của một entity cụ thể
+  - name: Statistics
+    description: Thống kê audit log
+
+paths:
+  /api/audit-logs:
+    get:
+      tags:
+        - Audit Logs
+      summary: Truy vấn audit log
+      description: |
+        Truy vấn danh sách audit log với nhiều filter.
+        
+        - **Admin**: xem toàn bộ log mọi tenant
+        - **Owner**: tự động filter theo tenantId từ JWT
+        - **Staff**: chỉ xem log BOOKING/HOTEL tại khách sạn được gán
+        
+        Kết quả trả về dạng phân trang, sắp xếp theo `timestamp` giảm dần mặc định.
+      operationId: getAuditLogs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          description: Thời gian bắt đầu (ISO-8601). VD: 2026-07-01T00:00:00Z
+          schema:
+            type: string
+            format: date-time
+          example: "2026-07-01T00:00:00Z"
+
+        - name: endDate
+          in: query
+          description: Thời gian kết thúc (ISO-8601). VD: 2026-07-31T23:59:59Z
+          schema:
+            type: string
+            format: date-time
+          example: "2026-07-31T23:59:59Z"
+
+        - name: actorId
+          in: query
+          description: UUID của actor (người thực hiện hành động)
+          schema:
+            type: string
+            format: uuid
+
+        - name: actorType
+          in: query
+          description: Loại actor
+          schema:
+            type: string
+            enum:
+              - CUSTOMER
+              - STAFF
+              - OWNER
+              - ADMIN
+              - SYSTEM
+
+        - name: action
+          in: query
+          description: |
+            Action code cụ thể.
+            VD: BOOKING_CREATED, PAYMENT_SUCCESS, USER_ACCOUNT_LOCKED
+          schema:
+            type: string
+          example: "BOOKING_CREATED"
+
+        - name: actionCategory
+          in: query
+          description: Nhóm hành động
+          schema:
+            type: string
+            enum:
+              - AUTH
+              - BOOKING
+              - PAYMENT
+              - HOTEL
+              - PROMOTION
+              - ADMIN
+              - NOTIFICATION
+
+        - name: entityType
+          in: query
+          description: Loại entity bị tác động
+          schema:
+            type: string
+            enum:
+              - BOOKING
+              - HOTEL
+              - USER
+              - PAYMENT
+              - ROOM
+              - ROOM_TYPE
+              - PROMOTION
+              - COUPON
+              - NOTIFICATION
+              - TENANT
+
+        - name: entityId
+          in: query
+          description: ID cụ thể của entity
+          schema:
+            type: string
+
+        - name: severity
+          in: query
+          description: Mức độ nghiêm trọng
+          schema:
+            type: string
+            enum:
+              - INFO
+              - WARN
+              - ERROR
+
+        - name: resultStatus
+          in: query
+          description: Kết quả hành động
+          schema:
+            type: string
+            enum:
+              - SUCCESS
+              - FAILURE
+              - PARTIAL
+
+        - name: serviceName
+          in: query
+          description: Tên service phát sinh event
+          schema:
+            type: string
+          example: "booking-service"
+
+        - name: correlationId
+          in: query
+          description: Correlation/Trace ID xuyên service
+          schema:
+            type: string
+
+        - name: search
+          in: query
+          description: Full-text search trên trường description
+          schema:
+            type: string
+          example: "Khách hàng hủy"
+
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 0)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+
+        - name: size
+          in: query
+          description: Số lượng mỗi trang
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+
+        - name: sort
+          in: query
+          description: |
+            Sắp xếp. Format: `field,direction`.
+            VD: `timestamp,desc` hoặc `timestamp,asc`.
+          schema:
+            type: string
+            default: "timestamp,desc"
+
+      responses:
+        '200':
+          description: Trả về danh sách audit log phân trang
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPageResponse'
+              example:
+                content:
+                  - eventId: "550e8400-e29b-41d4-a716-446655440000"
+                    timestamp: "2026-07-28T10:30:00Z"
+                    tenantId: "tenant-uuid-123"
+                    actor:
+                      id: "user-uuid-456"
+                      type: "CUSTOMER"
+                      email: "customer@example.com"
+                      ip: "192.168.1.100"
+                    action: "BOOKING_CREATED"
+                    actionCategory: "BOOKING"
+                    severity: "INFO"
+                    entity:
+                      type: "BOOKING"
+                      id: "booking-uuid-789"
+                    serviceName: "booking-service"
+                    correlationId: "saga-uuid-abc"
+                    description: "Khách hàng tạo đơn đặt phòng mới tại Khách sạn ABC"
+                    resultStatus: "SUCCESS"
+                    newValue:
+                      status: "PENDING"
+                      totalAmount: 1500000
+                page: 0
+                size: 20
+                totalElements: 1543
+                totalPages: 78
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/audit-logs/{eventId}:
+    get:
+      tags:
+        - Audit Logs
+      summary: Xem chi tiết 1 audit log entry
+      description: |
+        Trả về đầy đủ thông tin của 1 audit log entry theo eventId,
+        bao gồm oldValue, newValue, metadata.
+      operationId: getAuditLogByEventId
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          description: UUID của audit event
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Chi tiết audit log entry
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogDetail'
+        '404':
+          description: Không tìm thấy audit log với eventId này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "AUDIT_LOG_NOT_FOUND"
+                message: "Audit log entry not found"
+                status: 404
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/audit-logs/entity/{entityType}/{entityId}/history:
+    get:
+      tags:
+        - Entity History
+      summary: Xem lịch sử thay đổi của 1 entity
+      description: |
+        Trả về danh sách tất cả audit log liên quan đến 1 entity cụ thể,
+        sắp xếp theo thời gian.
+        
+        VD: Xem toàn bộ lịch sử booking-789 từ tạo → confirmed → check-in → check-out.
+        
+        Hữu ích cho việc trace lifecycle của booking, hotel, payment...
+      operationId: getEntityHistory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          description: Loại entity
+          schema:
+            type: string
+            enum:
+              - BOOKING
+              - HOTEL
+              - USER
+              - PAYMENT
+              - ROOM
+              - ROOM_TYPE
+              - PROMOTION
+              - COUPON
+              - NOTIFICATION
+              - TENANT
+          example: "BOOKING"
+
+        - name: entityId
+          in: path
+          required: true
+          description: ID của entity
+          schema:
+            type: string
+          example: "booking-uuid-789"
+
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+
+      responses:
+        '200':
+          description: Timeline lịch sử thay đổi của entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPageResponse'
+              example:
+                content:
+                  - eventId: "event-001"
+                    timestamp: "2026-07-28T10:00:00Z"
+                    action: "BOOKING_CREATED"
+                    severity: "INFO"
+                    description: "Khách hàng tạo đơn đặt phòng"
+                    resultStatus: "SUCCESS"
+                    newValue:
+                      status: "PENDING"
+                  - eventId: "event-002"
+                    timestamp: "2026-07-28T10:01:30Z"
+                    action: "BOOKING_CONFIRMED"
+                    severity: "INFO"
+                    description: "Booking xác nhận tự động sau thanh toán"
+                    resultStatus: "SUCCESS"
+                    oldValue:
+                      status: "PENDING"
+                    newValue:
+                      status: "CONFIRMED"
+                  - eventId: "event-003"
+                    timestamp: "2026-08-01T14:00:00Z"
+                    action: "BOOKING_CHECKED_IN"
+                    severity: "INFO"
+                    description: "Nhân viên thực hiện check-in"
+                    resultStatus: "SUCCESS"
+                    oldValue:
+                      status: "CONFIRMED"
+                    newValue:
+                      status: "CHECKEDIN"
+                page: 0
+                size: 50
+                totalElements: 3
+                totalPages: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/audit-logs/statistics:
+    get:
+      tags:
+        - Statistics
+      summary: Thống kê audit log
+      description: |
+        Trả về thống kê tổng hợp audit log trong khoảng thời gian:
+        - Số lượng log theo action category
+        - Số lượng log theo severity
+        - Số lượng log theo ngày (trend)
+        - Top actors (ai có nhiều hành động nhất)
+        
+        Chỉ dành cho Platform Admin.
+      operationId: getAuditLogStatistics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2026-07-01T00:00:00Z"
+
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2026-07-31T23:59:59Z"
+
+        - name: tenantId
+          in: query
+          description: Lọc theo tenant (chỉ Admin dùng, Owner tự động filter)
+          schema:
+            type: string
+            format: uuid
+
+      responses:
+        '200':
+          description: Thống kê audit log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogStatistics'
+              example:
+                totalEvents: 12543
+                byActionCategory:
+                  - category: "BOOKING"
+                    count: 5200
+                  - category: "PAYMENT"
+                    count: 3100
+                  - category: "AUTH"
+                    count: 2500
+                  - category: "HOTEL"
+                    count: 800
+                  - category: "PROMOTION"
+                    count: 543
+                  - category: "ADMIN"
+                    count: 200
+                  - category: "NOTIFICATION"
+                    count: 200
+                bySeverity:
+                  - severity: "INFO"
+                    count: 11000
+                  - severity: "WARN"
+                    count: 1200
+                  - severity: "ERROR"
+                    count: 343
+                dailyTrend:
+                  - date: "2026-07-28"
+                    count: 420
+                  - date: "2026-07-29"
+                    count: 385
+                topActors:
+                  - actorId: "user-001"
+                    actorEmail: "admin@hotel.com"
+                    count: 320
+                  - actorId: "user-002"
+                    actorEmail: "staff@hotel.com"
+                    count: 210
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token từ Keycloak
+
+  schemas:
+    # === Audit Log Entry (summary, dùng trong danh sách) ===
+    AuditLogSummary:
+      type: object
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: ID duy nhất của audit event (idempotency key)
+        timestamp:
+          type: string
+          format: date-time
+          description: Thời điểm sự kiện xảy ra
+        tenantId:
+          type: string
+          format: uuid
+        actor:
+          $ref: '#/components/schemas/Actor'
+        action:
+          type: string
+          description: Action code
+          example: "BOOKING_CREATED"
+        actionCategory:
+          type: string
+          enum: [AUTH, BOOKING, PAYMENT, HOTEL, PROMOTION, ADMIN, NOTIFICATION]
+        severity:
+          type: string
+          enum: [INFO, WARN, ERROR]
+        entity:
+          $ref: '#/components/schemas/Entity'
+        serviceName:
+          type: string
+          example: "booking-service"
+        correlationId:
+          type: string
+          nullable: true
+        description:
+          type: string
+          example: "Khách hàng tạo đơn đặt phòng mới"
+        resultStatus:
+          type: string
+          enum: [SUCCESS, FAILURE, PARTIAL]
+      required:
+        - eventId
+        - timestamp
+        - tenantId
+        - action
+        - actionCategory
+        - severity
+        - entity
+        - serviceName
+        - resultStatus
+
+    # === Audit Log Detail (đầy đủ, bao gồm old/new value) ===
+    AuditLogDetail:
+      allOf:
+        - $ref: '#/components/schemas/AuditLogSummary'
+        - type: object
+          properties:
+            oldValue:
+              type: object
+              nullable: true
+              description: Giá trị trước khi thay đổi (flexible JSON)
+            newValue:
+              type: object
+              nullable: true
+              description: Giá trị sau khi thay đổi (flexible JSON)
+            metadata:
+              type: object
+              nullable: true
+              description: Dữ liệu bổ sung (flexible JSON)
+            errorMessage:
+              type: string
+              nullable: true
+              description: Lý do thất bại (nếu resultStatus = FAILURE)
+            receivedAt:
+              type: string
+              format: date-time
+              description: Thời điểm Audit Service nhận được event
+
+    # === Actor ===
+    Actor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "null nếu actor là SYSTEM"
+        type:
+          type: string
+          enum: [CUSTOMER, STAFF, OWNER, ADMIN, SYSTEM]
+        email:
+          type: string
+          nullable: true
+          description: Snapshot email tại thời điểm log
+        ip:
+          type: string
+          nullable: true
+          description: IPv4 hoặc IPv6
+      required:
+        - type
+
+    # === Entity ===
+    Entity:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [BOOKING, HOTEL, USER, PAYMENT, ROOM, ROOM_TYPE, PROMOTION, COUPON, NOTIFICATION, TENANT]
+        id:
+          type: string
+          description: ID của entity bị tác động
+      required:
+        - type
+        - id
+
+    # === Paginated Response ===
+    AuditLogPageResponse:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogSummary'
+        page:
+          type: integer
+          description: Trang hiện tại (0-indexed)
+        size:
+          type: integer
+          description: Số lượng mỗi trang
+        totalElements:
+          type: integer
+          format: int64
+          description: Tổng số phần tử
+        totalPages:
+          type: integer
+          description: Tổng số trang
+
+    # === Statistics ===
+    AuditLogStatistics:
+      type: object
+      properties:
+        totalEvents:
+          type: integer
+          format: int64
+          description: Tổng số audit event trong khoảng thời gian
+        byActionCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                type: string
+              count:
+                type: integer
+                format: int64
+        bySeverity:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+              count:
+                type: integer
+                format: int64
+        dailyTrend:
+          type: array
+          description: Số lượng event theo ngày
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+                format: int64
+        topActors:
+          type: array
+          description: Top actors có nhiều hành động nhất
+          items:
+            type: object
+            properties:
+              actorId:
+                type: string
+              actorEmail:
+                type: string
+              count:
+                type: integer
+                format: int64
+
+    # === Error Response ===
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mã lỗi
+        message:
+          type: string
+          description: Thông báo lỗi
+        status:
+          type: integer
+          description: HTTP status code
+      required:
+        - error
+        - message
+        - status
+
+  responses:
+    Unauthorized:
+      description: Chưa xác thực — JWT không hợp lệ hoặc hết hạn
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "JWT token is missing or invalid"
+            status: 401
+
+    Forbidden:
+      description: Không đủ quyền truy cập
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "FORBIDDEN"
+            message: "You do not have permission to access this resource"
+            status: 403

@@ -588,6 +588,53 @@ services:
       - ./keycloak/import:/opt/keycloak/data/import
     networks:
       - app-network
+
+  audit-db:
+    image: mongo:7.0
+    container_name: audit-db
+    restart: unless-stopped
+    ports:
+      - "${AUDIT_DB_EXTERNAL_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: audit_db
+    volumes:
+      - audit-db-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  audit-service:
+    build: ./services/audit-service
+    ports:
+      - "${AUDIT_SERVICE_PORT:-5008}:5000"
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 5000
+      MONGO_URI: mongodb://audit-db:27017/audit_db
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      KAFKA_CONSUMER_GROUP: audit-service-group
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8085/realms/hotel-booking-system}
+      KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs}
+    depends_on:
+      audit-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - app-network
+    volumes:
+      - ./services/audit-service:/app
+      - maven-cache:/root/.m2
+
 networks:
   app-network:
     driver: bridge
@@ -601,3 +648,5 @@ volumes:
   maven-cache:
   redis-data:
   keycloak-db-data:
+  audit-db-data:
+
