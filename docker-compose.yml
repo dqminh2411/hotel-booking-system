@@ -120,6 +120,27 @@ services:
     networks:
       - app-network
 
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - ./minio/data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
   user-db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -319,12 +340,20 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      MINIO_BUCKET_HOTEL_IMAGES: ${MINIO_BUCKET_HOTEL_IMAGES:-hotel-images}
+
     depends_on:
       hotel-db:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks:
       - app-network
@@ -601,3 +630,4 @@ volumes:
   maven-cache:
   redis-data:
   keycloak-db-data:
+  minio-data:
