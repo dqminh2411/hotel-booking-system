@@ -73,6 +73,7 @@ public class BookingService {
     StringRedisTemplate stringRedisTemplate;
     HotelServiceFiegnClient hotelServiceFiegnClient;
     CheckinCheckoutService checkinCheckoutService;
+    RoomInventoryRedisService roomInventoryRedisService;
 
 
     public BookingResponse getBookingById(UUID bookingId) {
@@ -257,7 +258,7 @@ public class BookingService {
     }
 
     @Transactional
-    public void handleCreateBooking(CreateBookingCommand command, List<UUID> sortedRoomTypeId){
+    public void handleCreateBooking(CreateBookingCommand command, List<UUID> sortedRoomTypeId, boolean isReversed){
         validateCreateCommand(command);
         if(bookingRepository.existsById(command.bookingId())){
             return;
@@ -336,6 +337,16 @@ public class BookingService {
         if(isRoomTypeNotEnough){
             bookingEntity.setStatus(BookingStatus.FAILED);
             bookingRepository.save(bookingEntity);
+
+            if(isReversed){
+                Map<UUID, Integer> roomTypeQuantities = command.roomTypeList().stream()
+                                                                .collect(Collectors.toMap(
+                                                                    CreateBookingCommand.RoomTypeItem::roomTypeId,
+                                                                    CreateBookingCommand.RoomTypeItem::bookingQuantity,
+                                                                    Integer::sum
+                                                                ));
+                roomInventoryRedisService.release(command.bookingId(), roomTypeQuantities, command.checkin(), command.checkout());
+            }
             saveOutboxEvent(
                     new BookingFailed(
                         command.sagaId(),
@@ -382,6 +393,11 @@ public class BookingService {
     private void updateStatusFromCommand(UUID sagaId, UUID bookingId, BookingStatus targetStatus, String eventType, String reason) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
+
+        if (booking.getStatus() == targetStatus) {
+            return;
+        }
+
         booking.setStatus(targetStatus);
         bookingRepository.save(booking);
 
@@ -392,6 +408,13 @@ public class BookingService {
         }
 
         saveOutboxEvent(new BookingCancelled(sagaId, eventType, bookingDetail, reason));
+        Map<UUID, Integer> roomTypeQuantities = bookingDetail.getRoomTypeList().stream()
+                                                            .collect(Collectors.toMap(
+                                                                BookingDetail.RoomType::getRoomTypeId,
+                                                                BookingDetail.RoomType::getBookingQuantity,
+                                                                Integer::sum
+                                                            ));
+        roomInventoryRedisService.release(bookingId, roomTypeQuantities, booking.getCheckinDate(), booking.getCheckoutDate());
         try {
             clearHotelDetailCache(bookingDetail.getHotel().getHotelId());
         } catch (Exception e) {
