@@ -48,7 +48,7 @@ public class AuditLogDocument {
     @Indexed(name = "idx_correlationId", sparse = true)
     private String correlationId;
 
-    @TextIndexed(name = "idx_description_text")
+    @TextIndexed
     private String description;
 
     private Object oldValue;
@@ -57,7 +57,7 @@ public class AuditLogDocument {
 
     private String resultStatus;
 
-    @TextIndexed(name = "idx_errorMessage_text")
+    @TextIndexed
     private String errorMessage;
 
     private Instant receivedAt;
