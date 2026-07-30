@@ -888,7 +888,7 @@ public class PromotionServiceImpl implements PromotionService {
         // nếu có yêu cầu dùng promotion bị trùng
         if (promotionUsageRepository.existsByIdempotencyKey(idempotencyKey)) {
             Optional<PromotionUsageEntity> existing = promotionUsageRepository.findByBookingId(command.getBookingId());
-            
+
             if (existing.isPresent() && existing.get().getStatus() != PromotionUsageStatus.CANCELLED) {
                 PromotionUsageEntity u = existing.get();
                 BigDecimal finalAmt = command.getTotalAmount().subtract(u.getDiscountAmount()).max(BigDecimal.ZERO);
