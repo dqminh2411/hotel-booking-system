@@ -23,6 +23,8 @@ public class MinioStorageServiceImpl implements MinioStorageService {
     public String uploadFile(String bucketName, String objectName, InputStream stream, long size, String contentType) {
 
         try {
+            ensureBucket(bucketName);
+
             minioClient.putObject(
                     PutObjectArgs.builder()
                             .bucket(bucketName)
