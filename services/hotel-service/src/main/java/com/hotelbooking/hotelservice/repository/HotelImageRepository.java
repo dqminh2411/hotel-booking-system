@@ -11,4 +11,6 @@ public interface HotelImageRepository extends JpaRepository<HotelImageEntity, UU
 
     List<HotelImageEntity> findByHotel_IdOrderByIsCoverDescCreatedAtAsc(UUID hotelId);
     List<HotelImageEntity> findByHotel_IdInAndIsCoverTrue(List<UUID> hotelIds);
+
+    List<HotelImageEntity> findAllByIdInAndHotel_Id(List<UUID> imgIds, UUID hotelId);
 }

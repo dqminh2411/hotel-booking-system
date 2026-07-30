@@ -7,12 +7,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +38,11 @@ import com.hotelbooking.hotelservice.repository.HotelRepository;
 import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
 import com.hotelbooking.hotelservice.service.AdminService;
 
+import io.minio.MinioClient;
+import io.minio.RemoveObjectsArgs;
+import io.minio.Result;
+import io.minio.messages.DeleteError;
+import io.minio.messages.DeleteObject;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -53,6 +61,13 @@ public class AdminServiceImpl implements AdminService{
     UserServiceFeignClient userServiceFeignClient;
     ObjectMapper objectMapper;
     OutboxEventRepository outboxEventRepository;
+    MinioClient minioClient;
+
+    @Value("${minio.endpoint:http://minio:9000}")
+    String endpoint;
+
+    @Value("${minio.bucket.hotel-images:hotel-images}")
+    String bucket;
 
     @Override
     @Transactional(readOnly = true)
@@ -116,19 +131,55 @@ public class AdminServiceImpl implements AdminService{
                     request.reason()        
         );
         saveOutboxEvent(emailRequest, "hotel-status-actions");
-        // invalid keys của hotel trong redis
-        String keyPattern = "hotel-detail-availability" + "::" + hotelId.toString() + "::*";
-        Set<String> keysToDelete = stringRedisTemplate.keys(keyPattern);
-
-        if(keysToDelete != null && !keysToDelete.isEmpty()){
-            stringRedisTemplate.delete(keysToDelete);
-        }
+        
+        // clearKeyHotelId(hotelId);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearKeyHotelId(hotelId);
+            }
+        });
     }
 
     @Override
     @Transactional
     public void deleteHotelImages(HotelImageDelRequest request){
+        List<HotelImageEntity> images = hotelImageRepository.findAllByIdInAndHotel_Id(request.imgIds(), request.hotelId());
+
+        if(images.size() != request.imgIds().size()){
+            throw new AppException("IMAGE_NOT_AVAILABLE", "Một số ảnh không tồn tại hoặc không thuộc hotel", HttpStatus.BAD_REQUEST);
+        }
+
+        List<DeleteObject> imgNames = images.stream()
+                                    .map(img -> new DeleteObject(extractImgName(img.getUrl())))
+                                    .toList();
+
+        hotelImageRepository.deleteAll(images);
         
+        try {
+            Iterable<Result<DeleteError>> results = minioClient.removeObjects(
+                        RemoveObjectsArgs.builder()
+                                .bucket(bucket)
+                                .objects(imgNames)
+                                .build()
+            );
+
+            for(Result<DeleteError> result : results){
+                DeleteError error = result.get();
+                log.error("Lỗi khi xóa ảnh {} khỏi MinIO: {}", error.objectName(), error.message());
+            }
+        } catch (Exception e) {
+            log.error("Lỗi không xóa ảnh khổi MinIO được: bucket={}, imgNames={}", bucket, imgNames, e);
+            throw new AppException("INTERNAL_SERVER_ERROR", "Lỗi không xóa được ảnh trong MinIO", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        // clearKeyHotelId(request.hotelId());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearKeyHotelId(request.hotelId());
+            }
+        });
     }
 
     private void saveOutboxEvent(Object event, String topic) {
@@ -142,6 +193,20 @@ public class AdminServiceImpl implements AdminService{
             outboxEventRepository.save(outbox);
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // http://minio:9000/hotel-images/imgName
+    private String extractImgName(String imgUrl){
+        return imgUrl.substring(imgUrl.lastIndexOf('/') + 1);
+    }
+
+    private void clearKeyHotelId(UUID hotelId){
+        String keyPattern = "hotel-detail-availability" + "::" + hotelId.toString() + "::*";
+        Set<String> keysToDelete = stringRedisTemplate.keys(keyPattern);
+
+        if(keysToDelete != null && !keysToDelete.isEmpty()){
+            stringRedisTemplate.delete(keysToDelete);
         }
     }
 }
