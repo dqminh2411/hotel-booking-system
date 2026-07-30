@@ -1,7 +1,7 @@
 package com.hotelbooking.auditservice.consumer;
 
-import com.audit_service.dto.AuditEvent;
-import com.audit_service.service.AuditLogService;
+import com.hotelbooking.auditservice.dto.AuditEvent;
+import com.hotelbooking.auditservice.service.AuditLogService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

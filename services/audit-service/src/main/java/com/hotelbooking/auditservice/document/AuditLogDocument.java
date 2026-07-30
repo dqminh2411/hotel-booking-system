@@ -56,6 +56,8 @@ public class AuditLogDocument {
     private Object metadata;
 
     private String resultStatus;
+
+    @TextIndexed(name = "idx_errorMessage_text")
     private String errorMessage;
 
     private Instant receivedAt;

@@ -1,8 +1,9 @@
 package com.hotelbooking.auditservice.controller;
 
-import com.audit_service.dto.AuditLogResponse;
-import com.audit_service.dto.AuditLogStatistics;
-import com.audit_service.service.AuditLogService;
+import com.hotelbooking.auditservice.dto.AuditLogRequest;
+import com.hotelbooking.auditservice.dto.AuditLogResponse;
+import com.hotelbooking.auditservice.dto.AuditLogStatistics;
+import com.hotelbooking.auditservice.service.AuditLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,37 +23,16 @@ public class AuditLogController {
     private final AuditLogService auditLogService;
 
     @GetMapping
-    public ResponseEntity<Page<AuditLogResponse>> getAuditLogs(
-            @RequestParam(required = false) String tenantId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant endDate,
-            @RequestParam(required = false) String actorId,
-            @RequestParam(required = false) String actorType,
-            @RequestParam(required = false) String action,
-            @RequestParam(required = false) String actionCategory,
-            @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) String entityId,
-            @RequestParam(required = false) String severity,
-            @RequestParam(required = false) String resultStatus,
-            @RequestParam(required = false) String serviceName,
-            @RequestParam(required = false) String correlationId,
-            @RequestParam(required = false) String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "timestamp,desc") String sort) {
-
-        String[] sortParams = sort.split(",");
+    public ResponseEntity<Page<AuditLogResponse>> getAuditLogs(AuditLogRequest request) {
+        String[] sortParams = request.sort().split(",");
         String sortProperty = sortParams[0];
         Sort.Direction sortDirection = (sortParams.length > 1 && "asc".equalsIgnoreCase(sortParams[1]))
                 ? Sort.Direction.ASC
                 : Sort.Direction.DESC;
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortProperty));
+        Pageable pageable = PageRequest.of(request.page(), request.size(), Sort.by(sortDirection, sortProperty));
 
-        Page<AuditLogResponse> result = auditLogService.getAuditLogs(
-                tenantId, startDate, endDate, actorId, actorType, action,
-                actionCategory, entityType, entityId, severity, resultStatus,
-                serviceName, correlationId, search, pageable);
+        Page<AuditLogResponse> result = auditLogService.getAuditLogs(request, pageable);
 
         return ResponseEntity.ok(result);
     }

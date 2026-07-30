@@ -1,27 +1,21 @@
 package com.hotelbooking.auditservice.service;
 
-import com.audit_service.document.AuditLogDocument;
-import com.audit_service.dto.AuditEvent;
-import com.audit_service.dto.AuditLogResponse;
-import com.audit_service.dto.AuditLogStatistics;
-import com.audit_service.repository.AuditLogRepository;
+import com.hotelbooking.auditservice.document.AuditLogDocument;
+import com.hotelbooking.auditservice.dto.AuditEvent;
+import com.hotelbooking.auditservice.dto.AuditLogRequest;
+import com.hotelbooking.auditservice.dto.AuditLogResponse;
+import com.hotelbooking.auditservice.dto.AuditLogStatistics;
+import com.hotelbooking.auditservice.repository.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.TextCriteria;
-import org.springframework.data.mongodb.core.query.TextQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,7 +27,6 @@ import java.util.stream.Collectors;
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
-    private final MongoTemplate mongoTemplate;
 
     public void processAuditEvent(AuditEvent event) {
         if (event == null || !StringUtils.hasText(event.getEventId())) {
@@ -83,84 +76,9 @@ public class AuditLogService {
         }
     }
 
-    public Page<AuditLogResponse> getAuditLogs(
-            String tenantId,
-            Instant startDate,
-            Instant endDate,
-            String actorId,
-            String actorType,
-            String action,
-            String actionCategory,
-            String entityType,
-            String entityId,
-            String severity,
-            String resultStatus,
-            String serviceName,
-            String correlationId,
-            String search,
-            Pageable pageable) {
-
-        Query query = new Query();
-        List<Criteria> criteriaList = new ArrayList<>();
-
-        if (StringUtils.hasText(tenantId)) {
-            criteriaList.add(Criteria.where("tenantId").is(tenantId));
-        }
-        if (startDate != null && endDate != null) {
-            criteriaList.add(Criteria.where("timestamp").gte(startDate).lte(endDate));
-        } else if (startDate != null) {
-            criteriaList.add(Criteria.where("timestamp").gte(startDate));
-        } else if (endDate != null) {
-            criteriaList.add(Criteria.where("timestamp").lte(endDate));
-        }
-        if (StringUtils.hasText(actorId)) {
-            criteriaList.add(Criteria.where("actor.id").is(actorId));
-        }
-        if (StringUtils.hasText(actorType)) {
-            criteriaList.add(Criteria.where("actor.type").is(actorType));
-        }
-        if (StringUtils.hasText(action)) {
-            criteriaList.add(Criteria.where("action").is(action));
-        }
-        if (StringUtils.hasText(actionCategory)) {
-            criteriaList.add(Criteria.where("actionCategory").is(actionCategory));
-        }
-        if (StringUtils.hasText(entityType)) {
-            criteriaList.add(Criteria.where("entity.type").is(entityType));
-        }
-        if (StringUtils.hasText(entityId)) {
-            criteriaList.add(Criteria.where("entity.id").is(entityId));
-        }
-        if (StringUtils.hasText(severity)) {
-            criteriaList.add(Criteria.where("severity").is(severity));
-        }
-        if (StringUtils.hasText(resultStatus)) {
-            criteriaList.add(Criteria.where("resultStatus").is(resultStatus));
-        }
-        if (StringUtils.hasText(serviceName)) {
-            criteriaList.add(Criteria.where("serviceName").is(serviceName));
-        }
-        if (StringUtils.hasText(correlationId)) {
-            criteriaList.add(Criteria.where("correlationId").is(correlationId));
-        }
-        if (StringUtils.hasText(search)) {
-            TextCriteria textCriteria = TextCriteria.forDefaultLanguage().matching(search);
-            query = TextQuery.queryText(textCriteria);
-        }
-
-        if (!criteriaList.isEmpty()) {
-            query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
-        }
-
-        long total = mongoTemplate.count(query, AuditLogDocument.class);
-        query.with(pageable);
-
-        List<AuditLogDocument> documents = mongoTemplate.find(query, AuditLogDocument.class);
-        List<AuditLogResponse> responses = documents.stream()
-                .map(this::mapToResponse)
-                .collect(Collectors.toList());
-
-        return new PageImpl<>(responses, pageable, total);
+    public Page<AuditLogResponse> getAuditLogs(AuditLogRequest request, Pageable pageable) {
+        Page<AuditLogDocument> page = auditLogRepository.searchAuditLogs(request, pageable);
+        return page.map(this::mapToResponse);
     }
 
     public Optional<AuditLogResponse> getAuditLogByEventId(String eventId) {
@@ -173,21 +91,7 @@ public class AuditLogService {
     }
 
     public AuditLogStatistics getStatistics(Instant startDate, Instant endDate, String tenantId) {
-        Query query = new Query();
-        List<Criteria> criteriaList = new ArrayList<>();
-
-        if (StringUtils.hasText(tenantId)) {
-            criteriaList.add(Criteria.where("tenantId").is(tenantId));
-        }
-        if (startDate != null && endDate != null) {
-            criteriaList.add(Criteria.where("timestamp").gte(startDate).lte(endDate));
-        }
-
-        if (!criteriaList.isEmpty()) {
-            query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
-        }
-
-        List<AuditLogDocument> documents = mongoTemplate.find(query, AuditLogDocument.class);
+        List<AuditLogDocument> documents = auditLogRepository.findForStatistics(startDate, endDate, tenantId);
 
         long totalEvents = documents.size();
 
