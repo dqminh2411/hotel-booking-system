@@ -133,8 +133,11 @@ promotion_management_js/
 prompt_merge_promotion.md
 promotion_service_guide.md
 
+
 Test_Plan_race_condition.jmx
-.gitignore
 queue_db_solution.md
 redis-atomic-reservation-kien-truc.pdf
 business_log.md
+files/
+*.http
+minio/data/
