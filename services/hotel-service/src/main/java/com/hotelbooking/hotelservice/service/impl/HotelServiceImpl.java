@@ -22,8 +22,6 @@ import com.hotelbooking.hotelservice.repository.HotelRepository;
 import com.hotelbooking.hotelservice.repository.PolicyRepository;
 import com.hotelbooking.hotelservice.repository.RoomRepository;
 import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
-import com.hotelbooking.hotelservice.mapper.HotelMapper;
-import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.*;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
@@ -32,7 +30,6 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
-import java.rmi.server.UID;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Collections;

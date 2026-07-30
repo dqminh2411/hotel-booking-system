@@ -2,6 +2,8 @@ package com.notification_service.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.notification_service.dto.EmailHotelStatusRequest;
+import com.notification_service.dto.EmailHotelStatusTemplate;
 import com.notification_service.dto.EmailRequest;
 import com.notification_service.dto.EmailTemplate;
 
@@ -31,7 +33,7 @@ public class KafkaNotificationConsumerService {
         EmailService emailService,
         TemplateService templateService,
         FcmPushService fcmPushService,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper, EmailRequest emailRequest
     ) {
         this.emailService = emailService;
         this.templateService = templateService;
@@ -104,7 +106,6 @@ public class KafkaNotificationConsumerService {
             @SuppressWarnings("unchecked")
             Map<String, Object> event = objectMapper.readValue(payloadJson, Map.class);
             
-            String eventType = (String) event.getOrDefault("eventType", "");
             String title;
             String body;
             Map<String, String> data = new HashMap<>();
@@ -141,6 +142,27 @@ public class KafkaNotificationConsumerService {
         }
     }
 
+    @KafkaListener(
+        topics = {"hotel-status-actions"},
+        groupId = "notification-service-group"
+    )
+    public void consumeHotelUpdateStatusNotification(String payloadJson) throws JsonProcessingException {
+        EmailHotelStatusRequest request = objectMapper.readValue(payloadJson, EmailHotelStatusRequest.class);
+        String emailTenant = request.tenant().email();
+        if(emailTenant != null && !emailTenant.isBlank()){
+            try {
+                String content = templateService.buildHotelEmailContent(
+                    EmailHotelStatusTemplate.valueOf(request.eventType()),
+                    request);
+                emailService.send(request.tenant().email(),
+                                "Thông báo về kiểm duyệt đăng thông tin khách sạn",
+                                content);   
+            } catch (Exception e) {
+                log.error("Could not send notification email for tenant {}", request.tenant().name(), e);
+            }
+        }
+    }
+    
     public String resolveFcmTopic(String kafkaTopic, Map<String, Object> event) {
         String scopeType = (String) event.get("scopeType");
         String scopeRefId = (String) event.get("scopeRefId");

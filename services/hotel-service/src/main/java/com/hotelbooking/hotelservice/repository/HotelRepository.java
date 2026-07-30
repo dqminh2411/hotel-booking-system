@@ -6,6 +6,8 @@ import com.hotelbooking.hotelservice.entity.HotelEntity;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -45,4 +47,9 @@ public interface HotelRepository extends JpaRepository<HotelEntity, UUID> {
 
     @EntityGraph(attributePaths = {"province", "district", "ward"})
     Optional<HotelEntity> findByIdAndIsDeletedFalseAndStatus(UUID id, HotelStatus status);
+
+    @EntityGraph(attributePaths = {"province", "district", "ward"})
+    Page<HotelEntity> findByStatus(HotelStatus status, Pageable pageable);
+
+    Optional<HotelEntity> findByIdAndIsDeletedFalse(UUID hotelId);
 }

@@ -1,6 +1,5 @@
 package com.hotelbooking.hotelservice.repository;
 
-import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
 
 import java.math.BigDecimal;
