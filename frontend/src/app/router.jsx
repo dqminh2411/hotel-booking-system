@@ -18,6 +18,7 @@ import { PromotionListPage } from '../features/promotion/pages/PromotionListPage
 import { PromotionCreatePage } from '../features/promotion/pages/PromotionCreatePage/PromotionCreatePage';
 import { PromotionDetailPage } from '../features/promotion/pages/PromotionDetailPage/PromotionDetailPage';
 import { PromotionEditPage } from '../features/promotion/pages/PromotionEditPage/PromotionEditPage';
+import { AdminHotelPendingListPage } from '../pages/AdminHotelPendingListPage';
 
 export default function AppRouter() {
   return (
@@ -40,6 +41,7 @@ export default function AppRouter() {
       <Route path="/promotions/create" element={<PromotionCreatePage />} />
       <Route path="/promotions/:id" element={<PromotionDetailPage />} />
       <Route path="/promotions/:id/edit" element={<PromotionEditPage />} />
+      <Route path="/admin/hotels/pending" element={<AdminHotelPendingListPage />} />
       <Route path="*" element={<NotFoundPage />} />
       <Route path="/hotels" element={<HomePageSearch />} />
       <Route path="/hotels/search" element={<SearchResultsPage />} />

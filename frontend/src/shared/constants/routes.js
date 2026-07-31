@@ -11,5 +11,8 @@ export const ROUTES = {
     detail: (id) => `/promotions/${id}`,
     edit: (id) => `/promotions/${id}/edit`,
   },
+  admin: {
+    hotelsPending: '/admin/hotels/pending',
+  },
   notFound: '*',
 };
