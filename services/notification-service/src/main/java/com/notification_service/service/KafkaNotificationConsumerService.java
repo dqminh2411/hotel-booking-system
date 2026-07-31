@@ -33,7 +33,7 @@ public class KafkaNotificationConsumerService {
         EmailService emailService,
         TemplateService templateService,
         FcmPushService fcmPushService,
-        ObjectMapper objectMapper, EmailRequest emailRequest
+        ObjectMapper objectMapper
     ) {
         this.emailService = emailService;
         this.templateService = templateService;

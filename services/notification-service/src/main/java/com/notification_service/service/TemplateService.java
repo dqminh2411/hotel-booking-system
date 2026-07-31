@@ -87,6 +87,8 @@ public class TemplateService {
 
                     =========Lý do=========
                     %s
+                    =======================
+                    
                     Bạn hãy sửa/cập nhật lại thông tin đã sai rồi gửi lại yêu cầu nhé.
                     
                     Chúc bạn có trải nghiệm sử dụng hệ thống thật hài lòng! 

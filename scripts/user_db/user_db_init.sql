@@ -98,5 +98,6 @@ INSERT INTO users (
 ) VALUES
     ('587ae577-e49a-4c71-8df9-67ae4a7ce752', 'user1@gmail.com', '0901234562', 'Tran Thi Binh', 'ACTIVE', NOW(), NOW(), FALSE),
     ('52d949a0-0411-4d5d-8017-6b0b94f97c35', 'staff1@gmail.com', '0901234563', 'Le Van Cuong', 'ACTIVE', NOW(), NOW(), FALSE),
-    ('284feb3c-1cb4-4510-91ae-2a640511689b', 'owner1@gmail.com', '0911111111', 'Nguyen Thi Host', 'ACTIVE', NOW(), NOW(), FALSE)
+    ('284feb3c-1cb4-4510-91ae-2a640511689b', 'owner1@gmail.com', '0911111111', 'Nguyen Thi Host', 'ACTIVE', NOW(), NOW(), FALSE),
+    ('fb27a6e0-abf0-4359-9f61-86c9da9b50df', 'vnkien28082004@gmail.com', '0123456712', 'Usertwo', 'ACTIVE', NOW(), NOW(), FALSE)
 -- ON CONFLICT (id) DO NOTHING;

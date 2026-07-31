@@ -46,6 +46,7 @@ import io.minio.messages.DeleteObject;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -63,9 +64,11 @@ public class AdminServiceImpl implements AdminService{
     OutboxEventRepository outboxEventRepository;
     MinioClient minioClient;
 
+    @NonFinal
     @Value("${minio.endpoint:http://minio:9000}")
     String endpoint;
 
+    @NonFinal
     @Value("${minio.bucket.hotel-images:hotel-images}")
     String bucket;
 

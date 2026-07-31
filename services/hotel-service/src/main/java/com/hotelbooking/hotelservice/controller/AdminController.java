@@ -56,7 +56,7 @@ public class AdminController {
     }
     
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
-    @PatchMapping("/{id}/status")
+    @PatchMapping("/{hotelId}/status")
     public ApiResponse<?> updateHotelStatus(
         @PathVariable(name = "hotelId") UUID hotelId,
         @Valid @RequestBody HotelUpdateStatusRequest request 

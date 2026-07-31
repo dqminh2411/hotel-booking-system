@@ -42,7 +42,7 @@ spring:
             - id: hotel-service-route
               uri: lb://hotel-service
               predicates:
-                - Path=/api/hotels/**,/api/room-types/**,/api/admin/hotels/**
+                - Path=/api/hotels/**,/api/room-types/**,/api/admin/hotels/**,/api/minio/**
 
             - id: promotion-service-route
               uri: lb://promotion-service
