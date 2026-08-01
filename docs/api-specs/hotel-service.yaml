@@ -5,16 +5,25 @@ info:
     Entity Service — quản lý thông tin khách sạn, loại phòng, phòng vật lý, tiện ích, chính sách và giá động.
     Theo Tài liệu Phân tích Thiết kế (SDD) mục 2.2 và 3.2.
 
-    Phạm vi tài liệu này: chỉ đặc tả 4 endpoint đọc dữ liệu công khai đầu tiên trong bảng tài nguyên của Hotel
-    Service (tìm kiếm khách sạn, xem chi tiết khách sạn, lấy danh sách loại phòng, xem chi tiết loại phòng).
-    Các endpoint quản trị (tạo/sửa/xóa khách sạn, phòng, giá động, duyệt khách sạn...) sẽ được đặc tả ở phiên
-    bản tiếp theo của tài liệu này.
+    Phạm vi tài liệu này: đặc tả 4 endpoint đọc dữ liệu công khai đầu tiên trong bảng tài nguyên của Hotel
+    Service (tìm kiếm khách sạn, xem chi tiết khách sạn, lấy danh sách loại phòng, xem chi tiết loại phòng),
+    cùng với 3 endpoint quản trị đầu tiên thuộc luồng duyệt/kiểm duyệt khách sạn (tag `Admin`, mục 3.2 SDD):
+    lấy danh sách khách sạn chờ duyệt, duyệt/đình chỉ khách sạn, và xóa ảnh vi phạm. Các endpoint quản trị
+    còn lại (tạo/sửa/xóa khách sạn, phòng, giá động...) sẽ được đặc tả ở phiên bản tiếp theo của tài liệu này.
 
-    Đặc điểm xử lý chung của các endpoint đọc:
+    Đặc điểm xử lý chung của các endpoint đọc công khai:
       - Kết quả được cache qua Redis theo khóa tổ hợp tham số truy vấn, TTL ngắn/trung bình tùy endpoint.
       - Chỉ trả về dữ liệu chưa bị xóa mềm (`is_deleted = false`); với tìm kiếm/chi tiết khách sạn công khai,
         chỉ trả về khách sạn có `status = APPROVED`.
-  version: 1.1.0
+
+    Đặc điểm chung của các endpoint quản trị (tag `Admin`):
+      - Yêu cầu xác thực bằng JWT (`Authorization: Bearer <token>`) và bắt buộc claim `role = PLATFORM_ADMIN`;
+        role khác trả về `403 FORBIDDEN`. Xem `components.securitySchemes.bearerAuth`.
+      - Không đọc/ghi qua Redis Cache như các endpoint công khai (đảm bảo dữ liệu quản trị luôn mới nhất),
+        nhưng có thể chủ động invalidate cache công khai khi hành động quản trị làm thay đổi dữ liệu đã cache.
+      - Mọi hành động thay đổi trạng thái/dữ liệu đều được ghi lại vào bảng audit (`audit_logs`) để phục vụ
+        truy vết.
+  version: 1.2.0
 
 servers:
   - url: http://localhost:5003
@@ -24,6 +33,8 @@ tags:
   - name: Health
   - name: Hotels
   - name: RoomTypes
+  - name: Admin
+    description: Endpoint quản trị nội bộ — chỉ role `PLATFORM_ADMIN` được phép gọi (xem `securitySchemes.bearerAuth`).
 
 paths:
   /health:
@@ -365,7 +376,355 @@ paths:
                 code: ROOM_TYPE_NOT_FOUND
                 message: Loại phòng không tồn tại
 
+  # ============================================================
+  # GET /api/admin/hotels/pending — Danh sách khách sạn chờ duyệt
+  # [PLATFORM_ADMIN only]
+  # ============================================================
+
+  /api/admin/hotels/pending:
+    get:
+      tags: [Admin]
+      summary: Lấy danh sách khách sạn đang chờ duyệt
+      description: |
+        **[PLATFORM_ADMIN only]** Trả về danh sách khách sạn có `status = PENDING` và `is_deleted = false`,
+        phục vụ màn hình hàng đợi duyệt khách sạn của quản trị viên nền tảng.
+
+        Luồng xử lý: truy vấn trực tiếp PostgreSQL `hotel_db` (không qua Redis Cache như các endpoint đọc
+        công khai, để đảm bảo dữ liệu chờ duyệt luôn mới nhất). Mặc định sắp xếp theo `created_at` tăng dần
+        (khách sạn đăng ký lâu nhất hiển thị trước, theo nguyên tắc FIFO).
+
+        **RBAC:** chỉ tài khoản có role `PLATFORM_ADMIN` (đọc từ claim `role` trong JWT, do API Gateway xác
+        thực và forward xuống service) mới được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
+      operationId: getPendingHotels
+      security:
+        - bearerAuth: []
+      x-required-role: PLATFORM_ADMIN
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          example: 10
+        - name: sortBy
+          in: query
+          required: false
+          description: Sắp xếp theo thời gian đăng ký (`created_at`). Mặc định `createdAtAsc` (cũ nhất trước).
+          schema:
+            type: string
+            enum: [createdAtAsc, createdAtDesc]
+            default: createdAtAsc
+          example: createdAtAsc
+      responses:
+        '200':
+          description: Danh sách khách sạn đang chờ duyệt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HotelAdminSummary'
+                  total:
+                    type: integer
+                    example: 1
+                  page:
+                    type: integer
+                    example: 0
+                  size:
+                    type: integer
+                    example: 10
+              example:
+                data:
+                  - hotelId: a1b2c3d4-e5f6-7890-abcd-ef1234567891
+                    name: Sapa Green Hotel
+                    ownerId: c0000000-0000-0000-0000-000000000009
+                    address:
+                      fullAddress: 45 Fansipan, Sa Pa, Lào Cai
+                      province: { code: "10", name: Lào Cai }
+                      district: { code: "101", name: Sa Pa }
+                      ward: { code: "10101", name: Phường Sa Pa }
+                    status: PENDING
+                    createdAt: "2026-07-20T08:15:00Z"
+                total: 1
+                page: 0
+                size: 10
+        '401':
+          description: Thiếu token hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: Thiếu hoặc token xác thực không hợp lệ
+        '403':
+          description: Người dùng không có role PLATFORM_ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: FORBIDDEN
+                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
+
+  # ============================================================
+  # PATCH /api/admin/hotels/{id}/status — Duyệt / đình chỉ khách sạn
+  # [PLATFORM_ADMIN only]
+  # ============================================================
+
+  /api/admin/hotels/{id}/status:
+    patch:
+      tags: [Admin]
+      summary: Duyệt hoặc đình chỉ khách sạn (chuyển trạng thái)
+      description: |
+        **[PLATFORM_ADMIN only]** Chuyển trạng thái khách sạn sang `APPROVED` hoặc `SUSPENDED`.
+
+        Các chuyển trạng thái hợp lệ:
+          - `PENDING → APPROVED`: duyệt khách sạn mới đăng ký.
+          - `PENDING → SUSPENDED`: từ chối khách sạn mới đăng ký (kèm `reason`).
+          - `APPROVED → SUSPENDED`: đình chỉ khách sạn đang hoạt động do vi phạm (kèm `reason`).
+          - `SUSPENDED → APPROVED`: khôi phục khách sạn sau khi đã xử lý xong vi phạm.
+        Chuyển sang chính trạng thái hiện tại (no-op) hoặc các cặp trạng thái không nằm trong danh sách trên
+        đều bị từ chối với `409 INVALID_STATUS_TRANSITION`.
+
+        Luồng xử lý:
+          1. Kiểm tra `hotelId` tồn tại, `is_deleted = false`; kiểm tra transition có hợp lệ theo trạng thái
+             hiện tại của khách sạn hay không.
+          2. Cập nhật `hotels.status` và `hotels.updated_at`.
+          3. Ghi 1 bản ghi vào bảng audit (`audit_logs`): `actor_id` (admin thực hiện, lấy từ claim `sub`
+             trong JWT), `action` (`APPROVE_HOTEL` / `SUSPEND_HOTEL`), `target_type = HOTEL`,
+             `target_id = hotelId`, `old_status`, `new_status`, `reason`, `created_at`.
+          4. Nếu `status = APPROVED`: phát Kafka event **`hotel.approved`** (key = `hotelId`) với payload gồm
+             `hotelId`, `ownerId` (`tenant_id`), `hotelName`, `approvedAt`, `approvedBy` — Notification Service
+             lắng nghe topic này để gửi email thông báo duyệt thành công cho Owner.
+          5. Nếu `status = SUSPENDED`: phát Kafka event **`hotel.suspended`** (key = `hotelId`) với payload
+             gồm `hotelId`, `ownerId`, `hotelName`, `reason`, `suspendedAt`, `suspendedBy` — Notification
+             Service lắng nghe để gửi email cảnh báo cho Owner; đồng thời invalidate các khóa Redis Cache
+             liên quan khách sạn này (`hotel_detail:{hotelId}:*`, `hotel_room_types:{hotelId}` và các cache
+             kết quả tìm kiếm `GET /api/hotels` có chứa khách sạn này) để khách sạn bị đình chỉ không còn
+             xuất hiện trong dữ liệu công khai đã cache.
+
+        **RBAC:** chỉ role `PLATFORM_ADMIN` được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
+      operationId: updateHotelStatus
+      security:
+        - bearerAuth: []
+      x-required-role: PLATFORM_ADMIN
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID khách sạn cần chuyển trạng thái.
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHotelStatusRequest'
+            example:
+              status: APPROVED
+      responses:
+        '200':
+          description: Cập nhật trạng thái khách sạn thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: Duyệt khách sạn thành công
+                  data:
+                    $ref: '#/components/schemas/HotelStatusUpdateData'
+              example:
+                code: 200
+                message: Duyệt khách sạn thành công
+                data:
+                  hotelId: a1b2c3d4-e5f6-7890-abcd-ef1234567891
+                  previousStatus: PENDING
+                  status: APPROVED
+                  updatedAt: "2026-07-29T09:00:00Z"
+        '400':
+          description: |
+            Body không hợp lệ: thiếu `status`, `status` không thuộc `[APPROVED, SUSPENDED]`, hoặc thiếu
+            `reason` khi chuyển sang `SUSPENDED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_REQUEST
+                message: "reason là bắt buộc khi chuyển trạng thái sang SUSPENDED"
+        '401':
+          description: Thiếu token hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: Thiếu hoặc token xác thực không hợp lệ
+        '403':
+          description: Người dùng không có role PLATFORM_ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: FORBIDDEN
+                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
+        '404':
+          description: Khách sạn không tồn tại hoặc đã bị xóa mềm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: HOTEL_NOT_FOUND
+                message: Khách sạn không tồn tại
+        '409':
+          description: Chuyển trạng thái không hợp lệ theo trạng thái hiện tại của khách sạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_STATUS_TRANSITION
+                message: "Không thể chuyển từ APPROVED sang APPROVED"
+
+  # ============================================================
+  # DELETE /api/admin/hotels/{hotelId}/images/{imageId} — Xóa ảnh vi phạm
+  # [PLATFORM_ADMIN only]
+  # ============================================================
+
+  /api/admin/hotels/{hotelId}/images/{imageId}:
+    delete:
+      tags: [Admin]
+      summary: Xóa ảnh vi phạm của khách sạn
+      description: |
+        **[PLATFORM_ADMIN only]** Admin xóa một ảnh vi phạm (nội dung không phù hợp, sai sự thật với thực
+        tế khách sạn...) khỏi khách sạn.
+
+        Luồng xử lý:
+          1. Kiểm tra ảnh (`hotel_images.id = imageId`) tồn tại và thuộc đúng `hotelId` truyền vào.
+          2. Gọi MinIO xóa object tương ứng với `hotel_images.url` (object key) trên bucket lưu trữ ảnh
+             khách sạn.
+          3. Xóa bản ghi tương ứng trong bảng `hotel_images` (PostgreSQL `hotel_db`).
+          4. Ghi 1 bản ghi vào bảng audit (`audit_logs`), tương tự endpoint duyệt/đình chỉ khách sạn ở trên:
+             `actor_id`, `action = DELETE_HOTEL_IMAGE`, `target_type = HOTEL_IMAGE`, `target_id = imageId`,
+             `created_at`.
+          5. Invalidate cache Redis `hotel_detail:{hotelId}:*`, vì danh sách ảnh trả về trong
+             `GET /api/hotels/{id}` đã thay đổi.
+
+        Nếu xóa object trên MinIO thất bại (lỗi kết nối, object không tồn tại...), request trả về lỗi
+        `503 MINIO_SERVICE_UNAVAILABLE` và **không** xóa bản ghi `hotel_images`, đảm bảo dữ liệu trong
+        `hotel_db` và storage luôn nhất quán với nhau.
+
+        **RBAC:** chỉ role `PLATFORM_ADMIN` được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
+      operationId: deleteHotelImage
+      security:
+        - bearerAuth: []
+      x-required-role: PLATFORM_ADMIN
+      parameters:
+        - name: hotelId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: d4e5f6a7-0001-4a2e-9a3a-cccccccccccc
+      responses:
+        '200':
+          description: Xóa ảnh vi phạm thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 200
+                  message:
+                    type: string
+                    example: Xóa ảnh vi phạm thành công
+                  data:
+                    type: object
+                    nullable: true
+              example:
+                code: 200
+                message: Xóa ảnh vi phạm thành công
+                data: null
+        '401':
+          description: Thiếu token hoặc token không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: Thiếu hoặc token xác thực không hợp lệ
+        '403':
+          description: Người dùng không có role PLATFORM_ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: FORBIDDEN
+                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
+        '404':
+          description: Khách sạn không tồn tại, hoặc ảnh không tồn tại/không thuộc khách sạn này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: HOTEL_IMAGE_NOT_FOUND
+                message: Ảnh không tồn tại hoặc không thuộc khách sạn này
+        '503':
+          description: Lỗi khi gọi MinIO để xóa object ảnh
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: MINIO_SERVICE_UNAVAILABLE
+                message: Không thể xóa file ảnh trên MinIO, vui lòng thử lại sau
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT do API Gateway xác thực (đăng nhập qua Auth/User Service) và forward xuống Hotel Service qua
+        header `Authorization: Bearer <token>`. Claim `role` trong token phải bằng `PLATFORM_ADMIN` để được
+        phép gọi các endpoint thuộc tag `Admin`; nếu không, service trả về `403 FORBIDDEN`.
   schemas:
     HealthResponse:
       type: object
@@ -639,3 +998,71 @@ components:
                 format: uri
               isCover:
                 type: boolean
+
+    # ---------- Admin (RBAC: PLATFORM_ADMIN) ----------
+
+    HotelAdminSummary:
+      type: object
+      description: Thông tin rút gọn khách sạn dùng cho danh sách quản trị (hàng đợi duyệt).
+      properties:
+        hotelId:
+          type: string
+          format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
+        name:
+          type: string
+          example: Sapa Green Hotel
+        ownerId:
+          type: string
+          format: uuid
+          description: Chủ khách sạn — cột `tenant_id`, tham chiếu logic tới `user-service`.
+          example: c0000000-0000-0000-0000-000000000009
+        address:
+          $ref: '#/components/schemas/Address'
+        status:
+          type: string
+          enum: [PENDING, APPROVED, SUSPENDED]
+          example: PENDING
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-07-20T08:15:00Z"
+
+    UpdateHotelStatusRequest:
+      type: object
+      description: Body của `PATCH /api/admin/hotels/{id}/status`.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, SUSPENDED]
+          description: Trạng thái đích muốn chuyển tới.
+          example: APPROVED
+        reason:
+          type: string
+          nullable: true
+          description: |
+            Lý do chuyển trạng thái — bắt buộc khi `status = SUSPENDED` (từ chối duyệt/đình chỉ do vi phạm).
+            Được lưu vào audit log và đưa vào nội dung email cảnh báo gửi Owner qua Notification Service.
+          example: Ảnh khách sạn không đúng với thực tế, vi phạm chính sách nền tảng
+
+    HotelStatusUpdateData:
+      type: object
+      description: Dữ liệu trả về sau khi chuyển trạng thái khách sạn thành công.
+      properties:
+        hotelId:
+          type: string
+          format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
+        previousStatus:
+          type: string
+          enum: [PENDING, APPROVED, SUSPENDED]
+          example: PENDING
+        status:
+          type: string
+          enum: [PENDING, APPROVED, SUSPENDED]
+          example: APPROVED
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-07-29T09:00:00Z"
