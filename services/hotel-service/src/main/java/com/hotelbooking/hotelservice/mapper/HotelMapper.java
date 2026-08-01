@@ -54,7 +54,6 @@ public class HotelMapper {
     public List<Image> buildImages(List<HotelImageEntity> images) {
         return images.stream()
                 .sorted(Comparator.comparing(img -> !img.getIsCover()))
-                .limit(5)
                 .map(img -> new Image(img.getId(), img.getUrl(), img.getIsCover()))
                 .toList();
     }

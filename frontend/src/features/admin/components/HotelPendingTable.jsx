@@ -13,9 +13,11 @@ const PLACEHOLDER_IMAGE =
  * Chi hien thi dung nhung field co trong HotelPendingResponse: hotelId, name,
  * tenantId, address, coverImgUrl, status, createdAt.
  *
- * Props: data, isLoading, onApprove(row), onSuspend(row), onManageImages(row)
+ * Props: data, isLoading, onViewDetail(row)
+ * Cac hanh dong duyet/tu choi/quan ly anh da chuyen sang trang chi tiet
+ * (xem pages/AdminHotelDetailPage.jsx), bang nay chi con dieu huong sang do.
  */
-export function HotelPendingTable({ data, isLoading, onApprove, onSuspend, onManageImages }) {
+export function HotelPendingTable({ data, isLoading, onViewDetail }) {
   const columns = [
     {
       key: 'cover',
@@ -65,17 +67,11 @@ export function HotelPendingTable({ data, isLoading, onApprove, onSuspend, onMan
       key: 'actions',
       header: '',
       align: 'right',
-      width: '360px',
+      width: '160px',
       render: (row) => (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button size="sm" variant="secondary" onClick={() => onManageImages(row)}>
-            Quản lý ảnh
-          </Button>
-          <Button size="sm" variant="danger" onClick={() => onSuspend(row)}>
-            Từ chối
-          </Button>
-          <Button size="sm" variant="primary" onClick={() => onApprove(row)}>
-            Duyệt
+        <div className="flex justify-end">
+          <Button size="sm" variant="primary" onClick={() => onViewDetail(row)}>
+            Xem chi tiết
           </Button>
         </div>
       ),

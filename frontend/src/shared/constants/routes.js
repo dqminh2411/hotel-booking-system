@@ -13,6 +13,7 @@ export const ROUTES = {
   },
   admin: {
     hotelsPending: '/admin/hotels/pending',
+    hotelDetail: (hotelId) => `/admin/hotels/${hotelId}`,
   },
   notFound: '*',
 };

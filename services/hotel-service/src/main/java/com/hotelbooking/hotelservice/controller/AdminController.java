@@ -20,8 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.hotelbooking.hotelservice.dto.request.HotelImageDelRequest;
 import com.hotelbooking.hotelservice.dto.request.HotelUpdateStatusRequest;
 import com.hotelbooking.hotelservice.dto.response.ApiResponse;
+import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.response.HotelPendingResponse;
 import com.hotelbooking.hotelservice.service.AdminService;
+import com.hotelbooking.hotelservice.service.HotelService;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -38,6 +40,7 @@ import lombok.experimental.FieldDefaults;
 public class AdminController {
 
     AdminService adminService;
+    HotelService hotelService;
 
     @PreAuthorize("hasRole('PLATFORM_ADMIN')")
     @GetMapping("/pending")
@@ -79,4 +82,14 @@ public class AdminController {
         return ApiResponse.builder().build();
     }
 
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @GetMapping("/{hotelId}")
+    public ApiResponse<HotelDetailsResponse> getHotelById(
+            @PathVariable(name = "hotelId") UUID hotelId){
+        return ApiResponse.<HotelDetailsResponse>builder()
+                .code(200)
+                .message("Lấy thành công thông tin khách sạn: " + hotelId.toString() + "cho Admin")
+                .data(hotelService.getHotelDetailForAdmin(hotelId))
+                .build();
+    }
 }

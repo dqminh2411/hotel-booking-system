@@ -51,5 +51,6 @@ public interface HotelRepository extends JpaRepository<HotelEntity, UUID> {
     @EntityGraph(attributePaths = {"province", "district", "ward"})
     Page<HotelEntity> findByStatus(HotelStatus status, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"province", "district", "ward"})
     Optional<HotelEntity> findByIdAndIsDeletedFalse(UUID hotelId);
 }
