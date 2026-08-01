@@ -43,7 +43,7 @@ public class HotelMapper {
                 hotel.getStatus().name());
     }
 
-    private Address toAddress(HotelEntity hotel) {
+    public Address toAddress(HotelEntity hotel) {
         return new Address(
                 hotel.getAddress(),
                 new Province(hotel.getProvince().getCode(), hotel.getProvince().getName()),
@@ -51,21 +51,20 @@ public class HotelMapper {
                 new Ward(hotel.getWard().getCode(), hotel.getWard().getName()));
     }
 
-    private List<Image> buildImages(List<HotelImageEntity> images) {
+    public List<Image> buildImages(List<HotelImageEntity> images) {
         return images.stream()
                 .sorted(Comparator.comparing(img -> !img.getIsCover()))
-                .limit(5)
                 .map(img -> new Image(img.getId(), img.getUrl(), img.getIsCover()))
                 .toList();
     }
 
-    private List<HotelPolicy> buildPolicies(List<PolicyEntity> policies) {
+    public List<HotelPolicy> buildPolicies(List<PolicyEntity> policies) {
         return policies.stream()
                 .map(p -> new HotelPolicy(p.getId(), p.getType(), p.getDescription()))
                 .toList();
     }
 
-    private List<HotelAmenity> buildAmenities(List<AmenityEntity> hotelAmenities) {
+    public List<HotelAmenity> buildAmenities(List<AmenityEntity> hotelAmenities) {
         return hotelAmenities.stream()
                 .map(ha -> new HotelAmenity(
                         ha.getId(),

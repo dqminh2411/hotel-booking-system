@@ -20,9 +20,13 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
-        return MinioClient.builder()
-                .endpoint(endpoint)
-                .credentials(accessKey, secretKey)
-                .build();
+        try {
+            return MinioClient.builder()
+                    .endpoint(endpoint)
+                    .credentials(accessKey, secretKey)
+                    .build();
+        } catch (Exception e) {
+            throw new RuntimeException("Không thể khởi tạo MinioClient: " + e.getMessage(), e);
+        }
     }
 }

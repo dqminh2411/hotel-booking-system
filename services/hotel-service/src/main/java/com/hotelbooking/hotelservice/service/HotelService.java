@@ -1,8 +1,5 @@
 package com.hotelbooking.hotelservice.service;
 
-import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
-import com.hotelbooking.hotelservice.dto.response.RoomTypeResponse;
-
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
@@ -27,5 +24,7 @@ public interface HotelService {
     public PagedResponse<HotelSearchItemDTO> search(HotelSearchRequest request) ;
 
     void updateRoomStatus(RoomCheckinRequest request);
+
+    HotelDetailsResponse getHotelDetailForAdmin(UUID hotelId);
 }
 
