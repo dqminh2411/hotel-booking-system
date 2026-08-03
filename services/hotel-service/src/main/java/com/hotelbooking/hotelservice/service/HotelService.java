@@ -30,5 +30,7 @@ public interface HotelService {
     void updateRoomStatus(RoomCheckinRequest request);
 
     CreateHotelResponse createHotel(CreateHotelRequest request);
+
+    HotelDetailsResponse getHotelDetailForAdmin(UUID hotelId);
 }
 

@@ -21,14 +21,6 @@ import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
-import com.hotelbooking.hotelservice.repository.HotelAmenityRepository;
-import com.hotelbooking.hotelservice.repository.HotelImageRepository;
-import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.PolicyRepository;
-import com.hotelbooking.hotelservice.repository.RoomRepository;
-import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
-import com.hotelbooking.hotelservice.mapper.HotelMapper;
-import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.*;
 import com.hotelbooking.hotelservice.security.SecurityUtils;
 import com.hotelbooking.hotelservice.service.HotelService;
@@ -40,14 +32,9 @@ import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
-import java.rmi.server.UID;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
@@ -112,6 +99,21 @@ public class HotelServiceImpl implements HotelService {
 
         return hotelMapper.toHotelDetailsResponse(
                 hotel, images, policies, hotelAmenities, filteredRoomTypes, bookedCountByRoomType);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HotelDetailsResponse getHotelDetailForAdmin(UUID hotelId){
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalse(hotelId)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
+        List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
+        List<RoomTypeEntity> roomTypes = roomTypeRepository.findActiveByHotelIdWithCoverImage(hotelId);
+
+        return hotelMapper.toHotelDetailsResponse(
+                hotel, images, policies, hotelAmenities, roomTypes, Map.of());
     }
 
     @Override
