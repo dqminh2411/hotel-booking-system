@@ -137,3 +137,6 @@ files/
 queue_db_solution.md
 redis-atomic-reservation-kien-truc.pdf
 minio/data/
+docs/asset/place_booking_success_flow.svg
+docs/asset/acti-dia.txt
+docs/asset/hotel_booking_success_flow.png

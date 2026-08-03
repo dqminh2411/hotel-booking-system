@@ -1,0 +1,94 @@
+receivers:
+  # ── Nhận traces và metrics từ service qua OTLP ───────────────────────
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ── Đọc logs từ stdout của Docker containers  ─────────
+  filelog:
+    include:
+      - /var/lib/docker/containers/*/*.log
+    include_file_path: true
+    start_at: beginning
+    operators:
+      - type: json_parser
+        id: docker_parser
+        parse_from: body
+
+      - type: json_parser
+        id: app_parser
+        parse_from: attributes.log
+        if: 'attributes["log"] != nil'
+
+      - type: move
+        from: attributes["@timestamp"]
+        to: attributes.timestamp
+        if: 'attributes["@timestamp"] != nil'
+
+      - type: move
+        from: attributes.service
+        to: resource["service.name"]
+        if: 'attributes.service != nil'
+
+      - type: remove
+        field: attributes.log
+
+processors:
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${ENVIRONMENT:development}
+        action: insert
+
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+
+  filter/logs:
+    logs:
+      exclude:
+        match_type: regexp
+        record_attributes:
+          - key: "http.path"
+            value: "^/actuator/.*"
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:14317
+    tls:
+      insecure: true
+
+  elasticsearch:
+    endpoints: [http://elasticsearch:9200]
+    logs_index: hotelhub-logs-${resource["service.name"]}
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+
+  prometheus:
+    endpoint: 0.0.0.0:8888
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlp/jaeger]
+
+    logs:
+      receivers: [filelog, otlp]
+      processors: [resource, filter/logs, batch]
+      exporters: [elasticsearch]
+
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [prometheus]

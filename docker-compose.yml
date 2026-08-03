@@ -617,6 +617,76 @@ services:
       - ./keycloak/import:/opt/keycloak/data/import
     networks:
       - app-network
+
+  # ── Elasticsearch ──────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false      # Tắt auth cho dev
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g       # Giới hạn RAM
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - app-network
+
+  # ── Kibana ─────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - app-network
+
+   # ── OTel Collector (thay thế Filebeat + Logstash) ─────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.100.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./infra/otel/otel-collector.yaml:/etc/otel/config.yaml:ro
+      # Mount Docker socket để đọc container logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC — service gửi traces/metrics đến đây
+      - "4318:4318"    # OTLP HTTP — alternative cho gRPC
+      - "8888:8888"    # Collector internal metrics (Prometheus scrape)
+    depends_on:
+      - elasticsearch
+      - jaeger
+    networks:
+      - app-network
+
+  # ── Jaeger (Distributed Tracing backend) ──────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true    # Nhận trace qua OTLP protocol
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+      - ES_INDEX_PREFIX=jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14317:4317"   # OTLP gRPC (Jaeger nhận từ Collector)
+      - "14318:4318"   # OTLP HTTP
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -631,3 +701,4 @@ volumes:
   redis-data:
   keycloak-db-data:
   minio-data:
+  elasticsearch_data:
