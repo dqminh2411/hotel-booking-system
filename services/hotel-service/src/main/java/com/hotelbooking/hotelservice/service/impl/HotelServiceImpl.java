@@ -2,6 +2,7 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
+import com.hotelbooking.hotelservice.dto.request.CreateHotelRequest;
 import com.hotelbooking.hotelservice.entity.AmenityEntity;
 import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
@@ -11,6 +12,10 @@ import com.hotelbooking.hotelservice.entity.HotelImageEntity;
 import com.hotelbooking.hotelservice.entity.PolicyEntity;
 import com.hotelbooking.hotelservice.entity.RoomEntity;
 import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
+import com.hotelbooking.hotelservice.entity.DistrictEntity;
+import com.hotelbooking.hotelservice.entity.WardEntity;
+import com.hotelbooking.hotelservice.entity.ProvinceEntity;
+import com.hotelbooking.hotelservice.event.HotelCreatedEvent;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
@@ -25,8 +30,11 @@ import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.*;
+import com.hotelbooking.hotelservice.security.SecurityUtils;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
@@ -34,6 +42,7 @@ import com.hotelbooking.hotelservice.dto.AddressDTO;
 
 import java.rmi.server.UID;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
@@ -69,6 +78,12 @@ public class HotelServiceImpl implements HotelService {
     RoomRepository roomRepository;
     AmenityRepository amenityRepository;
     RoomTypeAmenityRepository roomTypeAmenityRepository;
+    ApplicationEventPublisher applicationEventPublisher;
+    ProvinceRepository provinceRepository;
+    DistrictRepository districtRepository;
+    WardRepository wardRepository;
+    SecurityUtils securityUtils;
+
 
     @Override
     @Transactional(readOnly = true)
@@ -250,6 +265,85 @@ public class HotelServiceImpl implements HotelService {
                             + " như mong đợi. Vui lòng tải lại danh sách phòng.",
                     HttpStatus.BAD_REQUEST);
         }
+    }
+
+    @Override
+    @PreAuthorize("hasRole('HOTEL_OWNER')")
+    @Transactional
+    public CreateHotelResponse createHotel(CreateHotelRequest request) {
+        UUID tenantId = securityUtils.getCurrentTenantId();
+
+        ProvinceEntity province = provinceRepository.findById(request.getProvinceCode())
+                .orElseThrow(() -> new AppException(
+                        "PROVINCE_NOT_FOUND",
+                        "Không tìm thấy provinceCode: " + request.getProvinceCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        DistrictEntity district = districtRepository.findById(request.getDistrictCode())
+                .orElseThrow(() -> new AppException(
+                        "DISTRICT_NOT_FOUND",
+                        "Không tìm thấy districtCode: " + request.getDistrictCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        WardEntity ward = wardRepository.findById(request.getWardCode())
+                .orElseThrow(() -> new AppException(
+                        "WARD_NOT_FOUND",
+                        "Không tìm thấy wardCode: " + request.getWardCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        // Validate district thuộc đúng province, ward thuộc đúng district
+        // (tránh trường hợp client gửi 3 code hợp lệ riêng lẻ nhưng không cùng 1 cây địa giới)
+        if (!district.getProvince().getCode().equals(province.getCode())) {
+            throw new AppException(
+                    "INVALID_LOCATION_HIERARCHY",
+                    "districtCode không thuộc provinceCode đã cho",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (!ward.getDistrict().getCode().equals(district.getCode())) {
+            throw new AppException(
+                    "INVALID_LOCATION_HIERARCHY",
+                    "wardCode không thuộc districtCode đã cho",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        Instant now = Instant.now();
+        HotelEntity hotel = new HotelEntity();
+        hotel.setTenantId(tenantId);
+        hotel.setName(request.getName());
+        hotel.setDescription(request.getDescription());
+        hotel.setAddress(request.getAddress());
+        hotel.setProvince(province);
+        hotel.setDistrict(district);
+        hotel.setWard(ward);
+        hotel.setStatus(HotelStatus.PENDING);
+        hotel.setIsDeleted(false);
+        hotel.setCreatedAt(now);
+        hotel.setUpdatedAt(now);
+
+        HotelEntity saved = hotelRepository.save(hotel);
+
+        log.info("Tạo hotel mới id={} tenantId={} status=PENDING", saved.getId(), tenantId);
+
+        // Publish event NỘI BỘ ngay trong transaction. Kafka message thật sự
+        // chỉ được gửi đi ở HotelKafkaEventPublisher, SAU KHI transaction này commit.
+        applicationEventPublisher.publishEvent(new HotelCreatedEvent(
+                saved.getId(),
+                saved.getTenantId(),
+                saved.getName(),
+                saved.getCreatedAt()));
+
+        return CreateHotelResponse.builder()
+                .id(saved.getId())
+                .tenantId(saved.getTenantId())
+                .name(saved.getName())
+                .description(saved.getDescription())
+                .address(saved.getAddress())
+                .provinceCode(saved.getProvince().getCode())
+                .districtCode(saved.getDistrict().getCode())
+                .wardCode(saved.getWard().getCode())
+                .status(saved.getStatus())
+                .createdAt(saved.getCreatedAt())
+                .build();
     }
 
     // đây là phần Long thêm và sửa
