@@ -323,7 +323,6 @@ erDiagram
 | GET | `/api/hotels/{id}/room-types` | Lấy danh sách loại phòng | 200 OK, 404 Not Found |
 | GET | `/api/room-types/{id}` | Xem chi tiết loại phòng | 200 OK, 404 Not Found |
 | | | | | 
-| | | | |
 | POST | `/api/hotels` | Owner tạo khách sạn mới | 201 Created, 400 Bad Request, 403 Forbidden |
 | PUT | `/api/hotels/{id}` | Owner sửa thông tin khách sạn | 200 OK, 403 Forbidden, 404 Not Found |
 | DELETE | `/api/hotels/{id}` | Owner xóa khách sạn | 204 No Content, 403 Forbidden, 409 Conflict (còn booking hiệu lực) |

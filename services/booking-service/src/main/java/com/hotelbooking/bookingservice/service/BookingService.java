@@ -28,6 +28,8 @@ import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
+import com.hotelbooking.chassis.logging.aop.LogParam;
+import com.hotelbooking.chassis.logging.aop.Loggable;
 
 import feign.FeignException;
 import feign.RetryableException;
@@ -223,6 +225,7 @@ public class BookingService {
     /*-------*/
 
     @Transactional
+    
     public BookingResponse updateBookingStatus(UUID bookingId, BookingStatus newStatus) {
         BookingEntity booking = bookingRepository.findByBookingId(bookingId)
             .orElseThrow(() -> new AppException("BOOKING_NOT_FOUND", "Booking does not exist", HttpStatus.NOT_FOUND));
@@ -258,7 +261,11 @@ public class BookingService {
     }
 
     @Transactional
-    public void handleCreateBooking(CreateBookingCommand command, List<UUID> sortedRoomTypeId, boolean isReversed){
+    @Loggable(
+        event="CREATE_BOOKING",
+        message = "New booking is created"
+    )
+    public void handleCreateBooking(@LogParam("command:") CreateBookingCommand command, List<UUID> sortedRoomTypeId, boolean isReversed){
         validateCreateCommand(command);
         if(bookingRepository.existsById(command.bookingId())){
             return;
