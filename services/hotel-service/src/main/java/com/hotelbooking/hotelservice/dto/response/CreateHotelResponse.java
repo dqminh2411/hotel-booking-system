@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -24,4 +25,7 @@ public class CreateHotelResponse {
     private String wardCode;
     private HotelStatus status;
     private Instant createdAt;
+    private List<AmenityResponse> amenities;
+    private List<PolicyResponse> policies;
+    private List<RoomTypeCreatedResponse> roomTypes;
 }

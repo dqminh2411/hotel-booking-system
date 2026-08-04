@@ -1,5 +1,6 @@
 package com.hotelbooking.hotelservice.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -8,6 +9,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.List;
 
 @Getter
 @Setter
@@ -38,4 +41,14 @@ public class CreateHotelRequest {
     @NotBlank(message = "wardCode không được để trống")
     @Pattern(regexp = "^\\d{5}$", message = "wardCode phải gồm đúng 5 chữ số")
     private String wardCode;
+
+    @Valid
+    private List<AmenityRequest> amenities;
+
+    @Valid
+    private List<PolicyRequest> policies;
+
+    @Valid
+    @NotBlank(message = "Phải có it nhất 1 loại phòng (roomTypes)")
+    private  List<RoomTypeRequest> roomTypes;
 }

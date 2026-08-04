@@ -2,19 +2,10 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.dto.request.CreateHotelRequest;
-import com.hotelbooking.hotelservice.entity.AmenityEntity;
-import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
-import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
+import com.hotelbooking.hotelservice.constant.ScopeType;
+import com.hotelbooking.hotelservice.dto.request.*;
+import com.hotelbooking.hotelservice.entity.*;
 import com.hotelbooking.hotelservice.dto.response.*;
-import com.hotelbooking.hotelservice.entity.HotelEntity;
-import com.hotelbooking.hotelservice.entity.HotelImageEntity;
-import com.hotelbooking.hotelservice.entity.PolicyEntity;
-import com.hotelbooking.hotelservice.entity.RoomEntity;
-import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
-import com.hotelbooking.hotelservice.entity.DistrictEntity;
-import com.hotelbooking.hotelservice.entity.WardEntity;
-import com.hotelbooking.hotelservice.entity.ProvinceEntity;
 import com.hotelbooking.hotelservice.event.HotelCreatedEvent;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
@@ -324,7 +315,12 @@ public class HotelServiceImpl implements HotelService {
 
         HotelEntity saved = hotelRepository.save(hotel);
 
-        log.info("Tạo hotel mới id={} tenantId={} status=PENDING", saved.getId(), tenantId);
+        List<AmenityResponse> amenityResponses = processAmenities(request.getAmenities(), saved);
+        List<PolicyResponse> policyResponses = processPolicies(request.getPolicies(), saved);
+        List<RoomTypeCreatedResponse> roomTypeResponses = processRoomTypes(request.getRoomTypes(), saved, now);
+
+        log.info("Tạo hotel mới id={} tenantId={} status=PENDING amenities={} policies={} roomTypes={}",
+                saved.getId(), tenantId, amenityResponses.size(), policyResponses.size(), roomTypeResponses.size());
 
         // Publish event NỘI BỘ ngay trong transaction. Kafka message thật sự
         // chỉ được gửi đi ở HotelKafkaEventPublisher, SAU KHI transaction này commit.
@@ -345,7 +341,125 @@ public class HotelServiceImpl implements HotelService {
                 .wardCode(saved.getWard().getCode())
                 .status(saved.getStatus())
                 .createdAt(saved.getCreatedAt())
+                .amenities(amenityResponses)
+                .policies(policyResponses)
+                .roomTypes(roomTypeResponses)
                 .build();
+    }
+
+    /**
+     * Với mỗi amenity trong request: nếu có id -> dùng amenity có sẵn (phải
+     * tồn tại, chưa bị xoá). Nếu không có id -> tìm theo tên (không phân biệt
+     * hoa/thường); nếu đã tồn tại thì dùng lại, chưa có thì tạo mới với
+     * scope = HOTEL. Sau đó tạo liên kết HotelAmenityEntity.
+     */
+    private List<AmenityResponse> processAmenities(List<AmenityRequest> requests, HotelEntity hotel) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<AmenityResponse> result = new ArrayList<>();
+        for (AmenityRequest req : requests) {
+            AmenityEntity amenity = resolveAmenity(req);
+
+            HotelAmenityEntity link = new HotelAmenityEntity();
+            link.setId(new HotelAmenityId(hotel.getId(), amenity.getId()));
+            link.setHotel(hotel);
+            link.setAmenity(amenity);
+            link.setIsDeleted(false);
+            hotelAmenityRepository.save(link);
+
+            result.add(AmenityResponse.builder()
+                    .id(amenity.getId())
+                    .name(amenity.getName())
+                    .build());
+        }
+        return result;
+    }
+
+    private AmenityEntity resolveAmenity(AmenityRequest req) {
+        if (req.getId() != null) {
+            return amenityRepository.findById(req.getId())
+                    .filter(a -> !Boolean.TRUE.equals(a.getIsDeleted()))
+                    .orElseThrow(() -> new AppException(
+                            "AMENITY_NOT_FOUND",
+                            "Không tìm thấy amenity id: " + req.getId(),
+                            HttpStatus.BAD_REQUEST));
+        }
+
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new AppException(
+                    "AMENITY_NAME_REQUIRED",
+                    "Mỗi amenity phải có id (dùng cái có sẵn) hoặc name (tạo mới)",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String trimmedName = req.getName().trim();
+        return amenityRepository.findByNameIgnoreCaseAndIsDeletedFalse(trimmedName)
+                .orElseGet(() -> {
+                    AmenityEntity newAmenity = new AmenityEntity();
+                    newAmenity.setName(trimmedName);
+                    newAmenity.setScope(ScopeType.HOTEL);
+                    newAmenity.setIsDeleted(false);
+                    AmenityEntity createdAmenity = amenityRepository.save(newAmenity);
+                    log.info("Tạo amenity mới '{}' (id={})", trimmedName, createdAmenity.getId());
+                    return createdAmenity;
+                });
+    }
+
+    private List<PolicyResponse> processPolicies(List<PolicyRequest> requests, HotelEntity hotel) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<PolicyResponse> result = new ArrayList<>();
+        for (PolicyRequest req : requests) {
+            PolicyEntity policy = new PolicyEntity();
+            policy.setHotel(hotel);
+            policy.setType(req.getType());
+            policy.setDescription(req.getDescription());
+            policy.setIsDeleted(false);
+
+            PolicyEntity saved = policyRepository.save(policy);
+            result.add(PolicyResponse.builder()
+                    .id(saved.getId())
+                    .type(saved.getType())
+                    .description(saved.getDescription())
+                    .build());
+        }
+        return result;
+    }
+
+    /** roomTypes bắt buộc có ít nhất 1 phần tử (đã validate bằng @NotEmpty ở DTO). */
+    private List<RoomTypeCreatedResponse> processRoomTypes(List<RoomTypeRequest> requests, HotelEntity hotel, Instant now) {
+        List<RoomTypeCreatedResponse> result = new ArrayList<>();
+        for (RoomTypeRequest req : requests) {
+            RoomTypeEntity roomType = new RoomTypeEntity();
+            roomType.setHotel(hotel);
+            roomType.setName(req.getName());
+            roomType.setDescription(req.getDescription());
+            roomType.setMaxGuests(req.getMaxGuests());
+            roomType.setBedCounts(req.getBedCounts());
+            roomType.setBasePricePerNight(req.getBasePricePerNight());
+            roomType.setQuantity(req.getQuantity());
+            roomType.setArea(req.getArea());
+            roomType.setIsDeleted(false);
+            roomType.setCreatedAt(now);
+            roomType.setUpdatedAt(now);
+
+            RoomTypeEntity saved = roomTypeRepository.save(roomType);
+            result.add(RoomTypeCreatedResponse.builder()
+                    .id(saved.getId())
+                    .name(saved.getName())
+                    .description(saved.getDescription())
+                    .maxGuests(saved.getMaxGuests())
+                    .bedCounts(saved.getBedCounts())
+                    .basePricePerNight(saved.getBasePricePerNight())
+                    .quantity(saved.getQuantity())
+                    .area(saved.getArea())
+                    .build());
+        }
+        return result;
     }
 
     // đây là phần Long thêm và sửa
