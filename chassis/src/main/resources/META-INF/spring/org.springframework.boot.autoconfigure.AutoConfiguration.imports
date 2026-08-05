@@ -1,1 +1,2 @@
 com.hotelbooking.chassis.logging.LoggingAutoConfiguration
+com.hotelbooking.chassis.tracing.config.TracingAutoConfiguration

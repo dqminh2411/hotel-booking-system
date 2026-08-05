@@ -76,4 +76,20 @@ chassis:
     enabled: true
     json-enabled: ${CHASSIS_LOGGING_JSON_ENABLED:true}
 
+# otel:
+#   exporter:
+#     otlp:
+#       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-collector:4317}
 
+management:
+  tracing:
+    enabled: true
+
+    # lấy sample số request đầu vào, hiện tại dev đang để 1.0
+    # trong thực tế có thể chỉ để 0.1 = 10% request sẽ tracing
+    sampling:
+      probability: 1.0 
+
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces

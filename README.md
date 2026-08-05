@@ -4,11 +4,26 @@
 
 ## Thành viên nhóm
 
-| Họ tên           | Vai trò                                                                        | Ghi chú |
-|------------------|--------------------------------------------------------------------------------|--------|
-| Đoàn Quang Minh  |  ...                                                  | ...    |
-| Vũ Nhân Kiên   |  ...                                                | ...    |
-| Đồng Vũ Hoàng Long | ...  | ... | 
+| Họ tên           | Vai trò                                                                        |
+|------------------|--------------------------------------------------------------------------------|
+| Đoàn Quang Minh  |  
+- Phân tích và thiết kế kiến trúc hệ thống, viết tài liệu SRS, API doc	
+- Cài đặt luồng Saga đặt phòng khách sạn
+- Tích hợp hệ thống quản lý định danh và phân quyền sử dụng Keycloak, bao gồm đăng nhập bằng Google, quản lý SSO, xác thực JWT và phân quyền theo vai trò.
+- Tích hợp Firebase Cloud Messaging để gửi thông báo đẩy cho các sự kiện của hệ thống.
+- Tích hợp các API khuyến mãi vào quy trình đặt phòng.
+- Tham gia thiết kế giải pháp chống tình trạng đặt trùng phòng của nhiều người dùng khác nhau đồng thời                                                |
+| Vũ Nhân Kiên   | 
+- Phân tích thiết kế hệ thống, viết API doc                  
+- cài đặt chức năng xem chi tiết khách sạn và loại phòng
+- Cài đặt Redis cache cho tìm kiếm và xem chi tiết khách sạn
+- Thiết kế và cài đặt giải pháp tránh yêu cầu đặt phòng trùng lặp của 1 người dùng
+- thiết kế và cài đặt giải pháp chống tình trạng đặt trùng phòng của nhiều người dùng khác nhau đồng thời
+- cài đặt tính năng checkin/checkout phòng đặt |
+| Đồng Vũ Hoàng Long |
+- Phân tích thiết kế hệ thống, viết API doc 
+- Cài đặt tính năng tìm kiếm khách sạn 
+- Cài đặt các tính năng CRUD khuyến mãi, coupon |
 
 ---
 

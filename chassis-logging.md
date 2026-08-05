@@ -2289,7 +2289,7 @@ import io.opentelemetry.api.OpenTelemetry;
 @Bean
 @ConditionalOnClass(name = "io.opentelemetry.api.GlobalOpenTelemetry")
 @ConditionalOnProperty(
-    name = "chassis.logging.tracing-enabled",
+    name = "management.tracing.enabled=true",
     havingValue = "true",
     matchIfMissing = true
 )

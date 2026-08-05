@@ -20,28 +20,25 @@ import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
-import lombok.extern.slf4j.Slf4j;
-import net.logstash.logback.argument.StructuredArgument;
-import net.logstash.logback.argument.StructuredArguments;
-import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.reflect.MethodSignature;
-import org.slf4j.MDC;
 
-import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.List;
 
 @Slf4j
 @Aspect
 public class LoggingAspect {
 
     private final SensitiveDataMasker masker;
-    private final Tracer tracer = GlobalOpenTelemetry.getTracer("com.hotelbooking.chassis", "1.1.0");
 
     public LoggingAspect(SensitiveDataMasker masker) {
         this.masker = masker;
+    }
+
+    /**
+     * Lazy lookup — lấy Tracer mỗi lần gọi thay vì cache lúc khởi tạo.
+     * Vì LoggingAspect bean được tạo TRƯỚC khi TracingAutoConfiguration đăng ký SDK
+     * vào GlobalOpenTelemetry, nếu cache sẵn sẽ luôn nhận no-op Tracer.
+     */
+    private Tracer getTracer() {
+        return GlobalOpenTelemetry.getTracer("com.hotelbooking.chassis", "1.1.0");
     }
 
     /**
@@ -52,7 +49,7 @@ public class LoggingAspect {
         MethodSignature sig = (MethodSignature) pjp.getSignature();
         List<StructuredArgument> baseArgs = buildBaseArgs(loggable, sig, pjp.getArgs());
 
-        Span span = tracer.spanBuilder(loggable.event())
+        Span span = getTracer().spanBuilder(loggable.event())
             .setSpanKind(SpanKind.INTERNAL)
             .startSpan();
 

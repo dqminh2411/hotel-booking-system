@@ -94,14 +94,18 @@ Danh sách topic, publisher, consumer, event type và schema chi tiết được
 ```mermaid
 flowchart TB
     Client[Frontend] -->|REST| GW[API Gateway]
-    GW <-->|register/discover| Eureka[Eureka Server]
 
+    Client <-->|Auth| KC[Keycloak]
+    
+    KC --> KCDB[(Keycloak DB)]
+    GW <-->|register/discover| Eureka[Eureka Server]
+    GW <--> |JWKS| KC
     GW --> US[User Service]
     GW --> HS[Hotel Service]
     GW --> BS[Booking Service]
     GW --> PB[Place Booking Service]
     GW --> PRS[Promotion Service]
-    GW --> SMS[Staff Management Service]
+    
     GW --> NS[Notification Service]
 
     PB -->|REST sync| US
@@ -115,15 +119,15 @@ flowchart TB
     Kafka -.->|consume commands| NS
 
     HS <-->|cache| Redis[(Redis)]
-    BS <-->|cache invalidation| Redis
+    BS <-->|race condition| Redis
 
+    PRS <--> |race condition| Redis
     US --> UDB[(user_db)]
     HS --> HDB[(hotel_db)]
     BS --> BDB[(booking_db)]
     PB --> PBDB[(place_booking_db)]
     PS --> PDB[(payment_db)]
     PRS --> PRDB[(promotion_db)]
-    SMS --> SDB[(staff_db)]
     NS --> NDB[(notification_db)]
 
     US <--> Eureka

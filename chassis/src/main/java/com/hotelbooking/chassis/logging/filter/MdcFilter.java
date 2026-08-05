@@ -1,8 +1,14 @@
 package com.hotelbooking.chassis.logging.filter;
 
 import com.hotelbooking.chassis.logging.LoggingProperties;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,6 +22,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,6 +46,18 @@ public class MdcFilter extends OncePerRequestFilter {
     private static final String MDC_HTTP_METHOD = "http.method";
     private static final String MDC_HTTP_PATH   = "http.path";
 
+    private static final TextMapGetter<HttpServletRequest> HTTP_GETTER = new TextMapGetter<>() {
+        @Override
+        public Iterable<String> keys(HttpServletRequest carrier) {
+            return Collections.list(carrier.getHeaderNames());
+        }
+
+        @Override
+        public String get(HttpServletRequest carrier, String key) {
+            return carrier.getHeader(key);
+        }
+    };
+
     private final LoggingProperties properties;
 
     @Override
@@ -56,38 +75,52 @@ public class MdcFilter extends OncePerRequestFilter {
                                     throws ServletException, IOException {
         long startTime = System.currentTimeMillis();
 
-        try {
-            setupMdc(request);
+        // 1. Trích xuất context từ HTTP Header (W3C traceparent hoặc X-Trace-Id nếu có)
+        Context extractedContext = GlobalOpenTelemetry.getPropagators()
+                .getTextMapPropagator()
+                .extract(Context.current(), request, HTTP_GETTER);
+
+        // 2. Tạo OTel Server Span cho HTTP Request
+        Tracer tracer = GlobalOpenTelemetry.getTracer("com.hotelbooking.chassis", "1.1.0");
+        String spanName = request.getMethod() + " " + request.getRequestURI();
+
+        Span span = tracer.spanBuilder(spanName)
+                .setParent(extractedContext)
+                .setSpanKind(SpanKind.SERVER)
+                .setAttribute("http.method", request.getMethod())
+                .setAttribute("http.target", request.getRequestURI())
+                .startSpan();
+
+        try (Scope scope = span.makeCurrent()) {
+            setupMdc(request, span);
             // Forward traceId xuống response header
             response.setHeader(TRACE_ID_HEADER, MDC.get(MDC_TRACE_ID));
 
             chain.doFilter(request, response);
 
+            span.setAttribute("http.status_code", response.getStatus());
+            if (response.getStatus() >= 500) {
+                span.setStatus(StatusCode.ERROR, "HTTP " + response.getStatus());
+            } else {
+                span.setStatus(StatusCode.OK);
+            }
+
+        } catch (Throwable t) {
+            span.setStatus(StatusCode.ERROR, t.getMessage());
+            span.recordException(t);
+            throw t;
         } finally {
             long duration = System.currentTimeMillis() - startTime;
             logRequestCompleted(request, response, duration);
 
-            // QUAN TRỌNG: Clear MDC sau mỗi request.
+            span.end(); // Gửi span sang BatchSpanProcessor -> OTel Collector -> Jaeger
             MDC.clear();
         }
     }
 
-    private void setupMdc(HttpServletRequest request) {
-        // Lấy traceId từ OTel active span (nếu OTel SDK đang chạy)
-        SpanContext otelContext = Span.current().getSpanContext();
-
-        String traceId;
-        String spanId;
-
-        if (otelContext.isValid()) {
-            traceId = otelContext.getTraceId();
-            spanId  = otelContext.getSpanId();
-        } else {
-            traceId = Optional.ofNullable(request.getHeader(TRACE_ID_HEADER))
-                .filter(id -> !id.isBlank())
-                .orElseGet(() -> UUID.randomUUID().toString().replace("-", ""));
-            spanId = UUID.randomUUID().toString().substring(0, 16);
-        }
+    private void setupMdc(HttpServletRequest request, Span span) {
+        String traceId = span.getSpanContext().getTraceId();
+        String spanId  = span.getSpanContext().getSpanId();
 
         MDC.put(MDC_TRACE_ID,   traceId);
         MDC.put(MDC_SPAN_ID,    spanId);

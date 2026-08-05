@@ -140,3 +140,6 @@ minio/data/
 docs/asset/place_booking_success_flow.svg
 docs/asset/acti-dia.txt
 docs/asset/hotel_booking_success_flow.png
+chassis-logging.md
+chassis.md
+OpenTelemetry.md
