@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.hotelbooking.userservice.entity.Tenant;
 import com.hotelbooking.userservice.entity.TenantStatus;
@@ -25,7 +26,7 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID>{
             or lower(u.phone) like lower(concat('%', :search, '%'))
         )
         """)
-    Page<Tenant> findByStatusAndSearch(TenantStatus status, String search, Pageable pageable);
+    Page<Tenant> findByStatusAndSearch(@Param("status") TenantStatus status, @Param("search") String search, Pageable pageable);
 
     Boolean existsByOwnerUser_IdAndIsDeletedFalse(UUID ownerId);
 

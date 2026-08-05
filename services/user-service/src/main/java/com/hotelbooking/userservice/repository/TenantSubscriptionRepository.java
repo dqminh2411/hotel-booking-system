@@ -15,4 +15,5 @@ public interface TenantSubscriptionRepository extends JpaRepository<TenantSubscr
     Optional<TenantSubscription> findByTenant_IdAndStatusAndIsDeletedFalse(UUID tenantId, TenantSubscriptionPlanStatus status);
 
     boolean existsByTenant_IdAndStatusAndIsDeletedFalse(UUID tenantId, TenantSubscriptionPlanStatus status);
+    boolean existsBySubscriptionPlan_IdAndStatusAndIsDeletedFalse(UUID plandId, TenantSubscriptionPlanStatus status);
 }
