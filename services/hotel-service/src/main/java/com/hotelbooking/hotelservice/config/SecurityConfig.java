@@ -52,7 +52,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Converter trích xuất các role từ claim 'realm_access.roles' trong Keycloak JWT 
+     * Converter trích xuất các role từ claim 'realm_access.roles' trong Keycloak JWT
      * và chuyển thành các GrantedAuthority dạng "ROLE_<ROLE_NAME>" cho Spring Security.
      */
     @Bean

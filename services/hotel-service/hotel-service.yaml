@@ -1,0 +1,641 @@
+openapi: 3.0.3
+info:
+  title: Hotel Service API
+  description: |
+    Entity Service — quản lý thông tin khách sạn, loại phòng, phòng vật lý, tiện ích, chính sách và giá động.
+    Theo Tài liệu Phân tích Thiết kế (SDD) mục 2.2 và 3.2.
+
+    Phạm vi tài liệu này: chỉ đặc tả 4 endpoint đọc dữ liệu công khai đầu tiên trong bảng tài nguyên của Hotel
+    Service (tìm kiếm khách sạn, xem chi tiết khách sạn, lấy danh sách loại phòng, xem chi tiết loại phòng).
+    Các endpoint quản trị (tạo/sửa/xóa khách sạn, phòng, giá động, duyệt khách sạn...) sẽ được đặc tả ở phiên
+    bản tiếp theo của tài liệu này.
+
+    Đặc điểm xử lý chung của các endpoint đọc:
+      - Kết quả được cache qua Redis theo khóa tổ hợp tham số truy vấn, TTL ngắn/trung bình tùy endpoint.
+      - Chỉ trả về dữ liệu chưa bị xóa mềm (`is_deleted = false`); với tìm kiếm/chi tiết khách sạn công khai,
+        chỉ trả về khách sạn có `status = APPROVED`.
+  version: 1.1.0
+
+servers:
+  - url: http://localhost:5003
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Hotels
+  - name: RoomTypes
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  # ============================================================
+  # GET /api/hotels — Tìm kiếm khách sạn
+  # ============================================================
+
+  /api/hotels:
+    get:
+      tags: [Hotels]
+      summary: Tìm kiếm khách sạn theo địa điểm/ngày/khách/giá/tiện ích
+      description: |
+        Tìm các khách sạn (status = APPROVED, is_deleted = false) có ít nhất một loại phòng còn trống
+        thỏa điều kiện tìm kiếm. Với mỗi khách sạn trong kết quả, chỉ trả về loại phòng có giá rẻ nhất
+        (cheapestRoomType) — phục vụ hiển thị ở màn hình danh sách kết quả tìm kiếm; xem chi tiết đầy đủ
+        các loại phòng tại `GET /api/hotels/{id}/room-types`.
+
+        Luồng xử lý: kiểm tra Redis Cache theo khóa tổ hợp tham số (đã chuẩn hóa) trước khi truy vấn
+        PostgreSQL `hotel_db`; nếu cache miss thì truy vấn rồi ghi lại cache với TTL ngắn.
+      operationId: searchHotels
+      parameters:
+        - name: locationCode
+          in: query
+          required: false
+          description: Mã địa điểm tìm kiếm — có thể là `province_code`, `district_code` hoặc `ward_code`.
+          schema:
+            type: string
+          example: "01"
+        - name: checkinDate
+          in: query
+          required: false
+          description: Ngày check-in (ISO 8601, YYYY-MM-DD). Bắt buộc đi kèm `checkoutDate` nếu muốn lọc theo phòng trống.
+          schema:
+            type: string
+            format: date
+          example: "2026-07-10"
+        - name: checkoutDate
+          in: query
+          required: false
+          description: Ngày check-out (ISO 8601, YYYY-MM-DD). Phải sau `checkinDate` ít nhất 1 ngày.
+          schema:
+            type: string
+            format: date
+          example: "2026-07-12"
+        - name: guestNum
+          in: query
+          required: false
+          description: Số khách. Phải lớn hơn 0.
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+        - name: roomNum
+          in: query
+          required: false
+          description: Số phòng cần đặt. Phải lớn hơn 0.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: minPrice
+          in: query
+          required: false
+          description: Giá thấp nhất mỗi đêm (VND). Phải nhỏ hơn hoặc bằng `maxPrice` nếu cả hai cùng truyền.
+          schema:
+            type: number
+            format: double
+          example: 500000
+        - name: maxPrice
+          in: query
+          required: false
+          description: Giá cao nhất mỗi đêm (VND).
+          schema:
+            type: number
+            format: double
+          example: 2000000
+        - name: amenities
+          in: query
+          required: false
+          description: Danh sách `amenity_id` cần lọc (chọn nhiều tiện ích đồng thời), phân tách bằng dấu phẩy.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+          example: ["b6a1f5b0-1111-4a2e-9a3a-aaaaaaaaaaaa", "b6a1f5b0-2222-4a2e-9a3a-bbbbbbbbbbbb"]
+        - name: sortBy
+          in: query
+          required: false
+          description: Sắp xếp kết quả theo trường nào.
+          schema:
+            type: string
+            enum: [priceAsc, priceDesc]
+          example: priceAsc
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          example: 10
+      responses:
+        '200':
+          description: Danh sách khách sạn phù hợp
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HotelSearchItem'
+                  total:
+                    type: integer
+                    example: 25
+                  page:
+                    type: integer
+                    example: 0
+                  size:
+                    type: integer
+                    example: 10
+        '400':
+          description: Tham số không hợp lệ (checkoutDate trước checkinDate, guestNum/roomNum ≤ 0, minPrice > maxPrice...)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_SEARCH_PARAMS
+                message: Ngày checkoutDate phải sau ngày checkinDate
+        '404':
+          description: Không tìm thấy khách sạn nào phù hợp với tiêu chí tìm kiếm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: NO_HOTEL_FOUND
+                message: Không tìm thấy khách sạn phù hợp với tiêu chí tìm kiếm
+
+  # ============================================================
+  # GET /api/hotels/{id} — Xem chi tiết khách sạn
+  # ============================================================
+
+  /api/hotels/{id}:
+    get:
+      tags: [Hotels]
+      summary: Lấy thông tin chi tiết khách sạn
+      description: |
+        Trả về thông tin đầy đủ của một khách sạn (mô tả, địa chỉ, tối đa 5 ảnh, chính sách, tiện ích) kèm
+        danh sách loại phòng còn trống (`availableRoomTypes`) nếu có truyền đủ `checkinDate`, `checkoutDate`,
+        `guestNum`, `roomNum`. Nếu không truyền các tham số này, `availableRoomTypes` trả về toàn bộ loại
+        phòng của khách sạn mà không tính phòng trống.
+
+        Luồng xử lý: kiểm tra Redis Cache theo khóa `hotel_detail:{hotelId}:{normalizedParamsHash}` trước khi
+        truy vấn PostgreSQL `hotel_db`; nếu cache miss thì truy vấn rồi ghi lại cache với TTL ngắn.
+      operationId: getHotelById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        - name: checkinDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-07-10"
+        - name: checkoutDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-07-12"
+        - name: guestNum
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+        - name: roomNum
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Thông tin chi tiết khách sạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelDetail'
+        '400':
+          description: Tham số ngày không hợp lệ (checkoutDate trước checkinDate, ngày trong quá khứ)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_DATE_RANGE
+                message: Ngày checkoutDate phải sau ngày checkinDate
+        '404':
+          description: Khách sạn không tồn tại, đã bị xóa mềm, hoặc chưa được duyệt (status khác APPROVED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: HOTEL_NOT_FOUND
+                message: Khách sạn không tồn tại
+
+  # ============================================================
+  # GET /api/hotels/{id}/room-types — Danh sách loại phòng
+  # ============================================================
+
+  /api/hotels/{id}/room-types:
+    get:
+      tags: [RoomTypes]
+      summary: Lấy danh sách loại phòng của khách sạn
+      description: |
+        Trả về toàn bộ loại phòng (`is_deleted = false`) thuộc một khách sạn, dùng cho mục đích quản lý/xem
+        danh sách — **không lọc theo ngày và không tính phòng trống** (khác với danh sách phòng trống trả về
+        trong `GET /api/hotels/{id}` khi có truyền `checkinDate`/`checkoutDate`).
+
+        Luồng xử lý: kiểm tra Redis Cache theo khóa `hotel_room_types:{hotelId}` trước khi truy vấn
+        PostgreSQL `hotel_db`; nếu cache miss thì truy vấn rồi ghi lại cache với TTL trung bình.
+      operationId: getRoomTypesByHotel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      responses:
+        '200':
+          description: Danh sách loại phòng của khách sạn
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoomTypeSummary'
+              example:
+                - roomTypeId: c3d4e5f6-0001-4a2e-9a3a-aaaaaaaaaaaa
+                  name: Standard Room
+                  basePricePerNight: 800000
+                  maxGuests: 2
+                  bedCounts: 1
+                  area: 25
+                  coverImageUrl: https://example.com/room-types/standard-cover.jpg
+                  totalRooms: 10
+                - roomTypeId: c3d4e5f6-0002-4a2e-9a3a-bbbbbbbbbbbb
+                  name: Deluxe Room
+                  basePricePerNight: 1200000
+                  maxGuests: 3
+                  bedCounts: 2
+                  area: 32
+                  coverImageUrl: https://example.com/room-types/deluxe-cover.jpg
+                  totalRooms: 5
+        '404':
+          description: Khách sạn không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: HOTEL_NOT_FOUND
+                message: Khách sạn không tồn tại
+
+  # ============================================================
+  # GET /api/room-types/{id} — Chi tiết loại phòng
+  # ============================================================
+
+  /api/room-types/{id}:
+    get:
+      tags: [RoomTypes]
+      summary: Lấy thông tin chi tiết loại phòng
+      description: |
+        Trả về thông tin chi tiết một loại phòng kèm danh sách tiện ích (`amenities`, đã lọc
+        `is_deleted = false`) và tối đa 5 ảnh đầu tiên (`images`, phân trang `limit 5`).
+
+        Luồng xử lý: kiểm tra Redis Cache theo khóa `room_type_detail:{roomTypeId}` trước khi truy vấn
+        PostgreSQL `hotel_db`; nếu cache miss thì truy vấn rồi ghi lại cache với TTL trung bình.
+      operationId: getRoomTypeById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: c3d4e5f6-0002-4a2e-9a3a-bbbbbbbbbbbb
+      responses:
+        '200':
+          description: Thông tin chi tiết loại phòng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomTypeDetail'
+        '404':
+          description: Loại phòng không tồn tại hoặc đã bị xóa mềm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ROOM_TYPE_NOT_FOUND
+                message: Loại phòng không tồn tại
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: HOTEL_NOT_FOUND
+        message:
+          type: string
+          example: Khách sạn không tồn tại
+
+    # ---------- Location (provinces / districts / wards) ----------
+
+    LocationRef:
+      type: object
+      description: Tham chiếu rút gọn tới một đơn vị hành chính (province/district/ward).
+      properties:
+        code:
+          type: string
+          example: "01"
+        name:
+          type: string
+          example: Hà Nội
+
+    Address:
+      type: object
+      description: Địa chỉ khách sạn, ghép từ `address` và 3 mã hành chính (`province_code`, `district_code`, `ward_code`).
+      properties:
+        fullAddress:
+          type: string
+          example: 12 Phan Chu Trinh, Hoàn Kiếm, Hà Nội
+        province:
+          $ref: '#/components/schemas/LocationRef'
+        district:
+          $ref: '#/components/schemas/LocationRef'
+        ward:
+          $ref: '#/components/schemas/LocationRef'
+
+    # ---------- Amenities / Policies ----------
+
+    Amenity:
+      type: object
+      description: Tương ứng bảng `amenities`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Hồ bơi
+        scope:
+          type: string
+          enum: [HOTEL, ROOM_TYPE, BOTH]
+
+    Policy:
+      type: object
+      description: Tương ứng bảng `policies`.
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CANCELLATION, CHECKIN, CHECKOUT, SMOKING, PAYMENT, PETS, CHILDREN]
+        description:
+          type: string
+          nullable: true
+
+    # ---------- Hotels ----------
+
+    CheapestRoomType:
+      type: object
+      description: |
+        Loại phòng có giá rẻ nhất còn trống của một khách sạn, dùng riêng cho kết quả tìm kiếm
+        (`GET /api/hotels`) — màn hình danh sách chỉ cần hiển thị mức giá khởi điểm.
+      properties:
+        roomTypeId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Standard Room
+        pricePerNight:
+          type: number
+          format: double
+          description: Giá đã áp dụng pricing_rules (nếu trùng ngày tìm kiếm) theo độ ưu tiên SPECIAL > WEEKEND > SEASONAL.
+          example: 800000
+        availableRooms:
+          type: integer
+          example: 4
+
+    HotelSearchItem:
+      type: object
+      description: Một khách sạn trong kết quả tìm kiếm, kèm loại phòng rẻ nhất còn trống.
+      properties:
+        hotelId:
+          type: string
+          format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        name:
+          type: string
+          example: Marriott Hanoi
+        coverImageUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://example.com/hotels/marriott-hanoi-cover.jpg
+        address:
+          $ref: '#/components/schemas/Address'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        cheapestRoomType:
+          allOf:
+            - $ref: '#/components/schemas/CheapestRoomType'
+          nullable: true
+          description: Null nếu không có loại phòng nào còn trống theo điều kiện tìm kiếm.
+
+    HotelDetail:
+      type: object
+      description: Tương ứng bảng `hotels`, kèm tối đa 5 ảnh, chính sách, tiện ích và danh sách loại phòng.
+      properties:
+        hotelId:
+          type: string
+          format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        name:
+          type: string
+          example: Marriott Hanoi
+        description:
+          type: string
+          nullable: true
+          example: Khách sạn 5 sao tọa lạc trung tâm Hà Nội
+        address:
+          $ref: '#/components/schemas/Address'
+        images:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              url:
+                type: string
+                format: uri
+              isCover:
+                type: boolean
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Policy'
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Amenity'
+        availableRoomTypes:
+          type: array
+          description: |
+            Nếu có truyền đủ checkinDate/checkoutDate/guestNum/roomNum: chỉ gồm loại phòng còn đủ phòng trống.
+            Nếu không truyền: trả về toàn bộ loại phòng của khách sạn (không tính phòng trống).
+          items:
+            $ref: '#/components/schemas/RoomTypeSummary'
+        status:
+          type: string
+          enum: [PENDING, APPROVED, SUSPENDED]
+
+    # ---------- Room Types ----------
+
+    RoomTypeSummary:
+      type: object
+      description: Tương ứng bảng `room_types`, dùng cho danh sách loại phòng (không kèm mô tả/tiện ích/đầy đủ ảnh).
+      properties:
+        roomTypeId:
+          type: string
+          format: uuid
+          example: c3d4e5f6-0002-4a2e-9a3a-bbbbbbbbbbbb
+        name:
+          type: string
+          example: Deluxe Room
+        basePricePerNight:
+          type: number
+          format: double
+          example: 1200000
+        maxGuests:
+          type: integer
+          description: Sức chứa tối đa (số khách) — cột `max_guests`.
+          example: 3
+        bedCounts:
+          type: integer
+          description: Số giường — cột `bed_counts`.
+          example: 2
+        area:
+          type: integer
+          nullable: true
+          description: Diện tích phòng (m²) — cột `area`.
+          example: 32
+        coverImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        totalRooms:
+          type: integer
+          description: Tổng số phòng thuộc loại này — cột `quantity`.
+          example: 5
+        availableRooms:
+          type: integer
+          nullable: true
+          description: Số phòng còn trống — chỉ có giá trị khi truy vấn kèm checkinDate/checkoutDate; null nếu không truyền ngày.
+          example: 3
+
+    RoomTypeDetail:
+      type: object
+      description: Tương ứng bảng `room_types`, kèm tiện ích và tối đa 5 ảnh đầu tiên.
+      properties:
+        roomTypeId:
+          type: string
+          format: uuid
+        hotelId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Deluxe Room
+        description:
+          type: string
+          nullable: true
+          example: Phòng deluxe view hồ, tầng cao
+        basePricePerNight:
+          type: number
+          format: double
+          example: 1200000
+        maxGuests:
+          type: integer
+          example: 3
+        bedCounts:
+          type: integer
+          example: 2
+        area:
+          type: integer
+          nullable: true
+          example: 32
+        totalRooms:
+          type: integer
+          example: 5
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Amenity'
+        images:
+          type: array
+          maxItems: 5
+          description: Tối đa 5 ảnh đầu tiên (phân trang `limit 5`).
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              url:
+                type: string
+                format: uri
+              isCover:
+                type: boolean
