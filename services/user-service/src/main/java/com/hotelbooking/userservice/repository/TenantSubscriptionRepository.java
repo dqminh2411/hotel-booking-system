@@ -3,6 +3,8 @@ package com.hotelbooking.userservice.repository;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,4 +18,12 @@ public interface TenantSubscriptionRepository extends JpaRepository<TenantSubscr
 
     boolean existsByTenant_IdAndStatusAndIsDeletedFalse(UUID tenantId, TenantSubscriptionPlanStatus status);
     boolean existsBySubscriptionPlan_IdAndStatusAndIsDeletedFalse(UUID plandId, TenantSubscriptionPlanStatus status);
+
+    @EntityGraph(attributePaths = {"subscriptionPlan"})
+    Page<TenantSubscription> findByTenant_IdAndIsDeletedFalse(UUID tenantId, Pageable pageable);
+    
+    boolean existsByTenant_IdAndSubscriptionPlan_IdAndStatusAndIsDeletedFalse(UUID tenantId, UUID planId, TenantSubscriptionPlanStatus status);
+
+    @EntityGraph(attributePaths = {"tenant", "subscriptionPlan"})
+    Optional<TenantSubscription> findByIdAndIsDeletedFalse(UUID id);
 }

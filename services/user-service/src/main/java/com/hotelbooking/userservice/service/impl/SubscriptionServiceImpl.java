@@ -98,7 +98,7 @@ public class SubscriptionServiceImpl implements SubscriptionService{
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Phải có ít nhất 1 field được cập nhật");
         }
 
-        if(subscriptionPlanRepository.existByNameAndIdNotAndIsDeletedFalse(request.name(), planId)){
+        if(subscriptionPlanRepository.existsByNameAndIdNotAndIsDeletedFalse(request.name(), planId)){
             throw new ApiException(HttpStatus.BAD_REQUEST, "CODE_ALREADY_EXISTS", "Code đã tồn tại trong hệ thống");
         }
 

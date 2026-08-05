@@ -53,7 +53,7 @@ public class AdminController {
         @RequestParam(name = "page", defaultValue = "0", required = false) @Min(0) int page,
         @RequestParam(name =  "size", defaultValue = "10", required = false) @Min(10) @Max(30) int size,
         @RequestParam(name = "status", required = false) UserStatus status,
-        @RequestParam(name = "search", required = false) String search
+        @RequestParam(name = "search", required = false, defaultValue = "") String search
     ) {
         Pageable pageable = PageRequest.of(page, size, Sort.Direction.ASC, "createdAt");
         
@@ -119,7 +119,6 @@ public class AdminController {
         @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody LockRequest request
     ){
-
         return ApiResponse.builder()
                         .code(200)
                         .message("Khóa tài khoản người dùng thành công")

@@ -68,8 +68,6 @@ public class AdminServiceImpl implements AdminService{
     @Override
     @Transactional(readOnly = true)
     public Page<ResponseUser> getAllUsers(UserStatus status, String search, Pageable pageable){
-        if (search == null || search.isBlank()) search = null;
-
         Page<UserEntity> searchUsers = userRepository.findByStatusAndSearch(status, search, pageable);
 
         return searchUsers.map(
