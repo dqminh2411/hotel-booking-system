@@ -2,6 +2,7 @@ package com.hotelbooking.hotelservice.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -49,6 +50,6 @@ public class CreateHotelRequest {
     private List<PolicyRequest> policies;
 
     @Valid
-    @NotBlank(message = "Phải có it nhất 1 loại phòng (roomTypes)")
+    @NotEmpty(message = "Phải có it nhất 1 loại phòng (roomTypes)")
     private  List<RoomTypeRequest> roomTypes;
 }

@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS hotel_images (
     id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     hotel_id   UUID         NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
     url        VARCHAR(500) NOT NULL,
+    object_name VARCHAR(500) NOT NULL,
     is_cover   BOOLEAN      NOT NULL DEFAULT false,
     is_deleted BOOLEAN      NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
