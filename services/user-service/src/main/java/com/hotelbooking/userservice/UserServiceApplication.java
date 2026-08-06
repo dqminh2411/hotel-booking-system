@@ -2,8 +2,18 @@ package com.hotelbooking.userservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
+@EntityScan(basePackages = {
+    "com.hotelbooking.userservice.entity",
+    "com.hotelbooking.chassis.outbox.entity"
+})
+@EnableJpaRepositories(basePackages = {
+    "com.hotelbooking.userservice.repository",
+    "com.hotelbooking.chassis.outbox.repository"
+})
 public class UserServiceApplication {
 
 	public static void main(String[] args) {

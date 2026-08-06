@@ -94,7 +94,10 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     published     BOOLEAN     NOT NULL DEFAULT false,
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
-    is_deleted    BOOLEAN     NOT NULL DEFAULT false
+    is_deleted    BOOLEAN     NOT NULL DEFAULT false, 
+    traceparent  VARCHAR(55),
+    event_type VARCHAR(100),
+    retry_count  INT         NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS roomtype_inventory (

@@ -18,7 +18,7 @@ import com.hotelbooking.bookingservice.dto.kafka.CreateBookingCommand;
 import com.hotelbooking.bookingservice.entity.BookedRoomTypeEntity;
 import com.hotelbooking.bookingservice.entity.BookingEntity;
 import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
-import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.exception.AppException;
@@ -26,7 +26,6 @@ import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
-import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
 import com.hotelbooking.chassis.logging.aop.LogParam;
 import com.hotelbooking.chassis.logging.aop.Loggable;
@@ -69,7 +68,7 @@ public class BookingService {
     BookingRepository bookingRepository;
     BookedRoomTypeRepository bookedRoomTypeRepository;
     BookingInfoRepository bookingInfoRepository;
-    OutboxEventRepository outboxEventRepository;
+    OutboxRelay outboxRelay;
     ObjectMapper objectMapper;
     RoomTypeInventoryRepository roomTypeInventoryRepository;
     StringRedisTemplate stringRedisTemplate;
@@ -431,13 +430,7 @@ public class BookingService {
 
     public void saveOutboxEvent(Object event) {
         try {
-            OutboxEventEntity outbox = new OutboxEventEntity();
-            outbox.setId(UUID.randomUUID());
-            outbox.setTopic(OUTBOX_TOPIC);
-            outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setPublished(Boolean.FALSE);
-            outbox.setCreatedAt(Instant.now());
-            outboxEventRepository.save(outbox);
+            outboxRelay.saveEvent(OUTBOX_TOPIC, event);
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
         }

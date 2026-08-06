@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.payment_service.dto.PaymentFailed;
 import com.payment_service.dto.PaymentProcessResult;
 import com.payment_service.dto.PaymentRefunded;
@@ -18,7 +19,6 @@ import com.payment_service.dto.ProcessPayment;
 import com.payment_service.dto.RefundPayment;
 import com.payment_service.entity.Payment;
 import com.payment_service.repository.PaymentRepository;
-import com.payment_service.service.OutboxPublisherService;
 import com.payment_service.service.PaymentService;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
@@ -30,7 +30,7 @@ public class KafkaConsumerService {
     @Autowired
     private  PaymentService paymentService;
     @Autowired
-    private  OutboxPublisherService outboxPublisherService;
+    private  OutboxRelay outboxPublisherService;
     @Autowired
     private PaymentRepository paymentRepository;
 

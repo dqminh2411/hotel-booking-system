@@ -2,11 +2,11 @@ package com.promotion.promotion_service.service.kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.promotion.promotion_service.dto.kafka.ConfirmPromotionUsageCommand;
 import com.promotion.promotion_service.dto.kafka.PromotionRejectedEvent;
 import com.promotion.promotion_service.dto.kafka.ReleasePromotionUsageCommand;
 import com.promotion.promotion_service.dto.kafka.ValidatePromotionCommand;
-import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +29,7 @@ public class PromotionKafkaConsumerService {
 
     PromotionService promotionService;
     RedissonClient redissonClient;
-    OutboxPublisherService outboxPublisherService;
+    OutboxRelay outboxPublisherService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @KafkaListener(topics = "promotion-commands", groupId = "${spring.kafka.consumer.group-id:promotion-service}")

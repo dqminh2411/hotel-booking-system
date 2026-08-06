@@ -7,8 +7,8 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.place_booking_service.dto.*;
-import com.place_booking_service.service.OutboxPublisherService;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ import com.place_booking_service.repository.SagaStateRepository;
 public class KafkaConsumerService {
 
     SagaStateRepository sagaStateRepository;
-    OutboxPublisherService outboxPublisherService;
+    OutboxRelay outboxPublisherService;
 
     @KafkaListener(topics = "booking-events")
     @Transactional

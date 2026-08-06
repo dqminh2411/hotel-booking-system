@@ -30,12 +30,11 @@ import com.hotelbooking.hotelservice.dto.response.HotelPendingResponse;
 import com.hotelbooking.hotelservice.dto.response.UserResponse;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.HotelImageEntity;
-import com.hotelbooking.hotelservice.entity.OutboxEventEntity;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.hotelbooking.hotelservice.service.AdminService;
 
 import io.minio.MinioClient;
@@ -61,7 +60,8 @@ public class AdminServiceImpl implements AdminService{
     StringRedisTemplate stringRedisTemplate;
     UserServiceFeignClient userServiceFeignClient;
     ObjectMapper objectMapper;
-    OutboxEventRepository outboxEventRepository;
+    private final OutboxRelay outboxPublisherService;
+
     MinioClient minioClient;
 
     @NonFinal
@@ -133,7 +133,8 @@ public class AdminServiceImpl implements AdminService{
                     eventType,
                     request.reason()        
         );
-        saveOutboxEvent(emailRequest, "hotel-status-actions");
+       
+        outboxPublisherService.saveEvent("hotel-status-actions", emailRequest);
         
         // clearKeyHotelId(hotelId);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -185,19 +186,19 @@ public class AdminServiceImpl implements AdminService{
         });
     }
 
-    private void saveOutboxEvent(Object event, String topic) {
-        try {
-            OutboxEventEntity outbox = new OutboxEventEntity();
-            outbox.setId(UUID.randomUUID());
-            outbox.setTopic(topic);
-            outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setPublished(Boolean.FALSE);
-            outbox.setCreatedAt(Instant.now());
-            outboxEventRepository.save(outbox);
-        } catch (Exception ex) {
-            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
+    // private void saveOutboxEvent(Object event, String topic) {
+    //     try {
+    //         OutboxEventEntity outbox = new OutboxEventEntity();
+    //         outbox.setId(UUID.randomUUID());
+    //         outbox.setTopic(topic);
+    //         outbox.setPayload(objectMapper.writeValueAsString(event));
+    //         outbox.setPublished(Boolean.FALSE);
+    //         outbox.setCreatedAt(Instant.now());
+    //         outboxEventRepository.save(outbox);
+    //     } catch (Exception ex) {
+    //         throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
+    //     }
+    // }
 
     // http://minio:9000/hotel-images/imgName
     private String extractImgName(String imgUrl){

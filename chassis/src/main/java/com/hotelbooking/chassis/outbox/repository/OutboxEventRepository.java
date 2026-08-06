@@ -1,14 +1,12 @@
-package com.promotion.promotion_service.repository;
+package com.hotelbooking.chassis.outbox.repository;
 
-import com.promotion.promotion_service.entity.OutboxEventEntity;
+import com.hotelbooking.chassis.outbox.entity.OutboxEventEntity;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.UUID;
-
 @Repository
 public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, UUID> {
-
     List<OutboxEventEntity> findTop50ByPublishedFalseAndIsDeletedFalseOrderByCreatedAtAsc();
 }

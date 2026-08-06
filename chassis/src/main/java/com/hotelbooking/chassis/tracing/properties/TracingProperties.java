@@ -1,16 +1,9 @@
 package com.hotelbooking.chassis.tracing.properties;
 
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
-
-@Data
-@Configuration
-@ConfigurationProperties(prefix = "management.tracing")
+/**
+ * Tracing configuration is now managed by OpenTelemetry Java Agent
+ * via environment variables (OTEL_*), not Spring Boot properties.
+ * This class is kept as a placeholder.
+ */
 public class TracingProperties {
-    
-    private Double samplingProbability;
-
-    private boolean enabled = true;
-    
 }
