@@ -85,7 +85,7 @@ services:
     ports:
       - "${KAFKA_EXTERNAL_PORT:-9092}:9092"
     environment:
-      CLUSTER_ID: "hotel-test-cluster-01"
+      CLUSTER_ID: "Ad1e7PaOSp6FZ9ia6Gi5Tw"
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
