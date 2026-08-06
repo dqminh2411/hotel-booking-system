@@ -3,10 +3,9 @@ receivers:
   otlp:
     protocols:
       grpc:
-        # endpoint: 0.0.0.0:4317
+        endpoint: 0.0.0.0:4317
       http:
-        # endpoint: 0.0.0.0:4318
-
+        endpoint: 0.0.0.0:4318
   # ── Đọc logs từ stdout của Docker containers  ─────────
   # filelog:
   #   include:
@@ -57,7 +56,7 @@ processors:
 
 exporters:
   otlp/jaeger:
-    endpoint: jaeger:4318
+    endpoint: jaeger:4317
     tls:
       insecure: true
 

@@ -715,8 +715,8 @@ services:
       - ES_INDEX_PREFIX=jaeger
     ports:
       - "16686:16686"  # Jaeger UI
-      # - "14317:4317"   # OTLP gRPC (Jaeger nhận từ Collector)
-      # - "14318:4318"   # OTLP HTTP
+      - "4317"   # OTLP gRPC (Jaeger nhận từ Collector)
+      - "4318"   # OTLP HTTP
     depends_on:
       elasticsearch:
         condition: service_healthy
