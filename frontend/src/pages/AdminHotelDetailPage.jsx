@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import PublicHeader from '../shared/components/PublicHeader';
+import { AdminLayout } from '@/shared/components/AdminLayout/AdminLayout';
 import ErrorState from '../shared/components/ErrorState';
 import { Button } from '@/shared/components/Button/Button';
 import { useDisclosure } from '@/shared/hooks/useDisclosure';
@@ -32,6 +32,11 @@ import { ROUTES } from '@/shared/constants/routes';
  *  - Thay nút "Đặt ngay" trên HotelHeader bằng 3 nút action quản lý:
  *    Quản lý ảnh / Từ chối / Duyệt (tái sử dụng đúng các modal + hook đã có
  *    ở AdminHotelPendingListPage trước đây).
+ *
+ * Dùng AdminLayout (sidebar trái + header quản trị) thay vì PublicHeader để đồng bộ
+ * giao diện với các trang Admin khác. Modal (RoomTypeDetailModal, UpdateHotelStatusModal,
+ * ManageHotelImagesModal) vẫn render bình thường dù đặt trong AdminLayout vì Modal dùng
+ * portal ra document.body, không phụ thuộc vị trí trong cây JSX.
  */
 export default function AdminHotelDetailPage() {
   const { hotelId } = useParams();
@@ -100,42 +105,38 @@ export default function AdminHotelDetailPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <PublicHeader />
+    <AdminLayout>
+      <Link
+        to={ROUTES.admin.hotelsPending}
+        className="text-sm font-medium text-blue-700 hover:text-blue-800"
+      >
+        ← Quay lại danh sách chờ duyệt
+      </Link>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
-        <Link
-          to={ROUTES.admin.hotelsPending}
-          className="text-sm font-medium text-blue-700 hover:text-blue-800"
-        >
-          ← Quay lại danh sách chờ duyệt
-        </Link>
+      <div className="mt-4">
+        {status === 'loading' && <HotelDetailSkeleton />}
 
-        <div className="mt-4">
-          {status === 'loading' && <HotelDetailSkeleton />}
+        {status === 'error' && <ErrorState message={errorMessage} onRetry={reload} />}
 
-          {status === 'error' && <ErrorState message={errorMessage} onRetry={reload} />}
+        {status === 'success' && hotel && (
+          <div className="space-y-8">
+            <HotelHeader hotel={hotel} actions={actionButtons} />
+            <HotelGallery images={hotel.imageUrls} hotelName={hotel.name} />
 
-          {status === 'success' && hotel && (
             <div className="space-y-8">
-              <HotelHeader hotel={hotel} actions={actionButtons} />
-              <HotelGallery images={hotel.imageUrls} hotelName={hotel.name} />
-
-              <div className="space-y-8">
-                <HotelOverview description={hotel.description} />
-                <HotelAmenities amenities={hotel.amenities} />
-              </div>
-
-              <AdminRoomTypeList
-                roomTypes={hotel.availableRoomTypes}
-                onViewDetail={setSelectedRoomTypeId}
-              />
-
-              <HotelPolicies policies={hotel.policies} />
+              <HotelOverview description={hotel.description} />
+              <HotelAmenities amenities={hotel.amenities} />
             </div>
-          )}
-        </div>
-      </main>
+
+            <AdminRoomTypeList
+              roomTypes={hotel.availableRoomTypes}
+              onViewDetail={setSelectedRoomTypeId}
+            />
+
+            <HotelPolicies policies={hotel.policies} />
+          </div>
+        )}
+      </div>
 
       <RoomTypeDetailModal roomTypeId={selectedRoomTypeId} onClose={() => setSelectedRoomTypeId(null)} />
 
@@ -157,6 +158,6 @@ export default function AdminHotelDetailPage() {
         onClose={imagesModal.close}
         onSubmit={handleDeleteImages}
       />
-    </div>
+    </AdminLayout>
   );
 }
