@@ -334,6 +334,8 @@ public class AdminServiceImpl implements AdminService{
         user.setEnabled(enable);
 
         userResource.update(user);
+
+        if(enable == false) userResource.logout();
     }
 
     private List<String> getUserRoleKeycloak(UUID userId){
