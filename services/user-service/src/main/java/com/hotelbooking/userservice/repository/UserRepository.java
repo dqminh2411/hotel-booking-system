@@ -24,7 +24,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
     @Query("""
             select u from UserEntity u
             where u.deleted = false
-                and (:status is null or u.status = :status)
+                and u.status = coalesce(:status, u.status)
                 and (:search is null
                     or lower(u.email) like lower(concat('%', :search, '%'))
                     or lower(u.phone) like lower(concat('%', :search, '%'))

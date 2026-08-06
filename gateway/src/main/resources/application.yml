@@ -34,15 +34,15 @@ spring:
               predicates:
                 - Path=/bookings,/bookings/**
 
-            - id: user-service-route
-              uri: lb://user-service
-              predicates:
-                - Path=/api/auth/**,/api/users,/api/users/**,/api/admin/users/**
-
             - id: hotel-service-route
               uri: lb://hotel-service
               predicates:
                 - Path=/api/hotels/**,/api/room-types/**,/api/admin/hotels/**,/api/minio/**
+
+            - id: user-service-route
+              uri: lb://user-service
+              predicates:
+                - Path=/api/auth/**,/api/users,/api/users/**,/api/admin/**
 
             - id: promotion-service-route
               uri: lb://promotion-service
