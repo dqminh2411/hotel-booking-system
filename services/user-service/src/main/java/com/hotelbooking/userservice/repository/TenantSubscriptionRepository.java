@@ -1,5 +1,7 @@
 package com.hotelbooking.userservice.repository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,4 +28,6 @@ public interface TenantSubscriptionRepository extends JpaRepository<TenantSubscr
 
     @EntityGraph(attributePaths = {"tenant", "subscriptionPlan"})
     Optional<TenantSubscription> findByIdAndIsDeletedFalse(UUID id);
+
+    List<TenantSubscription> findByExpiresAtBetweenAndStatusAndIsDeletedFalse(Instant startOfDay, Instant endOfDay, TenantSubscriptionPlanStatus status);
 }

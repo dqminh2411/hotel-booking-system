@@ -27,7 +27,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     String[] whiteLists = {
-        "/api/users/**",
+        // "/api/users/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/health"
