@@ -43,6 +43,12 @@ import io.minio.RemoveObjectsArgs;
 import io.minio.Result;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
+
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapSetter;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -185,6 +191,9 @@ public class AdminServiceImpl implements AdminService{
         });
     }
 
+    private static final TextMapSetter<Map<String, String>> MAP_SETTER =
+        (carrier, key, value) -> carrier.put(key, value);
+
     private void saveOutboxEvent(Object event, String topic) {
         try {
             OutboxEventEntity outbox = new OutboxEventEntity();
@@ -193,6 +202,16 @@ public class AdminServiceImpl implements AdminService{
             outbox.setPayload(objectMapper.writeValueAsString(event));
             outbox.setPublished(Boolean.FALSE);
             outbox.setCreatedAt(Instant.now());
+            
+            SpanContext spanCtx = Span.current().getSpanContext();
+            if (spanCtx.isValid()) {
+                Map<String, String> carrier = new java.util.HashMap<>();
+                GlobalOpenTelemetry.getPropagators()
+                    .getTextMapPropagator()
+                    .inject(Context.current(), carrier, MAP_SETTER);
+                outbox.setTraceparent(carrier.get("traceparent"));
+            }
+            
             outboxEventRepository.save(outbox);
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);

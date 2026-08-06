@@ -1,7 +1,9 @@
 package com.hotelbooking.hotelservice.kafka;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -13,6 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotelbooking.hotelservice.entity.OutboxEventEntity;
 import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -30,6 +35,18 @@ public class OutboxRelay {
     ObjectMapper objectMapper;
     KafkaTemplate<String, String> kafkaTemplate;
 
+    private static final TextMapGetter<Map<String, String>> MAP_GETTER =
+        new TextMapGetter<>() {
+            @Override
+            public Iterable<String> keys(Map<String, String> carrier) {
+                return carrier.keySet();
+            }
+            @Override
+            public String get(Map<String, String> carrier, String key) {
+                return carrier.get(key);
+            }
+        };
+
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:100}")
     @Transactional
     public void relay() {
@@ -45,7 +62,19 @@ public class OutboxRelay {
                 String topic = event.getTopic() == null || event.getTopic().isBlank()
                     ? TOPIC
                     : event.getTopic();
-                kafkaTemplate.send(topic, hotelId, event.getPayload()).get();
+
+                if (event.getTraceparent() != null) {
+                    Map<String, String> carrier = new HashMap<>();
+                    carrier.put("traceparent", event.getTraceparent());
+                    Context restoredCtx = GlobalOpenTelemetry.getPropagators()
+                        .getTextMapPropagator()
+                        .extract(Context.current(), carrier, MAP_GETTER);
+                    try (io.opentelemetry.context.Scope scope = restoredCtx.makeCurrent()) {
+                        kafkaTemplate.send(topic, hotelId, event.getPayload()).get();
+                    }
+                } else {
+                    kafkaTemplate.send(topic, hotelId, event.getPayload()).get();
+                }
 
                 event.setPublished(Boolean.TRUE);
                 event.setPublishedAt(Instant.now());

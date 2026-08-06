@@ -31,6 +31,12 @@ import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
 import com.hotelbooking.chassis.logging.aop.LogParam;
 import com.hotelbooking.chassis.logging.aop.Loggable;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapSetter;
+
 import feign.FeignException;
 import feign.RetryableException;
 
@@ -428,6 +434,8 @@ public class BookingService {
             log.error("Lỗi khi xóa cache (booking vẫn được tạo trước rồi)");
         }
     }
+    private static final TextMapSetter<java.util.Map<String, String>> MAP_SETTER =
+        (carrier, key, value) -> carrier.put(key, value);
 
     public void saveOutboxEvent(Object event) {
         try {
@@ -437,6 +445,16 @@ public class BookingService {
             outbox.setPayload(objectMapper.writeValueAsString(event));
             outbox.setPublished(Boolean.FALSE);
             outbox.setCreatedAt(Instant.now());
+            // ── Capture W3C traceparent từ span hiện tại ──────────────────────────
+            // Khi gọi từ @KafkaListener, Java Agent đã tạo span → SpanContext hợp lệ
+            SpanContext spanCtx = Span.current().getSpanContext();
+            if (spanCtx.isValid()) {
+                java.util.Map<String, String> carrier = new java.util.HashMap<>();
+                GlobalOpenTelemetry.getPropagators()
+                    .getTextMapPropagator()
+                    .inject(Context.current(), carrier, MAP_SETTER);
+                outbox.setTraceparent(carrier.get("traceparent"));
+            }
             outboxEventRepository.save(outbox);
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);

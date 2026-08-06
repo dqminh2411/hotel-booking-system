@@ -1,11 +1,17 @@
 package com.hotelbooking.bookingservice.kafka;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapGetter;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
-import java.time.Instant;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -22,6 +28,18 @@ public class OutboxRelay {
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+     // TextMapGetter để extract traceparent từ Map khi restore context
+    private static final TextMapGetter<Map<String, String>> MAP_GETTER =
+        new TextMapGetter<>() {
+            @Override
+            public Iterable<String> keys(Map<String, String> carrier) {
+                return carrier.keySet();
+            }
+            @Override
+            public String get(Map<String, String> carrier, String key) {
+                return carrier.get(key);
+            }
+        };
 
     @Scheduled(fixedDelayString = "${outbox.relay.interval-ms:100}")
     @Transactional
@@ -38,11 +56,28 @@ public class OutboxRelay {
                 String topic = event.getTopic() == null || event.getTopic().isBlank()
                     ? FALLBACK_TOPIC
                     : event.getTopic();
-                kafkaTemplate.send(topic, bookingId, event.getPayload()).get();
 
+                final String key = bookingId;
+                // ── Restore OTel trace context từ traceparent đã lưu ────────────────
+                // Span PRODUCER của kafkaTemplate.send() sẽ là child của span gốc
+                if (event.getTraceparent() != null) {
+                    Map<String, String> carrier = new HashMap<>();
+                    carrier.put("traceparent", event.getTraceparent());
+                    Context restoredCtx = GlobalOpenTelemetry.getPropagators()
+                        .getTextMapPropagator()
+                        .extract(Context.current(), carrier, MAP_GETTER);
+                    try (io.opentelemetry.context.Scope scope = restoredCtx.makeCurrent()) {
+                        kafkaTemplate.send(topic, key, event.getPayload()).get();
+                    }
+                } else {
+                    // Fallback cho row cũ chưa có traceparent
+                    kafkaTemplate.send(topic, key, event.getPayload()).get();
+                }
+                
                 event.setPublished(Boolean.TRUE);
                 event.setPublishedAt(Instant.now());
                 outboxEventRepository.save(event);
+
             } catch (Exception ex) {
                 log.error("Failed to relay outbox event id={}", event.getId(), ex);
             }
