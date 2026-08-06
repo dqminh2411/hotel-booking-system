@@ -2,36 +2,75 @@ openapi: 3.0.3
 info:
   title: User Service API
   description: |
-    User Service — sở hữu toàn bộ vòng đời người dùng và tổ chức thuê (tenant) trên nền tảng HotelHub SaaS.
-    Gộp nghiệp vụ Identity & Access (đăng ký, đăng nhập, OAuth2 Google, JWT, RBAC, khóa/mở tài khoản)
-    và nghiệp vụ Tenant Management (tenant, subscription plan) vào cùng một service, theo Tài liệu
-    Phân tích Thiết kế (SDD) v1.0, mục 2.1 và 3.1.
+    User Service — sở hữu vòng đời hồ sơ người dùng (profile) và nghiệp vụ Tenant Management
+    (tenant, subscription plan, tenant subscription) trên nền tảng HotelHub SaaS.
+
+    **Mô hình xác thực (đã đổi so với bản trước):** service KHÔNG tự phát hành JWT, không có
+    local login/register bằng password, không có OAuth2 Google, forgot/reset-password tại
+    tầng này. Toàn bộ Identity & Access (đăng ký, đăng nhập, cấp Access Token) do **Keycloak**
+    đảm nhiệm (realm `hotel-booking-system`). User Service chỉ đóng vai trò **OAuth2 Resource
+    Server**: nhận Access Token (JWT) do Keycloak ký, xác thực qua JWKS, đọc role từ claim
+    `realm_access.roles` để check RBAC (`@PreAuthorize`). Bảng `users` ở service này lưu
+    **hồ sơ mở rộng** (fullName, phone, address, avatar...) của user đã tồn tại trên Keycloak,
+    khoá chính `users.id` = subject (`sub`) của JWT = Keycloak User ID.
 
     Được gọi bởi:
-      - API Gateway (forward request từ Client, đính kèm xác thực JWT).
-      - Place Booking Service (Saga Orchestrator) qua endpoint nội bộ `GET /api/users/{id}`
+      - API Gateway (forward request từ Client, đính kèm Access Token do Keycloak phát hành).
+      - Place Booking Service (Saga Orchestrator) qua endpoint nội bộ `GET /api/users/{userId}`
         để xác minh user tồn tại và lấy thông tin (tên, email) trước khi bắt đầu Saga đặt phòng.
-  version: 1.1.0
+
+    **Lưu ý triển khai (khác với hợp đồng lý tưởng, nên biết khi tích hợp/test):**
+      - Toàn bộ endpoint dưới `/api/admin/**` (Admin Users, Admin Tenants, Tenant Subscriptions,
+        Admin Subscription Plans) đều bọc response trong `ApiResponse { code, message, data }`.
+        Tuy nhiên các controller này **không** khai báo `@ResponseStatus`, nên HTTP status
+        thật của mọi response thành công luôn là **200**, kể cả các action "tạo mới" — trường
+        `code: 201` bên trong `data` chỉ là giá trị nghiệp vụ do controller tự set, **không**
+        phải HTTP status. Chỉ riêng `POST /api/users` là có `@ResponseStatus(201)` nên trả
+        HTTP 201 thật.
+      - `/api/users/**` được whitelist `permitAll()` ở Spring Security, nghĩa là Gateway/Security
+        filter không chặn nếu thiếu token — nhưng `POST /api/users` và `GET /api/users/me` vẫn
+        đọc `@AuthenticationPrincipal Jwt` trong code và cần token hợp lệ để hoạt động đúng.
+        Gọi thiếu token có thể trả lỗi 500 (`INTERNAL_ERROR`) thay vì 401 như kỳ vọng, do
+        `GlobalExceptionHandler` có một handler bắt `Exception.class` chung có thể nuốt mất
+        `ResponseStatusException(401)` được throw thủ công trong code. Nên chủ động gửi kèm
+        Bearer token hợp lệ cho 2 endpoint này.
+  version: 2.0.0
 
 servers:
-  - url: http://localhost:5002
-    description: Local development
+  - url: http://localhost:5000
+    description: Local development (server.port mặc định, không có context-path)
 
 tags:
   - name: Health
-  - name: Auth
-    description: Đăng ký, đăng nhập, OAuth2 Google, quản lý token, khôi phục mật khẩu
   - name: Users
-    description: Hồ sơ người dùng, khóa/mở tài khoản, thống kê
-  - name: Tenants
-    description: Quản lý tenant và gói thuê bao (subscription)
+    description: |
+      Hồ sơ người dùng tự phục vụ (self-service). Không yêu cầu role cụ thể, chỉ cần
+      Access Token hợp lệ do Keycloak phát hành (trừ endpoint nội bộ lấy theo id).
+  - name: Admin - Users
+    description: Admin quản lý toàn bộ người dùng trong hệ thống. Yêu cầu role `PLATFORM_ADMIN`.
+  - name: Admin - Tenants
+    description: Admin quản lý tenant (doanh nghiệp/khách sạn thuê nền tảng). Yêu cầu role `PLATFORM_ADMIN`.
+  - name: Tenant Subscriptions
+    description: |
+      Quản lý gói thuê bao (subscription) mà một tenant đang/đã đăng ký.
+      Yêu cầu role `PLATFORM_ADMIN` hoặc `HOTEL_OWNER` (chỉ owner của chính tenant đó);
+      riêng xoá bản ghi chỉ `PLATFORM_ADMIN`.
+  - name: Admin - Subscription Plans
+    description: Admin quản lý catalog các gói subscription (gói cước) mà tenant có thể đăng ký. Yêu cầu role `PLATFORM_ADMIN`.
+
+security:
+  - bearerAuth: []
 
 paths:
+  # ============================================================
+  # HEALTH
+  # ============================================================
   /health:
     get:
       tags: [Health]
       summary: Health check
       operationId: healthCheck
+      security: []
       responses:
         '200':
           description: Service is healthy
@@ -41,298 +80,56 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
 
   # ============================================================
-  # AUTH
+  # USERS (self-service)
   # ============================================================
-
   /api/users:
     post:
-      tags: [Auth]
-      summary: Đăng ký tài khoản Customer
+      tags: [Users]
+      summary: Tạo hồ sơ người dùng (sau khi đã có tài khoản trên Keycloak)
       description: |
-        Tạo tài khoản mới với role mặc định CUSTOMER, trạng thái UNVERIFIED.
-        Hệ thống gửi email xác thực kèm liên kết kích hoạt sau khi tạo thành công.
-      operationId: registerUser
+        Tạo bản ghi hồ sơ (`users`) tương ứng với user đã tồn tại trên Keycloak. `id` của hồ sơ
+        được lấy từ claim `sub` (subject) của Access Token, **không** truyền trong body.
+        Trả lỗi nếu email, phone, hoặc chính user id này đã tồn tại trong bảng `users`.
+      operationId: registerUserProfile
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterUserRequest'
+              $ref: '#/components/schemas/CreateUserRequest'
       responses:
         '201':
-          description: Đăng ký thành công, tài khoản ở trạng thái UNVERIFIED
+          description: Tạo hồ sơ thành công
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         '400':
-          description: Dữ liệu không hợp lệ (sai định dạng email, mật khẩu yếu...)
+          description: Dữ liệu không hợp lệ (sai định dạng email/phone, thiếu field bắt buộc)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_REQUEST
+                message: "phone must contain 9 to 15 digits"
         '409':
-          description: Email hoặc số điện thoại đã tồn tại
+          description: Email, số điện thoại, hoặc user (theo id từ token) đã tồn tại
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
-                code: EMAIL_ALREADY_EXISTS
-                message: Email đã được sử dụng bởi tài khoản khác
-
-  /api/users/verify-email:
-    post:
-      tags: [Auth]
-      summary: Xác thực email qua token
-      description: Kích hoạt tài khoản (chuyển status UNVERIFIED → ACTIVE) bằng token gửi qua email khi đăng ký.
-      operationId: verifyEmail
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token:
-                  type: string
-                  description: Token xác thực email gửi kèm liên kết kích hoạt
-      responses:
-        '200':
-          description: Xác thực thành công, tài khoản đã ACTIVE
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          description: Token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '410':
-          description: Token đã hết hạn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: TOKEN_EXPIRED
-                message: Liên kết xác thực đã hết hạn, vui lòng đăng ký lại
-
-  /api/users/login:
-    post:
-      tags: [Auth]
-      summary: Đăng nhập bằng email/mật khẩu
-      description: |
-        Xác thực email/mật khẩu, kiểm tra trạng thái tài khoản (UNVERIFIED/ACTIVE/LOCKED) rồi phát hành
-        Access Token (JWT) và Refresh Token. Refresh Token được lưu dưới dạng hash trong bảng `refresh_tokens`;
-        phía client khuyến nghị lưu Refresh Token trong cookie HttpOnly và Access Token trong local storage.
-      operationId: login
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password]
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  format: password
-      responses:
-        '200':
-          description: Đăng nhập thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          description: Thông tin đăng nhập sai
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Sai email hoặc mật khẩu
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '423':
-          description: Tài khoản đang bị khóa (status = LOCKED)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: ACCOUNT_LOCKED
-                message: Tài khoản đang bị khóa, vui lòng liên hệ quản trị viên
-
-  /api/users/oauth/google:
-    post:
-      tags: [Auth]
-      summary: Đăng nhập / đăng ký bằng Google OAuth2
-      description: |
-        Nhận authorization code từ Google, đổi lấy thông tin profile (google_id, email, name, avatar).
-        Quy tắc xử lý:
-          - User chưa tồn tại → tạo user mới với google_id, email, profile cơ bản (role mặc định CUSTOMER).
-          - User tồn tại nhưng chưa liên kết Google → liên kết google_id với user hiện có.
-          - User đã tồn tại và đã liên kết Google → cập nhật lại profile nếu có thay đổi.
-        Sau khi xác định user, hệ thống kiểm tra status; nếu LOCKED thì từ chối đăng nhập.
-      operationId: loginWithGoogle
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [code]
-              properties:
-                code:
-                  type: string
-                  description: Authorization code do Google trả về sau khi người dùng cấp quyền
-      responses:
-        '200':
-          description: Đăng nhập thành công (user đã tồn tại)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '201':
-          description: Tài khoản mới được tạo và đăng nhập thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          description: Authorization code không hợp lệ hoặc xác thực với Google thất bại
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Tài khoản liên kết với email Google này đang bị khóa
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: ACCOUNT_LOCKED
-                message: Account is locked
-
-  /api/users/refresh-token:
-    post:
-      tags: [Auth]
-      summary: Làm mới Access Token
-      description: |
-        Kiểm tra hash của Refresh Token có tồn tại trong `refresh_tokens` và chưa bị thu hồi (revoked = false)
-        và chưa hết hạn (expires_at), sau đó phát hành Access Token mới.
-      operationId: refreshToken
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken:
-                  type: string
-      responses:
-        '200':
-          description: Access Token mới được phát hành
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  accessToken:
-                    type: string
-        '401':
-          description: Refresh Token không hợp lệ, đã bị thu hồi hoặc hết hạn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/users/forgot-password:
-    post:
-      tags: [Auth]
-      summary: Yêu cầu khôi phục mật khẩu
-      description: |
-        Gửi email chứa liên kết đặt lại mật khẩu có thời hạn hiệu lực. Vì lý do an toàn, API luôn trả về
-        200 OK kể cả khi email không tồn tại trong hệ thống (không tiết lộ thông tin tài khoản).
-      operationId: forgotPassword
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email]
-              properties:
-                email:
-                  type: string
-                  format: email
-      responses:
-        '200':
-          description: Yêu cầu đã được tiếp nhận (luôn trả 200 dù email có tồn tại hay không)
-        '400':
-          description: Dữ liệu không hợp lệ (sai định dạng email)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/users/reset-password:
-    post:
-      tags: [Auth]
-      summary: Đặt lại mật khẩu
-      description: Đặt mật khẩu mới bằng token nhận từ email, đồng thời revoke toàn bộ refresh token cũ của user.
-      operationId: resetPassword
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [token, newPassword]
-              properties:
-                token:
-                  type: string
-                newPassword:
-                  type: string
-                  format: password
-      responses:
-        '200':
-          description: Đặt lại mật khẩu thành công
-        '400':
-          description: Dữ liệu không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '410':
-          description: Token đặt lại mật khẩu đã hết hạn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  # ============================================================
-  # USERS
-  # ============================================================
+                code: INVALID_USER_DATA
+                message: Email, phone or user already exists
 
   /api/users/me:
     get:
       tags: [Users]
       summary: Lấy hồ sơ cá nhân hiện tại
-      description: Yêu cầu Access Token hợp lệ trong header Authorization.
+      description: Lấy hồ sơ theo `sub` của Access Token đang dùng để gọi API.
       operationId: getMyProfile
       security:
         - bearerAuth: []
@@ -342,57 +139,35 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         '401':
-          description: Chưa đăng nhập hoặc token không hợp lệ
+          description: Thiếu Access Token hoặc token không hợp lệ
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Token hợp lệ nhưng chưa có hồ sơ tương ứng trong bảng `users` (chưa gọi `POST /api/users`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: USER_NOT_FOUND
+                message: "User with ID ... not found"
 
-    put:
-      tags: [Users]
-      summary: Cập nhật hồ sơ cá nhân
-      operationId: updateMyProfile
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateProfileRequest'
-      responses:
-        '200':
-          description: Cập nhật thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          description: Dữ liệu không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Chưa đăng nhập hoặc token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /api/users/{id}:
+  /api/users/{userId}:
     get:
       tags: [Users]
       summary: '[internal] Lấy thông tin người dùng theo ID'
       description: |
-        Endpoint nội bộ (service-to-service), không expose trực tiếp cho client cuối.
-        Được gọi bởi Place Booking Service (Saga Orchestrator) để xác minh user tồn tại
-        và lấy email, tên phục vụ các bước sau của Saga đặt phòng.
+        Không yêu cầu token (path nằm trong whitelist `permitAll`). Dùng cho gọi nội bộ
+        service-to-service, ví dụ Place Booking Service (Saga Orchestrator) xác minh user
+        tồn tại và lấy email/tên trước khi bắt đầu Saga đặt phòng.
       operationId: getUserById
+      security: []
       parameters:
-        - name: id
+        - name: userId
           in: path
           required: true
           schema:
@@ -401,130 +176,609 @@ paths:
           example: 9c858901-8a57-4791-81fe-4c455b099bc9
       responses:
         '200':
-          description: Thông tin user
+          description: Thông tin hồ sơ user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/UserResponse'
         '404':
-          description: User không tồn tại
+          description: User không tồn tại (hoặc đã bị admin xoá mềm)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 code: USER_NOT_FOUND
-                message: User với ID đã cho không tồn tại
+                message: "User with ID 9c858901-8a57-4791-81fe-4c455b099bc9 not found"
+
+  # ============================================================
+  # ADMIN - USERS
+  # ============================================================
+  /api/admin/users:
+    get:
+      tags: [Admin - Users]
+      summary: Danh sách người dùng (Admin)
+      operationId: adminGetAllUsers
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/UserStatus'
+        - name: search
+          in: query
+          description: Tìm theo email, phone hoặc fullName (không phân biệt hoa/thường)
+          schema:
+            type: string
+            default: ""
+      responses:
+        '200':
+          description: Danh sách người dùng, có phân trang
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PageMeta'
+                          - type: object
+                            properties:
+                              content:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/ResponseUser'
+        '403':
+          description: Người gọi không có role PLATFORM_ADMIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Admin - Users]
+      summary: Admin tạo người dùng mới (kèm tạo trên Keycloak)
+      description: |
+        Tạo user đồng thời trên Keycloak (username = email, có credential/password, gán role
+        realm chỉ định) và trong bảng `users` của service, với `id` = Keycloak user id vừa tạo.
+        HTTP status thật trả về là **200** (không có `@ResponseStatus`); trường `code: 201`
+        trong body chỉ mang tính mô tả nghiệp vụ.
+      operationId: adminCreateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserAdminRequest'
+      responses:
+        '200':
+          description: Tạo người dùng thành công (`data.code` nội bộ = 201)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+              example:
+                code: 201
+                message: Admin tạo người dùng mới thành công
+                data:
+                  id: 9c858901-8a57-4791-81fe-4c455b099bc9
+                  userId: 9c858901-8a57-4791-81fe-4c455b099bc9
+                  email: nguyenvana@email.com
+                  phone: "0901234567"
+                  fullName: Nguyen Van A
+                  name: Nguyen Van A
+                  avatarUrl: null
+                  address: "12 Le Loi, Q1, TP.HCM"
+                  status: ACTIVE
+                  roles: ["HOTEL_OWNER"]
+                  createdAt: "2026-06-15T08:30:00Z"
+                  updatedAt: "2026-06-15T08:30:00Z"
+        '400':
+          description: Dữ liệu không hợp lệ, hoặc Keycloak trả lỗi khi tạo user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: KEYCLOAK_CREATE_FAILED
+                message: "Không thể tạo tài khoản trên keycloak, status: 400"
+        '409':
+          description: Email/phone đã tồn tại trong DB của service, hoặc email đã tồn tại trên Keycloak
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                trungEmailPhoneDb:
+                  value: { code: EMAIL_PHONE_ALREADY_EXISTS, message: "Email hoặc số điện thoại đã tồn tại trong hệ thống" }
+                trungKeycloak:
+                  value: { code: EMAIL_EXISTS_ON_KEYCLOAK, message: "Email này đã tồn tại trên keycloak" }
+        '500':
+          description: Lỗi khi gọi Keycloak Admin API
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users/{userId}:
+    get:
+      tags: [Admin - Users]
+      summary: Chi tiết người dùng (Admin), kèm role hiện có trên Keycloak
+      operationId: adminGetUserDetail
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: Chi tiết người dùng
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: Người dùng không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: USER_NOT_FOUND
+                message: "Không tìm thấy người dùng có id = ..."
+        '500':
+          description: Lỗi khi gọi Keycloak Admin API để lấy role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     patch:
-      tags: [Users]
-      summary: Admin khóa hoặc mở khóa tài khoản
+      tags: [Admin - Users]
+      summary: Admin cập nhật hồ sơ người dùng
       description: |
-        Một endpoint dùng chung cho cả khóa và mở khóa, phân biệt qua trường `status` trong request body:
-          - `status = LOCKED`: khóa tài khoản, bắt buộc kèm `reason`; hệ thống ghi một bản ghi mới vào
-            `account_lock_history` (locked_at = now, unlocked_at = null) và revoke toàn bộ refresh token hiện tại.
-          - `status = ACTIVE`: mở khóa tài khoản; hệ thống cập nhật `unlocked_at` cho bản ghi
-            `account_lock_history` đang mở (unlocked_at IS NULL) của user đó.
-        Chỉ Platform Admin mới có quyền gọi endpoint này (kiểm soát qua RBAC tại API Gateway/Service).
-      operationId: updateUserAccountStatus
-      security:
-        - bearerAuth: []
+        Cập nhật một hoặc nhiều field (`fullName`, `phone`, `address`, `avatarUrl`); đồng bộ
+        `fullName`/`phone` sang attributes trên Keycloak. Phải có ít nhất 1 field khác null.
+      operationId: adminUpdateUser
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/UserIdPath'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [status]
-              properties:
-                status:
-                  type: string
-                  enum: [LOCKED, ACTIVE]
-                  description: Trạng thái mới muốn chuyển sang
-                reason:
-                  type: string
-                  maxLength: 500
-                  description: Lý do khóa (bắt buộc khi status = LOCKED)
+              $ref: '#/components/schemas/UpdateUserRequest'
       responses:
         '200':
-          description: Cập nhật trạng thái tài khoản thành công
+          description: Cập nhật thành công
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
         '400':
-          description: Thiếu `reason` khi khóa tài khoản, hoặc trạng thái yêu cầu không hợp lệ
+          description: Không truyền field nào để cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_REQUEST
+                message: Ít nhất 1 field phải được chỉnh sửa
+        '404':
+          description: Người dùng không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Số điện thoại mới đã được dùng bởi người dùng khác
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: PHONE_ALREADY_EXISTS
+                message: Số điện thoại đã tồn tại
+
+    delete:
+      tags: [Admin - Users]
+      summary: Xoá mềm người dùng (kèm disable trên Keycloak)
+      operationId: adminDeleteUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: Xoá mềm thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEnvelope'
+        '403':
+          description: Admin cố xoá chính tài khoản của mình
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: CANNOT_MODIFY_SELF
+                message: Admin không thể tự xóa tài khoản của mình
+        '404':
+          description: Người dùng không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/users/{userId}/lock:
+    patch:
+      tags: [Admin - Users]
+      summary: Khoá tài khoản người dùng
+      description: |
+        Chuyển status sang `LOCKED`, disable user trên Keycloak, và ghi 1 bản ghi mới vào
+        `account_lock_history` (`locked_at = now`, `unlocked_at = null`).
+      operationId: adminLockUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockRequest'
+      responses:
+        '200':
+          description: Khoá tài khoản thành công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ResponseUser'
+        '400':
+          description: Thiếu `reason`
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Người gọi không có quyền Platform Admin
+          description: Admin cố khoá chính tài khoản của mình
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: CANNOT_MODIFY_SELF
+                message: Admin không thể tự khóa tài khoản của mình
+        '404':
+          description: Người dùng không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Tài khoản đã đang bị khoá từ trước
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ACCOUNT_ALREADY_LOCKED
+                message: Tài khoản đã bị khóa trước đó
+
+  /api/admin/users/{userId}/unlock:
+    patch:
+      tags: [Admin - Users]
+      summary: Mở khoá tài khoản người dùng
+      description: |
+        Chuyển status sang `ACTIVE`, enable lại trên Keycloak, và cập nhật `unlocked_at`
+        cho bản ghi `account_lock_history` gần nhất đang mở (`unlocked_at IS NULL`) của user đó.
+      operationId: adminUnlockUser
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: Mở khoá thành công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ResponseUser'
+        '404':
+          description: Người dùng không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Tài khoản đang ACTIVE, không cần mở khoá
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ACCOUNT_ALREADY_ACTIVE
+                message: Tài khoản vẫn đang hoạt động
+
+  # ============================================================
+  # ADMIN - TENANTS
+  # ============================================================
+  /api/admin/tenants:
+    get:
+      tags: [Admin - Tenants]
+      summary: Danh sách tenant
+      operationId: adminGetListTenant
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TenantStatus'
+        - name: search
+          in: query
+          description: Tìm theo tên tenant, hoặc email/phone/fullName của owner (không phân biệt hoa/thường)
+          schema:
+            type: string
+            default: ""
+      responses:
+        '200':
+          description: Danh sách tenant, có phân trang
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PageMeta'
+                          - type: object
+                            properties:
+                              content:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/TenantResponse'
+
+    post:
+      tags: [Admin - Tenants]
+      summary: Tạo tenant mới
+      description: |
+        `ownerId` phải là user đã tồn tại (chưa bị xoá mềm) và **chưa sở hữu tenant nào khác**
+        (`owner_user_id` là unique). Sau khi tạo tenant với `status = ACTIVE`, hệ thống tự gán
+        role realm `HOTEL_OWNER` cho user đó trên Keycloak. HTTP status thật trả về là **200**;
+        `code: 201` trong body chỉ là giá trị nghiệp vụ.
+      operationId: adminCreateTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '200':
+          description: Tạo tenant thành công (`data.code` nội bộ = 201)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantResponse'
+        '404':
+          description: ownerId không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: USER_NOT_FOUND
+                message: "Người dùng không tồn tại id=..."
+        '409':
+          description: Owner đã sở hữu một tenant khác từ trước
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: OWNER_ALREADY_HAS_TENANT
+                message: Owner đã có tenant từ trước
+        '500':
+          description: Lỗi khi gán role HOTEL_OWNER trên Keycloak
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/tenants/{tenantId}:
+    get:
+      tags: [Admin - Tenants]
+      summary: Chi tiết tenant, kèm subscription đang ACTIVE (nếu có)
+      operationId: adminGetTenantDetail
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      responses:
+        '200':
+          description: Chi tiết tenant
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantDetailResponse'
+        '404':
+          description: Tenant không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: TENANT_NOT_FOUND
+                message: Tenant không tồn tại trong hệ thống
+
+    patch:
+      tags: [Admin - Tenants]
+      summary: Cập nhật tenant
+      description: |
+        Phải có ít nhất 1 field (`name` hoặc `status`) khác null. Nếu `status` gửi lên **giống**
+        status hiện tại của tenant thì bị từ chối (409).
+
+        ⚠️ **Lưu ý validate hiện tại của code:** field `name` đang bị ràng buộc
+        `@Size(min = 20)` — tên tenant khi PATCH phải có **tối thiểu 20 ký tự**, nếu không sẽ
+        bị 400. Rất có thể đây là copy nhầm từ rule khác (ví dụ `fullName` ở
+        `CreateUserAdminRequest` cũng có `min = 10`) chứ không phải chủ đích cho tên doanh
+        nghiệp — nên rà lại nếu không phải cố ý.
+      operationId: adminUpdateTenant
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantDetailResponse'
+        '400':
+          description: Không truyền field nào để cập nhật, hoặc `name` không đạt độ dài yêu cầu
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: User không tồn tại
+          description: Tenant không tồn tại
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-  /api/users/stats:
-    get:
-      tags: [Users]
-      summary: Số liệu tổng số người dùng
-      description: Phục vụ Admin Dashboard (theo SDD mục 1.2 — không có Analytics Service riêng, mỗi service tự expose số liệu thuộc domain của mình).
-      operationId: getUserStats
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Thống kê người dùng
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserStatsResponse'
-        '403':
-          description: Người gọi không có quyền Platform Admin
+        '409':
+          description: Status gửi lên trùng với status hiện tại của tenant
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: STATUS_CONFLICT
+                message: Tenant đang có status như yêu cầu
 
-  # ============================================================
-  # TENANTS
-  # ============================================================
-
-  /api/tenants/{id}:
-    get:
-      tags: [Tenants]
-      summary: Lấy thông tin tenant
-      operationId: getTenantById
-      security:
-        - bearerAuth: []
+    delete:
+      tags: [Admin - Tenants]
+      summary: Xoá mềm tenant
+      description: |
+        Chỉ xoá được khi tenant **không còn** subscription đang ACTIVE — phải huỷ/hết hạn gói
+        trước. Sau khi xoá, hệ thống gỡ role `HOTEL_OWNER` của owner trên Keycloak.
+      operationId: adminDeleteTenant
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/TenantIdPath'
       responses:
         '200':
-          description: Thông tin tenant kèm subscription đang ACTIVE (nếu có)
+          description: Xoá mềm thành công (is_deleted = true)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tenant'
+                $ref: '#/components/schemas/ApiResponseEnvelope'
+        '400':
+          description: Tenant còn subscription đang ACTIVE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: TENANT_HAS_ACTIVE_SUBSCRIPTION
+                message: Bạn phải bỏ gói đăng ký thuê trước khi xóa tenant
+        '404':
+          description: Tenant không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi khi gỡ role trên Keycloak
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # TENANT SUBSCRIPTIONS
+  # ============================================================
+  /api/admin/tenants/{tenantId}/subscriptions:
+    get:
+      tags: [Tenant Subscriptions]
+      summary: Lịch sử subscription của 1 tenant
+      description: |
+        `PLATFORM_ADMIN` xem được mọi tenant; `HOTEL_OWNER` chỉ xem được tenant mà chính mình
+        là owner (so khớp `sub` của token với `owner_user_id`), nếu không sẽ bị 403.
+      operationId: getTenantSubscriptionHistory
+      parameters:
+        - $ref: '#/components/parameters/TenantIdPath'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Lịch sử subscription, sort theo startedAt giảm dần, có phân trang
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PageMeta'
+                          - type: object
+                            properties:
+                              content:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/TenantSubscriptionResponse'
+        '403':
+          description: HOTEL_OWNER cố xem tenant không thuộc quyền sở hữu của mình
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: FORBIDDEN
+                message: Bạn không có quyền thao tác trên subscription của tenant khác
         '404':
           description: Tenant không tồn tại
           content:
@@ -532,56 +786,358 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /api/tenants/{id}/subscription:
-    put:
-      tags: [Tenants]
-      summary: Admin cập nhật gói thuê bao của tenant
+  /api/admin/tenants/subscriptions:
+    post:
+      tags: [Tenant Subscriptions]
+      summary: Đăng ký subscription cho tenant
       description: |
-        Tạo một bản ghi mới trong `tenant_subscriptions` với `status = ACTIVE` cho gói được chỉ định,
-        đồng thời chuyển bản ghi subscription ACTIVE trước đó (nếu có) sang `EXPIRED` hoặc `CANCELLED`
-        để đảm bảo ràng buộc nghiệp vụ: tại một thời điểm tenant chỉ có duy nhất một subscription ACTIVE.
-      operationId: updateTenantSubscription
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
+        Không nhận `expiresAt` từ client — hệ thống tự tính: `startedAt = now`,
+        `expiresAt = now + 1 tháng` nếu plan `billingCycle = MONTHLY`, hoặc `+ 1 năm` nếu
+        `YEARLY`. Nếu tenant đang có 1 subscription `ACTIVE` khác, bản ghi cũ đó tự chuyển
+        sang `CANCELLED` (và `expiresAt = now`) trước khi tạo bản ghi mới `ACTIVE`.
+        `HOTEL_OWNER` chỉ đăng ký được cho tenant của chính mình. HTTP status thật trả về là
+        **200**; `code: 201` trong body chỉ là giá trị nghiệp vụ.
+      operationId: createTenantSubscription
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [subscriptionPlanId]
-              properties:
-                subscriptionPlanId:
-                  type: string
-                  format: uuid
-                  description: ID gói thuê bao mới (tham chiếu `subscription_plans.id`)
-                expiresAt:
-                  type: string
-                  format: date-time
-                  nullable: true
-                  description: Thời điểm hết hạn của subscription mới; bỏ trống nếu gói không giới hạn thời gian
+              $ref: '#/components/schemas/CreateTenantSubscriptionRequest'
       responses:
         '200':
-          description: Cập nhật gói thuê bao thành công
+          description: Đăng ký thành công (`data.code` nội bộ = 201)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tenant'
-        '400':
-          description: Dữ liệu không hợp lệ (subscriptionPlanId không tồn tại...)
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantSubscriptionDetailResponse'
+        '403':
+          description: HOTEL_OWNER cố đăng ký cho tenant không thuộc quyền sở hữu của mình
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
-          description: Tenant không tồn tại
+          description: tenantId hoặc subscriptionId không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                tenantNotFound:
+                  value: { code: TENANT_NOT_FOUND, message: "Không tồn tại tenantId = ..." }
+                planNotFound:
+                  value: { code: SUBSCRIPTION_PLAN_NOT_FOUND, message: "Không tồn tại subscription = ..." }
+        '409':
+          description: Tenant đang sử dụng đúng plan này rồi (đang ACTIVE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: TENANT_ALREADY_USE_PLAN
+                message: Tenant đang sử dụng plan này rồi
+
+  /api/admin/tenants/subscriptions/{id}:
+    get:
+      tags: [Tenant Subscriptions]
+      summary: Chi tiết 1 tenant subscription
+      operationId: getTenantSubscriptionDetail
+      parameters:
+        - $ref: '#/components/parameters/TenantSubscriptionIdPath'
+      responses:
+        '200':
+          description: Chi tiết tenant subscription
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantSubscriptionDetailResponse'
+        '403':
+          description: HOTEL_OWNER cố xem bản ghi không thuộc tenant của mình
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Không tìm thấy bản ghi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: TENANT_SUBSCRIPTION_NOT_FOUND
+                message: "Không tìm thấy bản ghi yêu cầu id = ..."
+
+    patch:
+      tags: [Tenant Subscriptions]
+      summary: Đổi trạng thái tenant subscription
+      description: |
+        Chỉ đổi được từ trạng thái hiện tại `ACTIVE` (nếu không → 409 `SUBSCRIPTION_NOT_ACTIVE`).
+        Trạng thái đích cho phép theo role:
+          - `PLATFORM_ADMIN`: `CANCELLED` hoặc `SUSPENDED`
+          - `HOTEL_OWNER` (chính chủ): chỉ `CANCELLED`
+        Gửi trạng thái đích không nằm trong danh sách cho phép → 403 `STATUS_NOT_ALLOWED`.
+      operationId: updateTenantSubscriptionStatus
+      parameters:
+        - $ref: '#/components/parameters/TenantSubscriptionIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantSubscription'
+      responses:
+        '200':
+          description: Cập nhật trạng thái thành công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantSubscriptionDetailResponse'
+        '403':
+          description: Role hiện tại không được chuyển sang trạng thái yêu cầu, hoặc HOTEL_OWNER không sở hữu tenant này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                statusNotAllowed:
+                  value: { code: STATUS_NOT_ALLOWED, message: "Role hiện tại không được phép chuyển sang trạng thái SUSPENDED" }
+                forbidden:
+                  value: { code: FORBIDDEN, message: "Bạn không có quyền thao tác trên subscription của tenant khác" }
+        '404':
+          description: Không tìm thấy bản ghi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Bản ghi hiện không ở trạng thái ACTIVE nên không thể đổi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SUBSCRIPTION_NOT_ACTIVE
+                message: Chỉ có thể đổi trạng thái từ ACTIVE
+
+    delete:
+      tags: [Tenant Subscriptions]
+      summary: Xoá bản ghi tenant subscription
+      description: Chỉ `PLATFORM_ADMIN` (khác các API GET/POST/PATCH trong nhóm này vốn cho phép cả HOTEL_OWNER).
+      operationId: deleteTenantSubscription
+      parameters:
+        - $ref: '#/components/parameters/TenantSubscriptionIdPath'
+      responses:
+        '200':
+          description: Xoá thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEnvelope'
+        '404':
+          description: Không tìm thấy bản ghi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================
+  # ADMIN - SUBSCRIPTION PLANS
+  # ============================================================
+  /api/admin/subscription-plans:
+    get:
+      tags: [Admin - Subscription Plans]
+      summary: Danh sách subscription plan
+      operationId: adminGetListSubscriptionPlan
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: search
+          in: query
+          description: Tìm theo code hoặc name (không phân biệt hoa/thường)
+          schema:
+            type: string
+            default: ""
+        - name: billingCycle
+          in: query
+          schema:
+            $ref: '#/components/schemas/BillingCycle'
+      responses:
+        '200':
+          description: Danh sách subscription plan, có phân trang
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/PageMeta'
+                          - type: object
+                            properties:
+                              content:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/SubscriptionPlanResponse'
+
+    post:
+      tags: [Admin - Subscription Plans]
+      summary: Tạo subscription plan
+      description: |
+        `code` và `name` phải không trùng với plan chưa bị xoá nào khác. HTTP status thật trả
+        về là **200**; `code: 201` trong body chỉ là giá trị nghiệp vụ.
+      operationId: adminCreateSubscriptionPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubPlanRequest'
+      responses:
+        '200':
+          description: Tạo thành công (`data.code` nội bộ = 201)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '400':
+          description: Dữ liệu không hợp lệ (thiếu field, giá âm, quá số ký tự...)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Code hoặc name đã tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: CODE_OR_NAME_ALREADY_EXISTS
+                message: Code hoặc Name đã tồn tại
+
+  /api/admin/subscription-plans/{planId}:
+    get:
+      tags: [Admin - Subscription Plans]
+      summary: Chi tiết subscription plan
+      operationId: adminGetSubscriptionPlanDetail
+      parameters:
+        - $ref: '#/components/parameters/PlanIdPath'
+      responses:
+        '200':
+          description: Chi tiết plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '404':
+          description: Plan không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SUBSCRIPTION_PLAN_NOT_FOUND
+                message: "Không tìm thấy plan có id = ..."
+
+    patch:
+      tags: [Admin - Subscription Plans]
+      summary: Cập nhật subscription plan
+      description: Phải có ít nhất 1 field (`name`, `description`, `price`, `billingCycle`) khác null.
+      operationId: adminUpdateSubscriptionPlan
+      parameters:
+        - $ref: '#/components/parameters/PlanIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubPlanRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SubscriptionPlanResponse'
+        '400':
+          description: Không truyền field nào để cập nhật, hoặc `name` trùng với plan khác (mã lỗi CODE_ALREADY_EXISTS mặc dù đang so trùng theo `name`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                noField:
+                  value: { code: INVALID_REQUEST, message: "Phải có ít nhất 1 field được cập nhật" }
+                duplicateName:
+                  value: { code: CODE_ALREADY_EXISTS, message: "Code đã tồn tại trong hệ thống" }
+        '404':
+          description: Plan không tồn tại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SUB_PLAN_NOT_FOUND
+                message: "Không có sub plan tồn tại id = ..."
+
+    delete:
+      tags: [Admin - Subscription Plans]
+      summary: Xoá subscription plan
+      description: Không xoá được nếu còn tenant nào đang dùng plan này với subscription `ACTIVE`.
+      operationId: adminDeleteSubscriptionPlan
+      parameters:
+        - $ref: '#/components/parameters/PlanIdPath'
+      responses:
+        '200':
+          description: Xoá thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEnvelope'
+        '400':
+          description: Còn tenant đang sử dụng plan này (subscription ACTIVE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: SUB_PLAN_ALREADY_USED
+                message: Không thể xóa plan đang có tenant sử dụng
+        '404':
+          description: Plan không tồn tại
           content:
             application/json:
               schema:
@@ -593,6 +1149,55 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Access Token (JWT) do Keycloak (realm `hotel-booking-system`) phát hành, xác thực qua JWKS.
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Số trang, bắt đầu từ 0
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    SizeParam:
+      name: size
+      in: query
+      description: Số bản ghi mỗi trang
+      schema:
+        type: integer
+        minimum: 10
+        maximum: 30
+        default: 10
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TenantIdPath:
+      name: tenantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    TenantSubscriptionIdPath:
+      name: id
+      in: path
+      required: true
+      description: ID của bản ghi `tenant_subscriptions`
+      schema:
+        type: string
+        format: uuid
+    PlanIdPath:
+      name: planId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
 
   schemas:
     HealthResponse:
@@ -603,6 +1208,7 @@ components:
           example: ok
 
     ErrorResponse:
+      description: Body trả về khi có lỗi (`GlobalExceptionHandler`).
       type: object
       properties:
         code:
@@ -612,27 +1218,98 @@ components:
           type: string
           example: User không tồn tại
 
-    # ---------- Users / Roles ----------
-
-    Role:
+    ApiResponseEnvelope:
+      description: |
+        Envelope chung cho mọi response thành công dưới `/api/admin/**`. `code` ở đây là giá
+        trị nghiệp vụ tự set trong controller, không phải HTTP status thật (xem lưu ý ở đầu file).
       type: object
-      description: Tương ứng bảng `roles`.
+      properties:
+        code:
+          type: integer
+          example: 200
+        message:
+          type: string
+          example: Thao tác thành công
+
+    PageMeta:
+      description: Các field phân trang chuẩn của Spring Data `Page<T>` (bỏ qua `pageable`/`sort` cho ngắn gọn).
+      type: object
+      properties:
+        totalElements:
+          type: integer
+          format: int64
+          example: 42
+        totalPages:
+          type: integer
+          example: 5
+        number:
+          type: integer
+          description: Trang hiện tại (0-based)
+          example: 0
+        size:
+          type: integer
+          example: 10
+        numberOfElements:
+          type: integer
+          example: 10
+        first:
+          type: boolean
+          example: true
+        last:
+          type: boolean
+          example: false
+        empty:
+          type: boolean
+          example: false
+
+    # ---------- Enums ----------
+    UserStatus:
+      type: string
+      enum: [ACTIVE, LOCKED]
+
+    TenantStatus:
+      type: string
+      enum: [ACTIVE, SUSPENDED]
+
+    BillingCycle:
+      type: string
+      enum: [MONTHLY, YEARLY]
+
+    TenantSubscriptionPlanStatus:
+      type: string
+      enum: [ACTIVE, EXPIRED, CANCELLED, SUSPENDED]
+
+    UserRole:
+      type: string
+      enum: [CUSTOMER, PLATFORM_ADMIN, HOTEL_OWNER, HOTEL_STAFF]
+
+    # ---------- Users ----------
+    CreateUserRequest:
+      type: object
+      required: [email, phone, fullName]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        phone:
+          type: string
+          description: 9–15 chữ số, có thể có dấu `+` ở đầu
+          pattern: '^\+?[0-9]{9,15}$'
+          example: "+84901234567"
+        fullName:
+          type: string
+          maxLength: 255
+
+    UserResponse:
+      description: Response trả nguyên (không bọc `ApiResponse`) cho các endpoint dưới `/api/users`.
+      type: object
       properties:
         id:
           type: string
           format: uuid
-        name:
-          type: string
-          enum: [CUSTOMER, HOTEL_STAFF, HOTEL_OWNER, PLATFORM_ADMIN]
-        description:
-          type: string
-          nullable: true
-
-    User:
-      type: object
-      description: Tương ứng bảng `users`, kèm danh sách role lấy từ `user_roles`/`roles`.
-      properties:
-        id:
+          description: Bằng userId, bằng luôn `sub` trong JWT Keycloak
+        userId:
           type: string
           format: uuid
         email:
@@ -643,6 +1320,9 @@ components:
           nullable: true
         fullName:
           type: string
+        name:
+          type: string
+          description: Trùng giá trị với `fullName` (field lặp trong DTO hiện tại)
         avatarUrl:
           type: string
           nullable: true
@@ -651,16 +1331,12 @@ components:
           nullable: true
         status:
           type: string
-          enum: [UNVERIFIED, ACTIVE, LOCKED]
-        googleId:
-          type: string
-          nullable: true
+          enum: [ACTIVE, LOCKED]
         roles:
           type: array
           items:
             type: string
-            enum: [CUSTOMER, HOTEL_STAFF, HOTEL_OWNER, PLATFORM_ADMIN]
-          example: ["CUSTOMER"]
+          description: Rỗng khi trả về từ `/api/users/**`; có giá trị khi trả về từ Admin API (lấy role thật từ Keycloak)
         createdAt:
           type: string
           format: date-time
@@ -669,120 +1345,173 @@ components:
           format: date-time
       example:
         id: 9c858901-8a57-4791-81fe-4c455b099bc9
+        userId: 9c858901-8a57-4791-81fe-4c455b099bc9
         email: nguyenvana@email.com
         phone: "0901234567"
         fullName: Nguyen Van A
+        name: Nguyen Van A
         avatarUrl: null
         address: null
         status: ACTIVE
-        googleId: null
-        roles: ["CUSTOMER"]
+        roles: []
         createdAt: "2026-06-15T08:30:00Z"
         updatedAt: "2026-06-15T08:30:00Z"
 
-    RegisterUserRequest:
+    ResponseUser:
+      description: DTO gọn dùng cho danh sách/lock/unlock ở Admin API (khác `UserResponse`).
       type: object
-      required: [email, password, fullName, phone]
       properties:
+        userId:
+          type: string
+          format: uuid
         email:
           type: string
           format: email
         phone:
           type: string
-          format: phone
+          nullable: true
+        fullname:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateUserAdminRequest:
+      type: object
+      required: [email, password, fullName, address, role]
+      properties:
+        email:
+          type: string
+          description: Không có validate định dạng email ở server, chỉ bắt buộc không rỗng
         password:
           type: string
           format: password
           minLength: 8
-        fullName:
-          type: string
-
-    UpdateProfileRequest:
-      type: object
-      properties:
-        fullName:
-          type: string
+          description: Mật khẩu khởi tạo trên Keycloak (non-temporary)
         phone:
           type: string
-          nullable: true
-        avatarUrl:
+          pattern: '^0\d{9}$'
+          description: 10 số, bắt đầu bằng 0
+          example: "0901234567"
+        fullName:
           type: string
-          nullable: true
+          minLength: 10
+          maxLength: 255
         address:
           type: string
-          nullable: true
+          maxLength: 500
+        avatarUrl:
+          type: string
+          maxLength: 500
+        role:
+          allOf:
+            - $ref: '#/components/schemas/UserRole'
+          description: Không có `@NotNull` ở validation nhưng bắt buộc trong thực tế — thiếu sẽ gây lỗi 500 khi gọi Keycloak
 
-    AuthResponse:
+    UpdateUserRequest:
       type: object
-      description: |
-        Kết quả đăng nhập (email/mật khẩu hoặc Google OAuth2). `refreshToken` khuyến nghị được phía client
-        lưu trong cookie HttpOnly, `accessToken` lưu trong local storage.
+      description: Tất cả field optional — phải có ít nhất 1 field khác null.
       properties:
-        accessToken:
+        fullName:
           type: string
-        refreshToken:
+          maxLength: 255
+        phone:
           type: string
-        user:
-          $ref: '#/components/schemas/User'
+          pattern: '^0\d{9}$'
+        address:
+          type: string
+          maxLength: 500
+        avatarUrl:
+          type: string
+          maxLength: 500
 
-    UserStatsResponse:
+    LockRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Lý do khoá tài khoản, lưu vào `account_lock_history`
+
+    # ---------- Tenants ----------
+    TenantResponse:
       type: object
       properties:
-        totalUsers:
-          type: integer
-          example: 1280
-        totalByRole:
-          type: object
-          additionalProperties:
-            type: integer
-          example:
-            CUSTOMER: 1150
-            HOTEL_STAFF: 80
-            HOTEL_OWNER: 45
-            PLATFORM_ADMIN: 5
-        totalLocked:
-          type: integer
-          example: 12
-
-    # ---------- Tenants / Subscriptions ----------
-
-    SubscriptionPlan:
-      type: object
-      description: Tương ứng bảng `subscription_plans`.
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-          enum: [FREE, BASIC, PRO]
-        name:
-          type: string
-        description:
-          type: string
-          nullable: true
-        price:
-          type: number
-          format: double
-        billingCycle:
-          type: string
-          enum: [MONTHLY, YEARLY]
-
-    TenantSubscription:
-      type: object
-      description: Tương ứng bảng `tenant_subscriptions` — một bản ghi lịch sử subscription của tenant.
-      properties:
-        id:
-          type: string
-          format: uuid
         tenantId:
           type: string
           format: uuid
-        subscriptionPlan:
-          $ref: '#/components/schemas/SubscriptionPlan'
-        status:
+        name:
           type: string
-          enum: [ACTIVE, EXPIRED, CANCELLED, SUSPENDED]
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        ownerId:
+          type: string
+          format: uuid
+        ownerEmail:
+          type: string
+          format: email
+        ownerFullname:
+          type: string
+        ownerPhone:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    TenantDetailResponse:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+        ownerId:
+          type: string
+          format: uuid
+        ownerEmail:
+          type: string
+          format: email
+        ownerFullname:
+          type: string
+        ownerPhone:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        activeSubscription:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/TenantDetailActiveSubscription'
+
+    TenantDetailActiveSubscription:
+      type: object
+      description: Subscription đang ACTIVE của tenant, null nếu chưa đăng ký gói nào.
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscriptionPlanId:
+          type: string
+          format: uuid
+        planCode:
+          type: string
+        planName:
+          type: string
+        status:
+          $ref: '#/components/schemas/TenantSubscriptionPlanStatus'
         startedAt:
           type: string
           format: date-time
@@ -794,28 +1523,180 @@ components:
           type: string
           format: date-time
 
-    Tenant:
+    CreateTenantRequest:
       type: object
-      description: Tương ứng bảng `tenants`, kèm subscription hiện đang ACTIVE (nếu có).
+      required: [ownerId, name]
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+          description: userId của HOTEL_OWNER sẽ sở hữu tenant; user này chưa được sở hữu tenant nào khác
+        name:
+          type: string
+
+    UpdateTenantRequest:
+      type: object
+      description: Phải có ít nhất 1 field khác null.
+      properties:
+        name:
+          type: string
+          minLength: 20
+          description: "⚠️ Ràng buộc @Size(min=20) trong code hiện tại — xem lưu ý ở endpoint PATCH."
+        status:
+          $ref: '#/components/schemas/TenantStatus'
+
+    # ---------- Tenant Subscriptions ----------
+    TenantSubscriptionResponse:
+      type: object
       properties:
         id:
           type: string
           format: uuid
-        ownerUserId:
+        tenantId:
           type: string
           format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+        planCode:
+          type: string
+        planName:
+          type: string
+        planDescription:
+          type: string
+          nullable: true
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+        status:
+          $ref: '#/components/schemas/TenantSubscriptionPlanStatus'
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    TenantSubscriptionDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+        tenantName:
+          type: string
+        tenantStatus:
+          $ref: '#/components/schemas/TenantStatus'
+        planCode:
+          type: string
+        planName:
+          type: string
+        planDescription:
+          type: string
+          nullable: true
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+        status:
+          $ref: '#/components/schemas/TenantSubscriptionPlanStatus'
+        startedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTenantSubscriptionRequest:
+      type: object
+      required: [tenantId, subscriptionId]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        subscriptionId:
+          type: string
+          format: uuid
+          description: id của SubscriptionPlan muốn đăng ký
+
+    UpdateTenantSubscription:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/TenantSubscriptionPlanStatus'
+
+    # ---------- Subscription Plans ----------
+    SubscriptionPlanResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
         name:
           type: string
-        status:
+        description:
           type: string
-          enum: [ACTIVE, SUSPENDED]
-        currentSubscription:
-          allOf:
-            - $ref: '#/components/schemas/TenantSubscription'
           nullable: true
+        price:
+          type: number
+          format: double
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    CreateSubPlanRequest:
+      type: object
+      required: [code, name, price, billingCycle]
+      properties:
+        code:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 500
+        price:
+          type: number
+          format: double
+          minimum: 0
+          description: Tối đa 12 chữ số nguyên + 2 chữ số thập phân
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'
+
+    UpdateSubPlanRequest:
+      type: object
+      description: Tất cả field optional — phải có ít nhất 1 field khác null.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 500
+        price:
+          type: number
+          format: double
+          minimum: 0
+        billingCycle:
+          $ref: '#/components/schemas/BillingCycle'

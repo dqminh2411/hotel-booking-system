@@ -20,16 +20,27 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hotelbooking.userservice.dto.CreateTenantRequest;
 import com.hotelbooking.userservice.dto.CreateUserAdminRequest;
 import com.hotelbooking.userservice.dto.LockRequest;
 import com.hotelbooking.userservice.dto.ResponseUser;
+import com.hotelbooking.userservice.dto.TenantDetailResponse;
+import com.hotelbooking.userservice.dto.TenantResponse;
+import com.hotelbooking.userservice.dto.UpdateTenantRequest;
 import com.hotelbooking.userservice.dto.UpdateUserRequest;
 import com.hotelbooking.userservice.dto.UserResponse;
+import com.hotelbooking.userservice.dto.UserRole;
 import com.hotelbooking.userservice.entity.AcountLockHistory;
+import com.hotelbooking.userservice.entity.Tenant;
+import com.hotelbooking.userservice.entity.TenantStatus;
+import com.hotelbooking.userservice.entity.TenantSubscription;
+import com.hotelbooking.userservice.entity.TenantSubscriptionPlanStatus;
 import com.hotelbooking.userservice.entity.UserEntity;
 import com.hotelbooking.userservice.entity.UserStatus;
 import com.hotelbooking.userservice.exception.ApiException;
 import com.hotelbooking.userservice.repository.AccountLockHistoryRepository;
+import com.hotelbooking.userservice.repository.TenantRepository;
+import com.hotelbooking.userservice.repository.TenantSubscriptionRepository;
 import com.hotelbooking.userservice.repository.UserRepository;
 import com.hotelbooking.userservice.service.AdminService;
 
@@ -50,12 +61,13 @@ public class AdminServiceImpl implements AdminService{
     UserRepository userRepository;
     AccountLockHistoryRepository accountLockHistoryRepository;
     Keycloak keycloak;
+    TenantRepository tenantRepository;
+    TenantSubscriptionRepository tenantSubscriptionRepository;
 
+    /*==== User ==== */
     @Override
     @Transactional(readOnly = true)
     public Page<ResponseUser> getAllUsers(UserStatus status, String search, Pageable pageable){
-        if (search == null || search.isBlank()) search = null;
-
         Page<UserEntity> searchUsers = userRepository.findByStatusAndSearch(status, search, pageable);
 
         return searchUsers.map(
@@ -322,6 +334,8 @@ public class AdminServiceImpl implements AdminService{
         user.setEnabled(enable);
 
         userResource.update(user);
+
+        if(enable == false) userResource.logout();
     }
 
     private List<String> getUserRoleKeycloak(UUID userId){
@@ -332,5 +346,158 @@ public class AdminServiceImpl implements AdminService{
         return roles.stream()
                     .map(RoleRepresentation::getName)
                     .toList();
+    }
+
+    /*============ */
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<TenantResponse> getListTenant(TenantStatus status, String search, Pageable pageable){
+        Page<Tenant> tenants = tenantRepository.findByStatusAndSearch(status, search, pageable);
+
+        return tenants.map(
+            tenant -> toTenantResponse(tenant)
+        );
+    }
+
+    // nếu tạo mới này thì mình có cần phải gán sẵn 1 cái gói nó đăng ký luôn không hay như nào?
+    @Override
+    @Transactional
+    public TenantResponse createTenant(CreateTenantRequest request){
+        UserEntity user = userRepository.findByIdAndDeletedFalse(request.ownerId())
+                                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "Người dùng không tồn tại id=" + request.ownerId().toString()));
+
+        if(tenantRepository.existsByOwnerUser_IdAndIsDeletedFalse(request.ownerId())){
+            throw new ApiException(HttpStatus.CONFLICT, "OWNER_ALREADY_HAS_TENANT", "Owner đã có tenant từ trước");
+        }
+
+        Tenant tenant = new Tenant(
+            UUID.randomUUID(),
+            user, 
+            request.name(),
+            TenantStatus.ACTIVE, 
+            Instant.now(), 
+            Instant.now(), 
+            false);
+        
+        tenantRepository.save(tenant);
+
+        try {
+            UserResource userResource = keycloak.realm(currentRealm).users().get(request.ownerId().toString());
+            
+            RoleRepresentation role = keycloak.realm(currentRealm)
+                                            .roles()
+                                            .get(UserRole.HOTEL_OWNER.toString())
+                                            .toRepresentation();
+            
+            userResource.roles().realmLevel().add(Collections.singletonList(role));
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_KEYCLOAK_SERVER_ERROR", "Lỗi server keycloak");
+        }
+        
+        return toTenantResponse(tenant);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TenantDetailResponse getTenantDetail(UUID tenantId){
+        Tenant tenant = tenantRepository.findByIdAndIsDeletedFalse(tenantId)
+                                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND", "Tenant không tồn tại trong hệ thống"));
+
+        TenantSubscription tenantSubscription = tenantSubscriptionRepository.findByTenant_IdAndStatusAndIsDeletedFalse(tenantId, TenantSubscriptionPlanStatus.ACTIVE)
+                            .orElse(null);
+
+        return toTenantDetailResponse(tenant, tenantSubscription);
+    }
+
+    @Override
+    @Transactional
+    public TenantDetailResponse updateTenant(UUID tenantId, UpdateTenantRequest request){
+
+        if(request.name() == null && request.status() == null){
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "Ít nhất 1 field phải được chỉnh sửa");
+        }
+
+        Tenant tenant = tenantRepository.findByIdAndIsDeletedFalse(tenantId)
+                                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND", "Tenant không tồn tại trong hệ thống"));
+        
+        if(request.status() != null && request.status().equals(tenant.getStatus())){
+            throw new ApiException(HttpStatus.CONFLICT, "STATUS_CONFLICT", "Tenant đang có status như yêu cầu");
+        }
+
+        if(request.name() != null) tenant.setName(request.name());
+        if(request.status() != null) tenant.setStatus(request.status());
+        tenantRepository.save(tenant);
+
+        TenantSubscription tenantSubscription = tenantSubscriptionRepository.findByTenant_IdAndStatusAndIsDeletedFalse(tenantId, TenantSubscriptionPlanStatus.ACTIVE)
+                            .orElse(null);
+        return toTenantDetailResponse(tenant, tenantSubscription);
+    }
+
+    @Override
+    @Transactional
+    public void deleteTenant(UUID tenantId){
+        if(tenantSubscriptionRepository.existsByTenant_IdAndStatusAndIsDeletedFalse(tenantId, TenantSubscriptionPlanStatus.ACTIVE)){
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TENANT_HAS_ACTIVE_SUBSCRIPTION", "Bạn phải bỏ gói đăng ký thuê trước khi xóa tenant");
+        }
+
+        Tenant tenant = tenantRepository.findByIdAndIsDeletedFalse(tenantId)
+                                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "TENANT_NOT_FOUND", "Tenant không tồn tại trong hệ thống"));
+
+        tenant.setIsDeleted(true);
+        tenantRepository.save(tenant);
+
+        try {
+            UserResource userResource = keycloak.realm(currentRealm).users().get(tenant.getOwnerUser().getId().toString());
+
+            List<RoleRepresentation> roleToRemove = userResource.roles().realmLevel().listAll().stream()
+                                                            .filter(r -> r.getName().equals(UserRole.HOTEL_OWNER.toString()))
+                                                            .toList();
+            if (!roleToRemove.isEmpty()) {
+                userResource.roles().realmLevel().remove(roleToRemove);
+            }
+        } catch (Exception e) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_KEYCLOAK_SERVER_ERROR", "Lỗi server keycloak");
+        }
+    }
+
+    private TenantResponse toTenantResponse(Tenant tenant){
+        return new TenantResponse(
+            tenant.getId(),
+            tenant.getName(),
+            tenant.getStatus(),
+            tenant.getOwnerUser().getId(),
+            tenant.getOwnerUser().getEmail(),
+            tenant.getOwnerUser().getFullName(),
+            tenant.getOwnerUser().getPhone(),
+            tenant.getCreatedAt()
+        );
+    }
+
+    private TenantDetailResponse toTenantDetailResponse(Tenant tenant, TenantSubscription tenantSubscription){
+         TenantDetailResponse.ActiveSubscription activeSubscription = tenantSubscription != null
+                                ? new TenantDetailResponse.ActiveSubscription(
+                                    tenantSubscription.getId(),
+                                    tenantSubscription.getSubscriptionPlan().getId(),
+                                    tenantSubscription.getSubscriptionPlan().getCode(),
+                                    tenantSubscription.getSubscriptionPlan().getName(), 
+                                    tenantSubscription.getStatus(), 
+                                    tenantSubscription.getStartedAt(),
+                                    tenantSubscription.getExpiresAt(),
+                                    tenantSubscription.getCreatedAt())
+                                : null;
+        
+        return new TenantDetailResponse(
+                tenant.getId(),
+                tenant.getName(),
+                tenant.getStatus(),
+                tenant.getOwnerUser().getId(),
+                tenant.getOwnerUser().getEmail(),
+                tenant.getOwnerUser().getFullName(),
+                tenant.getOwnerUser().getPhone(),
+                tenant.getCreatedAt(),
+                tenant.getUpdatedAt(),
+                activeSubscription
+        );
     }
 }

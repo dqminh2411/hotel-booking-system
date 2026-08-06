@@ -19,14 +19,14 @@ export default function PublicHeader() {
           <Link to="/promotions" className="hover:text-blue-100">Khuyến mãi</Link>
           <a href="#support" className="hover:text-blue-100">Hỗ trợ</a>
           {isPlatformAdmin && (
-            <Link to="/admin/hotels/pending" className="hover:text-blue-100"> Quản trị </Link>
+            <Link to="/admin/dashboard" className="hover:text-blue-100"> Quản trị </Link>
           )}
         </nav>
         {isAuthenticated ? (
           <div className="flex items-center gap-3">
             {isPlatformAdmin && (
               <Link
-                to="/admin/hotels/pending"
+                to="/admin/dashboard"
                 className="rounded-md border border-white/40 px-3 py-2 text-sm font-semibold hover:bg-white/10 md:hidden"
               >
                 Quản trị
