@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface HotelImageService {
 
     List<HotelImageResponse> uploadImages(UUID hotelId, List<MultipartFile> files);
+
+    void deleteImages(UUID hotelId, UUID imageId);
 }

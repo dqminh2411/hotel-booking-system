@@ -23,4 +23,6 @@ public interface HotelImageRepository extends JpaRepository<HotelImageEntity, UU
     List<HotelImageEntity> findAllByIdInAndHotel_IdAndIsDeletedFalse(List<UUID> imgIds, UUID hotelId);
 
     Optional<HotelImageEntity> findByHotel_IdAndIsCoverTrueAndIsDeletedFalse(UUID hotelId);
+
+    Optional<HotelImageEntity> findFirstByHotel_IdAndIsDeletedFalseOrderByCreatedAtAsc(UUID hotelId);
 }

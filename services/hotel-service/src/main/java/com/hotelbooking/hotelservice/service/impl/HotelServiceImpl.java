@@ -75,7 +75,7 @@ public class HotelServiceImpl implements HotelService {
         HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
                 .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
 
-        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdAndIsDeletedFalseOrderByIsCoverDescCreatedAtAsc(hotelId);
         List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
         List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
 
@@ -98,7 +98,7 @@ public class HotelServiceImpl implements HotelService {
         HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalse(hotelId)
                 .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
 
-        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdAndIsDeletedFalseOrderByIsCoverDescCreatedAtAsc(hotelId);
         List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
         List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
         List<RoomTypeEntity> roomTypes = roomTypeRepository.findActiveByHotelIdWithCoverImage(hotelId);
@@ -461,6 +461,8 @@ public class HotelServiceImpl implements HotelService {
         }
         return result;
     }
+
+
 
     // đây là phần Long thêm và sửa
 

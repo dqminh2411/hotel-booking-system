@@ -111,4 +111,12 @@ public class HotelController {
                         .data(response)
                         .build());
     }
+
+    @DeleteMapping("/{hotelId}/images/{imageId}")
+    public ResponseEntity<Void> deleteHotelImage(
+            @PathVariable UUID hotelId,
+            @PathVariable UUID imageId) {
+        hotelImageService.deleteImages(hotelId, imageId);
+        return ResponseEntity.noContent().build();
+    }
 }

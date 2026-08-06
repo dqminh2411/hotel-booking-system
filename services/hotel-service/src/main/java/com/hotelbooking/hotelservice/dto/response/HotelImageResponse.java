@@ -12,7 +12,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class HotelImageResponse {
-    private UUID id;
+    private UUID imageId;
     private String url;
     private Boolean isCover;
 }

@@ -48,4 +48,15 @@ public class SecurityUtils {
                     HttpStatus.UNAUTHORIZED);
         }
     }
+
+    public boolean hasRole(String roleName) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) return false;
+
+        String target = "ROLE_" + roleName;
+
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(target));
+    }
 }
