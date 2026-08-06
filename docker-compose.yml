@@ -61,6 +61,14 @@ services:
       SERVER_PORT: 8000
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     depends_on:
       eureka-server:
         condition: service_healthy
@@ -76,12 +84,15 @@ services:
       #   condition: service_started
     networks:
       - app-network
-
-    command: 
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./gateway:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -325,6 +336,14 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_VERIFICATION_URL: ${EMAIL_VERIFICATION_URL:-http://localhost:3000/verify-email}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: user-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     depends_on:
       user-db:
         condition: service_healthy
@@ -334,10 +353,15 @@ services:
         condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/user-service:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   hotel-service:
     build: ./services/hotel-service
@@ -361,6 +385,14 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
       MINIO_BUCKET_HOTEL_IMAGES: ${MINIO_BUCKET_HOTEL_IMAGES:-hotel-images}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: hotel-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
 
     depends_on:
       hotel-db:
@@ -373,10 +405,15 @@ services:
         condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/hotel-service:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   booking-service:
     build: ./services/booking-service
@@ -401,10 +438,18 @@ services:
       REDIS_PORT: 6379
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8085/realms/hotel-booking-system}
       KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: booking-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     command:
       - mvn
       - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010
+      - "-Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
     depends_on:
       booking-db:
         condition: service_healthy
@@ -428,6 +473,7 @@ services:
       - ./services/booking-service:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   place-booking-service:
     build: ./services/place_booking_service
@@ -449,10 +495,18 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: place-booking-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     command:
       - mvn
       - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011
+      - "-Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
       interval: 10s
@@ -482,6 +536,7 @@ services:
       - ./services/place_booking_service:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   payment-service:
     build: ./services/payment_service
@@ -500,6 +555,14 @@ services:
       KAFKA_CONSUMER_GROUP: payment-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: payment-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     depends_on:
       payment-db:
         condition: service_healthy
@@ -511,10 +574,15 @@ services:
         condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/payment_service:/app
       - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
 
   # promotion-service:
   #   build: ./services/promotion-service
