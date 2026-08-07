@@ -83,7 +83,7 @@ public class AdminServiceImpl implements AdminService{
         List<UUID> hotelIds = hotels.getContent().stream()
                                     .map(HotelEntity::getId)
                                     .toList();
-        List<HotelImageEntity> hotelImageEntities = hotelImageRepository.findByHotel_IdInAndIsCoverTrue(hotelIds);
+        List<HotelImageEntity> hotelImageEntities = hotelImageRepository.findByHotel_IdInAndIsCoverTrueAndIsDeletedFalse(hotelIds);
         Map<UUID, String> mapImgIsCover = hotelImageEntities.stream()
                                                 .collect(Collectors.toMap(
                                                     img -> img.getHotel().getId(),
@@ -147,7 +147,7 @@ public class AdminServiceImpl implements AdminService{
     @Override
     @Transactional
     public void deleteHotelImages(HotelImageDelRequest request){
-        List<HotelImageEntity> images = hotelImageRepository.findAllByIdInAndHotel_Id(request.imgIds(), request.hotelId());
+        List<HotelImageEntity> images = hotelImageRepository.findAllByIdInAndHotel_IdAndIsDeletedFalse(request.imgIds(), request.hotelId());
 
         if(images.size() != request.imgIds().size()){
             throw new AppException("IMAGE_NOT_AVAILABLE", "Một số ảnh không tồn tại hoặc không thuộc hotel", HttpStatus.BAD_REQUEST);

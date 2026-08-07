@@ -6,6 +6,7 @@ import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
 import com.hotelbooking.hotelservice.dto.response.ApiResponse;
 import com.hotelbooking.hotelservice.dto.response.HotelDetailsResponse;
 import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
+import com.hotelbooking.hotelservice.service.HotelImageService;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -24,6 +25,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import com.hotelbooking.hotelservice.dto.response.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/hotels")
@@ -33,6 +35,7 @@ import com.hotelbooking.hotelservice.dto.response.*;
 public class HotelController {
 
     HotelService hotelService;
+    HotelImageService hotelImageService;
 
     @GetMapping("/{hotelId}")
     public ApiResponse<HotelDetailsResponse> getHotelById(
@@ -93,5 +96,27 @@ public class HotelController {
                         .message("Tạo khách sạn thành công, đang chờ admin duyệt")
                         .data(response)
                         .build());
+    }
+
+    @PostMapping("/{hotelId}/images")
+    public ResponseEntity<ApiResponse<List<HotelImageResponse>>> uploadHotelImages(
+            @PathVariable UUID hotelId,
+            @RequestParam("images") List<MultipartFile> images) {
+        List<HotelImageResponse> response = hotelImageService.uploadImages(hotelId, images);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiResponse.<List<HotelImageResponse>>builder()
+                        .code(HttpStatus.CREATED.value())
+                        .message("Upload ảnh thành công")
+                        .data(response)
+                        .build());
+    }
+
+    @DeleteMapping("/{hotelId}/images/{imageId}")
+    public ResponseEntity<Void> deleteHotelImage(
+            @PathVariable UUID hotelId,
+            @PathVariable UUID imageId) {
+        hotelImageService.deleteImages(hotelId, imageId);
+        return ResponseEntity.noContent().build();
     }
 }
