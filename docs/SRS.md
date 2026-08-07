@@ -89,7 +89,7 @@ HotelHub là một nền tảng độc lập (không phải module mở rộng c
 
 ### 2.1.1. Sơ đồ kiến trúc tổng quan (mô tả)
 
-Kiến trúc gồm 4 lớp: (1) Lớp giao diện người dùng (Customer Web/App, Staff Portal, Owner Dashboard, Admin Console) xây dựng bằng ReactJS/Vite; (2) Lớp API Gateway (Spring Cloud Gateway) làm điểm vào duy nhất, xử lý routing, rate limiting, xác thực JWT; (3) Lớp các microservices nghiệp vụ (Auth, User, Hotel, Booking, Place Booking/Saga Orchestrator, Payment, Notification, Staff Management, Promotion); (4) Lớp hạ tầng dùng chung (Eureka Service Discovery, Kafka Message Broker, Redis Cache, PostgreSQL Database-per-Service, MongoDB/Neo4j cho chatbot RAG nếu áp dụng, MinIO lưu trữ file, ELK/OpenSearch cho logging, Prometheus/Grafana cho monitoring).
+Kiến trúc gồm 4 lớp: (1) Lớp giao diện người dùng (Customer Web/App, Staff Portal, Owner Dashboard, Admin Console) xây dựng bằng ReactJS/Vite; (2) Lớp API Gateway (Spring Cloud Gateway) làm điểm vào duy nhất, xử lý routing, rate limiting, xác thực JWT đầu vào qua Keycloak JWKS; (3) Lớp các microservices nghiệp vụ (Keycloak IdP, User, Hotel, Booking, Place Booking/Saga Orchestrator, Payment, Promotion, Notification); (4) Lớp hạ tầng dùng chung (Eureka Service Discovery, Kafka Message Broker, Redis Cache & Lock, MinIO Object Storage, PostgreSQL Database-per-Service, Keycloak DB, OpenTelemetry Collector, Jaeger Tracing Backend, Elasticsearch & Kibana cho Audit Logging).
 
 ### 2.1.2. Danh sách microservices
 
