@@ -519,16 +519,17 @@ sequenceDiagram
     end
 ```
 
-### 3.5. UC-31 - Tạo khách sạn mới
+## UC-31 — Tạo khách sạn mới (đã chỉnh sửa)
 
 ```mermaid
 sequenceDiagram
     autonumber
 
     actor Owner as HOTEL_OWNER
+    participant Keycloak
     participant Client as Postman / Frontend
     participant Gateway
-    participant Security as Spring Security
+    participant Security as Spring Security (hotel-service)
     participant Controller as HotelController
     participant Service as HotelServiceImpl
     participant Utils as SecurityUtils
@@ -537,260 +538,282 @@ sequenceDiagram
     participant HotelRepo as HotelRepository
     participant DB as PostgreSQL
     participant Event as ApplicationEventPublisher
-    participant Listener as @TransactionalEventListener
+    participant Listener as HotelKafkaEventPublisher
     participant Kafka
 
-    Owner->>Client: Login
-    Client->>Gateway: POST /login
-    Gateway-->>Client: JWT Access Token
+    Owner->>Keycloak: POST /protocol/openid-connect/token (username, password, client_id)
+    Keycloak-->>Owner: JWT Access Token (chứa realm_access.roles, sub=tenantId)
 
-    Client->>Gateway: POST /api/hotels\nAuthorization: Bearer JWT
+    Owner->>Client: Nhập thông tin khách sạn, bấm "Tạo"
+    Client->>Gateway: POST /api/hotels (Authorization: Bearer JWT)
 
-    Gateway->>Security: Validate JWT
+    Gateway->>Gateway: Validate chữ ký + hạn dùng JWT (JWKS)
+    alt Token không hợp lệ ở Gateway
+        Gateway-->>Client: 401 Unauthorized
+    else Token hợp lệ
+        Gateway->>Security: Forward request (giữ nguyên header Authorization)
+        Security->>Security: Tự re-validate JWT lần 2 (JWKS riêng của hotel-service)
 
-    alt Invalid Token
-        Security-->>Client: 401 Unauthorized
-    else Valid Token
+        alt Token không hợp lệ ở hotel-service
+            Security-->>Client: 401 Unauthorized
+        else Token hợp lệ
+            Security->>Controller: (AOP) kiểm tra hasRole('HOTEL_OWNER')
 
-        Security->>Controller: Authenticated Request
+            alt Thiếu role HOTEL_OWNER
+                Security-->>Client: 403 ACCESS_DENIED
+            else Có role HOTEL_OWNER
+                Controller->>Service: createHotel(request)
 
-        Controller->>Service: createHotel(request)
+                Service->>Utils: getCurrentTenantId()
+                Utils-->>Service: tenantId (đọc từ claim sub)
 
-        Service->>Utils: getCurrentTenantId()
-        Utils-->>Service: tenantId
+                Service->>Location: Kiểm tra provinceCode/districtCode/wardCode
 
-        Service->>Location: Validate Province/District/Ward
-        Location-->>Service: OK
+                alt Mã địa giới không hợp lệ
+                    Location-->>Service: not found hoặc sai cây phân cấp
+                    Service-->>Controller: throw AppException 400
+                    Controller-->>Client: 400 INVALID_LOCATION_HIERARCHY
+                else Địa giới hợp lệ
+                    Location-->>Service: OK
 
-        loop Each Amenity
-            Service->>Amenity: findByName()
+                    Service->>DB: BEGIN TRANSACTION
 
-            alt Amenity exists
-                Amenity-->>Service: Existing Amenity
-            else New Amenity
-                Service->>Amenity: save()
+                    loop Mỗi amenity trong request
+                        alt amenity có id
+                            Service->>Amenity: findById(id)
+                            alt Không tồn tại hoặc đã xóa
+                                Amenity-->>Service: empty
+                                Service-->>Controller: throw AppException 400
+                                Controller-->>Client: 400 AMENITY_NOT_FOUND
+                            else Tồn tại
+                                Amenity-->>Service: Amenity có sẵn
+                            end
+                        else amenity chỉ có name
+                            Service->>Amenity: findByNameIgnoreCase(name)
+                            alt Đã tồn tại tên này
+                                Amenity-->>Service: Amenity có sẵn dùng lại
+                            else Chưa tồn tại
+                                Service->>Amenity: save(new Amenity)
+                                Amenity-->>Service: Amenity mới
+                            end
+                        end
+                        Service->>DB: INSERT hotel_amenities
+                    end
+
+                    Service->>Service: processPolicies - tạo lần lượt các policies
+                    Service->>Service: processRoomTypes - tạo lần lượt các room_types
+
+                    Service->>HotelRepo: save(hotel status PENDING, tenant_id)
+                    HotelRepo->>DB: INSERT hotels
+                    DB-->>HotelRepo: OK
+
+                    Service->>DB: COMMIT TRANSACTION
+                    DB-->>Service: Committed
+
+                    Service->>Event: publishEvent(HotelCreatedEvent)
+                    Service-->>Controller: CreateHotelResponse
+                    Controller-->>Client: 201 Created
+
+                    Note over Event,Listener: Chạy SAU KHI transaction commit thành công
+                    Event->>Listener: onHotelCreated(event)
+                    Listener->>Kafka: send review-hotel-command
+                    Kafka-->>Listener: ACK bất đồng bộ
+                end
             end
         end
-
-        Service->>Service: processPolicies()
-
-        Service->>Service: processRoomTypes()
-
-        Service->>HotelRepo: save()
-
-        HotelRepo->>DB: INSERT Hotel
-
-        DB-->>HotelRepo: Success
-
-        Service->>Event: publish(HotelCreatedEvent)
-
-        Service-->>Controller: CreateHotelResponse
-
-        Controller-->>Client: HTTP 201
-
-        Note over DB,Listener: Transaction Commit
-
-        Listener->>Kafka: send(ReviewHotelCommand)
-
-        Kafka-->>Listener: ACK
-
     end
 ```
 
-### 3.6. UC-32 - Upload ảnh khách sạn
+---
+
+## UC-32 — Upload ảnh khách sạn (đã chỉnh sửa)
 
 ```mermaid
 sequenceDiagram
     autonumber
 
     actor Owner as HOTEL_OWNER
-
     participant Client
     participant Gateway
-    participant Security
+    participant Security as Spring Security (hotel-service)
     participant Controller
     participant Service as HotelImageServiceImpl
-    participant Utils as SecurityUtils
     participant HotelRepo
+    participant Utils as SecurityUtils
     participant Validator as ImageValidationUtils
+    participant ImageRepo as HotelImageRepository
     participant MinIO
-    participant ImageRepo
     participant DB
 
-    Owner->>Client: Upload Images
+    Owner->>Client: Chọn nhiều ảnh, bấm Upload
+    Client->>Gateway: POST /api/hotels/{id}/images (multipart, Bearer JWT)
+    Gateway->>Gateway: Validate JWT (JWKS)
 
-    Client->>Gateway: POST /hotels/{id}/images
+    alt Token không hợp lệ
+        Gateway-->>Client: 401 Unauthorized
+    else Token hợp lệ
+        Gateway->>Security: Forward request
+        Security->>Security: Tự re-validate JWT
 
-    Gateway->>Security: Validate JWT
+        alt Thiếu role HOTEL_OWNER
+            Security-->>Client: 403 ACCESS_DENIED
+        else Có role HOTEL_OWNER
+            Security->>Controller: uploadHotelImages()
+            Controller->>Service: uploadImages(hotelId, files)
 
-    alt Invalid Token
+            Service->>HotelRepo: findById(hotelId), chưa xóa mềm
 
-        Security-->>Client: 401
+            alt Không tìm thấy hotel
+                HotelRepo-->>Service: empty
+                Service-->>Controller: throw AppException 404
+                Controller-->>Client: 404 HOTEL_NOT_FOUND
+            else Tìm thấy hotel
+                HotelRepo-->>Service: Hotel
 
-    else Valid Token
+                Service->>Utils: getCurrentTenantId()
+                Utils-->>Service: tenantId
 
-        Security->>Controller: Authorized Request
+                alt tenantId khác hotel.tenantId
+                    Service-->>Controller: throw AppException 403
+                    Controller-->>Client: 403 NOT_HOTEL_OWNER
+                else Đúng chủ sở hữu
+                    Service->>Validator: validate từng file trong batch
 
-        Controller->>Service: uploadImages()
+                    alt Có file sai định dạng hoặc qua 5MB
+                        Validator-->>Service: throw AppException 400
+                        Service-->>Controller: propagate
+                        Controller-->>Client: 400 IMAGE_TYPE_NOT_ALLOWED hoặc IMAGE_TOO_LARGE
+                        note over Service,MinIO: Chưa có object nào lên MinIO ở bước này
+                    else Toàn bộ file hợp lệ
+                        Service->>ImageRepo: tìm cover hiện tại của hotel
+                        ImageRepo-->>Service: đã có cover hay chưa
 
-        Service->>HotelRepo: findHotel()
+                        loop Mỗi file hợp lệ
+                            Service->>Service: Sinh objectName hotelId slash UUID chấm ext
+                            Service->>MinIO: uploadFile(bucket, objectName, stream)
 
-        HotelRepo-->>Service: Hotel
+                            alt Upload lỗi mạng hoặc quyền bucket
+                                MinIO-->>Service: Error
+                                Service->>MinIO: rollback xóa các object đã lỡ upload trong batch
+                                Service-->>Controller: throw AppException 502
+                                Controller-->>Client: 502 lỗi upload, không lưu DB dòng nào
+                            else Upload thành công
+                                MinIO-->>Service: url
+                            end
+                        end
 
-        Service->>Utils: getCurrentTenantId()
+                        Service->>ImageRepo: saveAll(entities)
+                        note right of ImageRepo: Ảnh đầu tiên batch = cover chỉ khi hotel chưa có cover
+                        ImageRepo->>DB: INSERT hotel_images nhiều dòng
+                        DB-->>ImageRepo: OK
+                        ImageRepo-->>Service: saved entities
 
-        Utils-->>Service: tenantId
-
-        alt Not Owner
-
-            Service-->>Client: 403 Forbidden
-
-        else Owner
-
-            Service->>Validator: validate(images)
-
-            alt Invalid Images
-
-                Validator-->>Client: 400 Bad Request
-
-            else Images Valid
-
-                loop Upload Each Image
-
-                    Service->>MinIO: uploadFile()
-
-                    MinIO-->>Service: objectName
-
+                        Service-->>Controller: List HotelImageResponse
+                        Controller-->>Client: 201 Created
+                    end
                 end
-
-                Service->>ImageRepo: saveAll()
-
-                ImageRepo->>DB: INSERT hotel_images
-
-                DB-->>ImageRepo: Success
-
-                ImageRepo-->>Service: Saved
-
-                Service-->>Controller: Upload Response
-
-                Controller-->>Client: HTTP 201
-
             end
-
         end
-
     end
 ```
 
-### 3.7. UC-33 - Delete ảnh khách sạn
+---
+
+## UC-33 — Xóa ảnh khách sạn (đã chỉnh sửa)
 
 ```mermaid
 sequenceDiagram
     autonumber
 
-    actor User
-
+    actor User as HOTEL_OWNER hoac PLATFORM_ADMIN
     participant Client
     participant Gateway
-    participant Security
+    participant Security as Spring Security (hotel-service)
     participant Controller
-    participant Service
-    participant Utils
+    participant Service as HotelImageServiceImpl
     participant HotelRepo
-    participant ImageRepo
+    participant Utils as SecurityUtils
+    participant ImageRepo as HotelImageRepository
     participant MinIO
     participant DB
 
-    User->>Client: Delete Image
+    User->>Client: Bấm Xóa ảnh
+    Client->>Gateway: DELETE /api/hotels/{id}/images/{imageId} (Bearer JWT)
+    Gateway->>Gateway: Validate JWT (JWKS)
 
-    Client->>Gateway: DELETE /images/{imageId}
+    alt Token không hợp lệ
+        Gateway-->>Client: 401 Unauthorized
+    else Token hợp lệ
+        Gateway->>Security: Forward request
+        Security->>Security: Tự re-validate JWT
 
-    Gateway->>Security: Validate JWT
+        alt Không có role HOTEL_OWNER lẫn PLATFORM_ADMIN
+            Security-->>Client: 403 ACCESS_DENIED
+        else Có 1 trong 2 role
+            Security->>Controller: deleteHotelImage()
+            Controller->>Service: deleteImages(hotelId, imageId)
 
-    alt Invalid Token
+            Service->>HotelRepo: findById(hotelId), chưa xóa mềm
 
-        Security-->>Client: 401
+            alt Không tìm thấy hotel
+                HotelRepo-->>Service: empty
+                Service-->>Controller: throw AppException 404
+                Controller-->>Client: 404 HOTEL_NOT_FOUND
+            else Tìm thấy hotel
+                HotelRepo-->>Service: Hotel
 
-    else Valid Token
+                Service->>Utils: hasRole PLATFORM_ADMIN
 
-        Security->>Controller: Authorized Request
+                alt Là PLATFORM_ADMIN
+                    note over Service: Bỏ qua ownership check
+                else Là HOTEL_OWNER thường
+                    Service->>Utils: getCurrentTenantId()
+                    Utils-->>Service: tenantId
 
-        Controller->>Service: deleteImage()
+                    alt tenantId khác hotel.tenantId
+                        Service-->>Controller: throw AppException 403
+                        Controller-->>Client: 403 NOT_HOTEL_OWNER
+                    end
+                end
 
-        Service->>HotelRepo: findHotel()
+                Service->>ImageRepo: findById(imageId), đúng hotelId, chưa xóa mềm
 
-        HotelRepo-->>Service: Hotel
+                alt Không tìm thấy ảnh
+                    ImageRepo-->>Service: empty
+                    Service-->>Controller: throw AppException 404
+                    Controller-->>Client: 404 IMAGE_NOT_FOUND
+                else Tìm thấy ảnh
+                    ImageRepo-->>Service: HotelImage objectName isCover
 
-        Service->>Utils: hasRole()
+                    Service->>DB: BEGIN TRANSACTION
+                    Service->>ImageRepo: save is_deleted true, is_cover false
 
-        alt PLATFORM_ADMIN
+                    alt Ảnh vừa xóa đang là cover
+                        Service->>ImageRepo: tìm ảnh còn lại cũ nhất
+                        alt Còn ảnh khác
+                            ImageRepo-->>Service: ảnh cũ nhất còn lại
+                            Service->>ImageRepo: save is_cover true
+                        else Không còn ảnh nào
+                            note over Service: Hotel tạm thời không có cover
+                        end
+                    end
 
-            Note over Service: Skip Ownership Check
+                    Service->>MinIO: deleteFile(bucket, objectName)
 
-        else HOTEL_OWNER
-
-            Service->>Utils: getCurrentTenantId()
-
-            Utils-->>Service: tenantId
-
-            alt Not Owner
-
-                Service-->>Client: 403 Forbidden
-
+                    alt Xóa MinIO thất bại
+                        MinIO-->>Service: Error
+                        Service->>DB: ROLLBACK TRANSACTION
+                        note over DB: Hủy toàn bộ thay đổi ở trên
+                        Service-->>Controller: throw AppException 502
+                        Controller-->>Client: 502 IMAGE_DELETE_FAILED
+                    else Xóa MinIO thành công
+                        MinIO-->>Service: OK
+                        Service->>DB: COMMIT TRANSACTION
+                        Service-->>Controller: void
+                        Controller-->>Client: 204 No Content
+                    end
+                end
             end
-
         end
-
-        Service->>ImageRepo: findImage()
-
-        ImageRepo-->>Service: HotelImage
-
-        Service->>ImageRepo: Soft Delete
-
-        alt Deleted Image is Cover
-
-            Service->>ImageRepo: Find Oldest Remaining Image
-
-            ImageRepo-->>Service: New Cover
-
-            Service->>ImageRepo: Update Cover
-
-        end
-
-        Service->>MinIO: deleteObject()
-
-        MinIO-->>Service: Success
-
-        Service-->>Controller: HTTP 204
-
-        Controller-->>Client: No Content
-
     end
-```
-
-### Security (lấy tenant_id)
-
-```mermaid
-sequenceDiagram
-    actor Client
-
-    participant Gateway
-    participant Keycloak
-    participant HotelService
-
-    Client->>Gateway: Request + JWT
-
-    Gateway->>Keycloak: Validate JWT
-
-    Keycloak-->>Gateway: Valid Token
-
-    Gateway->>HotelService: Forward JWT
-
-    HotelService->>HotelService: Extract tenantId
-
-    HotelService->>HotelService: Check Role
-
-    HotelService->>HotelService: Check Ownership
-
-    HotelService-->>Client: Response
 ```
