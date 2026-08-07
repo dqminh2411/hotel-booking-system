@@ -5,24 +5,21 @@ info:
     Entity Service — quản lý thông tin khách sạn, loại phòng, phòng vật lý, tiện ích, chính sách và giá động.
     Theo Tài liệu Phân tích Thiết kế (SDD) mục 2.2 và 3.2.
 
-    Phạm vi tài liệu này: đặc tả 4 endpoint đọc dữ liệu công khai đầu tiên trong bảng tài nguyên của Hotel
-    Service (tìm kiếm khách sạn, xem chi tiết khách sạn, lấy danh sách loại phòng, xem chi tiết loại phòng),
-    cùng với 3 endpoint quản trị đầu tiên thuộc luồng duyệt/kiểm duyệt khách sạn (tag `Admin`, mục 3.2 SDD):
-    lấy danh sách khách sạn chờ duyệt, duyệt/đình chỉ khách sạn, và xóa ảnh vi phạm. Các endpoint quản trị
-    còn lại (tạo/sửa/xóa khách sạn, phòng, giá động...) sẽ được đặc tả ở phiên bản tiếp theo của tài liệu này.
+    Phạm vi tài liệu này (v1.2.0): 4 endpoint đọc dữ liệu công khai (tìm kiếm khách sạn, xem chi tiết khách
+    sạn, danh sách loại phòng, chi tiết loại phòng) + 3 endpoint ghi dữ liệu của Sprint 3 (tạo khách sạn,
+    upload ảnh, xóa ảnh — yêu cầu xác thực, dành cho `HOTEL_OWNER`/`PLATFORM_ADMIN`). Các endpoint quản trị
+    khác (duyệt khách sạn, sửa/xóa loại phòng, giá động...) sẽ được đặc tả ở phiên bản tiếp theo.
 
-    Đặc điểm xử lý chung của các endpoint đọc công khai:
+    Đặc điểm xử lý chung của các endpoint đọc:
       - Kết quả được cache qua Redis theo khóa tổ hợp tham số truy vấn, TTL ngắn/trung bình tùy endpoint.
       - Chỉ trả về dữ liệu chưa bị xóa mềm (`is_deleted = false`); với tìm kiếm/chi tiết khách sạn công khai,
         chỉ trả về khách sạn có `status = APPROVED`.
 
-    Đặc điểm chung của các endpoint quản trị (tag `Admin`):
-      - Yêu cầu xác thực bằng JWT (`Authorization: Bearer <token>`) và bắt buộc claim `role = PLATFORM_ADMIN`;
-        role khác trả về `403 FORBIDDEN`. Xem `components.securitySchemes.bearerAuth`.
-      - Không đọc/ghi qua Redis Cache như các endpoint công khai (đảm bảo dữ liệu quản trị luôn mới nhất),
-        nhưng có thể chủ động invalidate cache công khai khi hành động quản trị làm thay đổi dữ liệu đã cache.
-      - Mọi hành động thay đổi trạng thái/dữ liệu đều được ghi lại vào bảng audit (`audit_logs`) để phục vụ
-        truy vết.
+    Đặc điểm xử lý chung của các endpoint ghi (tạo hotel, upload/xóa ảnh):
+      - Yêu cầu header `Authorization: Bearer <JWT>` do Keycloak cấp (xem `securitySchemes.bearerAuth`).
+      - Gateway chỉ validate chữ ký/hạn dùng JWT; hotel-service tự re-validate JWT và tự đọc claim
+        `realm_access.roles` để authorize (`@PreAuthorize` + kiểm tra quyền sở hữu ở tầng Service).
+      - Toàn bộ thao tác ghi đều nằm trong transaction DB; nếu có bước nào lỗi, mọi thay đổi được rollback.
   version: 1.2.0
 
 servers:
@@ -32,9 +29,8 @@ servers:
 tags:
   - name: Health
   - name: Hotels
+  - name: HotelImages
   - name: RoomTypes
-  - name: Admin
-    description: Endpoint quản trị nội bộ — chỉ role `PLATFORM_ADMIN` được phép gọi (xem `securitySchemes.bearerAuth`).
 
 paths:
   /health:
@@ -54,7 +50,104 @@ paths:
   # GET /api/hotels — Tìm kiếm khách sạn
   # ============================================================
 
+  # ============================================================
+  # POST /api/hotels — Tạo khách sạn mới (HOTEL_OWNER)
+  # ============================================================
+
   /api/hotels:
+    post:
+      tags: [Hotels]
+      summary: Tạo khách sạn mới (kèm amenities/policies/roomTypes)
+      description: |
+        Tạo khách sạn ở trạng thái `PENDING`, gắn `tenantId` lấy từ claim `sub` của JWT (không tin
+        `tenantId` do client gửi lên). Bắt buộc kèm ít nhất 1 `roomTypes`; `amenities`/`policies` không
+        bắt buộc.
+
+        Xử lý `amenities`: mỗi phần tử có `id` (dùng amenity có sẵn trong hệ thống, phải tồn tại) hoặc
+        `name` (tạo mới — server tự kiểm tra trùng tên không phân biệt hoa/thường trước khi tạo, không
+        tạo trùng). Chủ khách sạn không thể xóa amenity hệ thống qua API này.
+
+        Sau khi lưu DB thành công (transaction commit), publish Kafka event `ReviewHotelCommand` (topic
+        `review-hotel-command`) để admin-service biết có khách sạn mới chờ duyệt — publish bất đồng bộ,
+        không làm chậm response.
+
+        Quyền: chỉ role `HOTEL_OWNER`.
+      operationId: createHotel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHotelRequest'
+            example:
+              name: Khách sạn Hoàn Kiếm Boutique
+              description: Khách sạn 3 sao gần Hồ Gươm
+              address: 12 Hàng Bạc, Hoàn Kiếm, Hà Nội
+              provinceCode: "01"
+              districtCode: "001"
+              wardCode: "00010"
+              amenities:
+                - id: a1000000-0000-0000-0000-000000000001
+                - name: Đưa đón sân bay
+              policies:
+                - type: CHECKIN
+                  description: Nhận phòng từ 14:00
+                - type: CANCELLATION
+                  description: Miễn phí hủy trước 24h
+              roomTypes:
+                - name: Standard Twin
+                  description: Phòng 2 giường đơn
+                  maxGuests: 2
+                  bedCounts: 2
+                  basePricePerNight: 800000
+                  quantity: 5
+                  area: 22
+      responses:
+        '201':
+          description: Tạo khách sạn thành công, trạng thái PENDING chờ admin duyệt
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  message:
+                    type: string
+                    example: Tạo khách sạn thành công, đang chờ admin duyệt
+                  data:
+                    $ref: '#/components/schemas/CreateHotelResponse'
+        '400':
+          description: Dữ liệu không hợp lệ (thiếu field bắt buộc, roomTypes rỗng, mã địa giới không tồn tại hoặc không đúng cây tỉnh/huyện/xã, amenity id không tồn tại...)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_LOCATION_HIERARCHY
+                message: districtCode không thuộc provinceCode đã cho
+        '401':
+          description: Thiếu hoặc sai JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHENTICATED
+                message: Không tìm thấy thông tin xác thực hợp lệ
+        '403':
+          description: JWT hợp lệ nhưng thiếu role HOTEL_OWNER
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: ACCESS_DENIED
+                message: Bạn không có quyền thực hiện thao tác này
+
     get:
       tags: [Hotels]
       summary: Tìm kiếm khách sạn theo địa điểm/ngày/khách/giá/tiện ích
@@ -277,6 +370,190 @@ paths:
                 message: Khách sạn không tồn tại
 
   # ============================================================
+  # POST /api/hotels/{id}/images — Upload ảnh khách sạn (HOTEL_OWNER)
+  # ============================================================
+
+  /api/hotels/{id}/images:
+    post:
+      tags: [HotelImages]
+      summary: Upload ảnh cho khách sạn (nhiều ảnh trong 1 request)
+      description: |
+        Nhận nhiều file trong 1 request (`multipart/form-data`, field `images`). Validate TOÀN BỘ batch
+        trước (định dạng jpg/jpeg/png/webp, tối đa 5MB/file) rồi mới upload — nếu 1 file sai, toàn bộ
+        request thất bại, không có ảnh nào được lưu (fail-fast).
+
+        Mỗi ảnh hợp lệ được sinh object name `{hotelId}/{UUID}.{ext}` (tránh trùng tên) rồi upload lên
+        MinIO bucket `hotel-images`, sau đó lưu bản ghi `hotel_images(hotel_id, url, object_name, is_cover)`.
+        Nếu khách sạn CHƯA có ảnh cover, ảnh ĐẦU TIÊN trong batch tự động là cover.
+
+        Nếu có lỗi giữa chừng khi upload lên MinIO (network, quyền truy cập bucket...), toàn bộ ảnh đã lỡ
+        upload trong batch này sẽ bị xóa lại (rollback), không lưu DB.
+
+        Quyền: role `HOTEL_OWNER` **và** phải đúng là chủ sở hữu khách sạn này (so khớp `tenantId` trong
+        JWT với `tenant_id` của khách sạn) — một `HOTEL_OWNER` khác không sở hữu khách sạn này sẽ bị từ chối.
+      operationId: uploadHotelImages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: hotelId của khách sạn cần thêm ảnh
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [images]
+              properties:
+                images:
+                  type: array
+                  description: 1 hoặc nhiều file ảnh, mỗi file tối đa 5MB
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Upload ảnh thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 201
+                  message:
+                    type: string
+                    example: Upload ảnh thành công
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HotelImageResponse'
+              example:
+                code: 201
+                message: Upload ảnh thành công
+                data:
+                  - imageId: d1e2f3a4-0001-4a2e-9a3a-aaaaaaaaaaaa
+                    url: https://minio.example.com/hotel-images/a1b2c3d4.../d1e2f3a4....jpg
+                    isCover: true
+        '400':
+          description: File rỗng, sai định dạng (không phải jpg/jpeg/png/webp), vượt quá 5MB/file, hoặc tổng dung lượng request vượt giới hạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: IMAGE_TYPE_NOT_ALLOWED
+                message: "File 'banner.gif' có định dạng không được hỗ trợ (chỉ nhận jpg/jpeg/png/webp)"
+        '401':
+          description: Thiếu hoặc sai JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Thiếu role HOTEL_OWNER, hoặc đúng role nhưng không phải chủ sở hữu khách sạn này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: NOT_HOTEL_OWNER
+                message: Bạn không phải chủ sở hữu khách sạn này
+        '404':
+          description: Không tìm thấy khách sạn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: HOTEL_NOT_FOUND
+                message: "Không tìm thấy hotel id: a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+  # ============================================================
+  # DELETE /api/hotels/{id}/images/{imageId} — Xóa ảnh khách sạn (HOTEL_OWNER hoặc PLATFORM_ADMIN)
+  # ============================================================
+
+  /api/hotels/{id}/images/{imageId}:
+    delete:
+      tags: [HotelImages]
+      summary: Xóa 1 ảnh của khách sạn
+      description: |
+        Soft delete bản ghi `hotel_images` (`is_deleted = true`) rồi xóa vật lý object tương ứng trên MinIO
+        (dùng `object_name` đã lưu lúc upload, không suy ngược từ `url`). Nếu ảnh bị xóa đang là cover, tự
+        động chọn ảnh còn lại CŨ NHẤT làm cover mới (nếu còn ảnh nào khác); nếu không còn ảnh nào, khách sạn
+        tạm thời không có cover.
+
+        Cả 2 bước (soft delete DB + xóa MinIO) nằm trong 1 transaction: nếu xóa MinIO thất bại, toàn bộ
+        transaction rollback (kể cả việc đổi cover), coi như chưa xóa gì cả — tránh tình trạng nửa vời
+        (DB nói đã xóa nhưng file vật lý vẫn còn, hoặc ngược lại).
+
+        Quyền: role `HOTEL_OWNER` **và** đúng chủ sở hữu khách sạn này, HOẶC role `PLATFORM_ADMIN` (bỏ qua
+        kiểm tra chủ sở hữu).
+      operationId: deleteHotelImage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: hotelId của khách sạn
+          schema:
+            type: string
+            format: uuid
+          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        - name: imageId
+          in: path
+          required: true
+          description: id bản ghi ảnh cần xóa (chính là imageId trả về lúc upload)
+          schema:
+            type: string
+            format: uuid
+          example: d1e2f3a4-0001-4a2e-9a3a-aaaaaaaaaaaa
+      responses:
+        '204':
+          description: Xóa ảnh thành công, không có nội dung trả về
+        '401':
+          description: Thiếu hoặc sai JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Thiếu role phù hợp, hoặc là HOTEL_OWNER nhưng không sở hữu khách sạn này
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: NOT_HOTEL_OWNER
+                message: Bạn không phải chủ sở hữu khách sạn này
+        '404':
+          description: Không tìm thấy khách sạn, hoặc ảnh không tồn tại/đã bị xóa trước đó
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: IMAGE_NOT_FOUND
+                message: "Không tìm thấy ảnh id: d1e2f3a4-0001-4a2e-9a3a-aaaaaaaaaaaa thuộc hotel: a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        '502':
+          description: Xóa object trên MinIO thất bại (network, quyền truy cập bucket...) — toàn bộ thao tác đã rollback
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: IMAGE_DELETE_FAILED
+                message: Xóa ảnh trên storage thất bại, vui lòng thử lại
+
+  # ============================================================
   # GET /api/hotels/{id}/room-types — Danh sách loại phòng
   # ============================================================
 
@@ -376,345 +653,6 @@ paths:
                 code: ROOM_TYPE_NOT_FOUND
                 message: Loại phòng không tồn tại
 
-  # ============================================================
-  # GET /api/admin/hotels/pending — Danh sách khách sạn chờ duyệt
-  # [PLATFORM_ADMIN only]
-  # ============================================================
-
-  /api/admin/hotels/pending:
-    get:
-      tags: [Admin]
-      summary: Lấy danh sách khách sạn đang chờ duyệt
-      description: |
-        **[PLATFORM_ADMIN only]** Trả về danh sách khách sạn có `status = PENDING` và `is_deleted = false`,
-        phục vụ màn hình hàng đợi duyệt khách sạn của quản trị viên nền tảng.
-
-        Luồng xử lý: truy vấn trực tiếp PostgreSQL `hotel_db` (không qua Redis Cache như các endpoint đọc
-        công khai, để đảm bảo dữ liệu chờ duyệt luôn mới nhất). Mặc định sắp xếp theo `created_at` tăng dần
-        (khách sạn đăng ký lâu nhất hiển thị trước, theo nguyên tắc FIFO).
-
-        **RBAC:** chỉ tài khoản có role `PLATFORM_ADMIN` (đọc từ claim `role` trong JWT, do API Gateway xác
-        thực và forward xuống service) mới được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
-      operationId: getPendingHotels
-      security:
-        - bearerAuth: []
-      x-required-role: PLATFORM_ADMIN
-      parameters:
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-          example: 0
-        - name: size
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 10
-          example: 10
-        - name: sortBy
-          in: query
-          required: false
-          description: Sắp xếp theo thời gian đăng ký (`created_at`). Mặc định `createdAtAsc` (cũ nhất trước).
-          schema:
-            type: string
-            enum: [createdAtAsc, createdAtDesc]
-            default: createdAtAsc
-          example: createdAtAsc
-      responses:
-        '200':
-          description: Danh sách khách sạn đang chờ duyệt
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/HotelAdminSummary'
-                  total:
-                    type: integer
-                    example: 1
-                  page:
-                    type: integer
-                    example: 0
-                  size:
-                    type: integer
-                    example: 10
-              example:
-                data:
-                  - hotelId: a1b2c3d4-e5f6-7890-abcd-ef1234567891
-                    name: Sapa Green Hotel
-                    ownerId: c0000000-0000-0000-0000-000000000009
-                    address:
-                      fullAddress: 45 Fansipan, Sa Pa, Lào Cai
-                      province: { code: "10", name: Lào Cai }
-                      district: { code: "101", name: Sa Pa }
-                      ward: { code: "10101", name: Phường Sa Pa }
-                    status: PENDING
-                    createdAt: "2026-07-20T08:15:00Z"
-                total: 1
-                page: 0
-                size: 10
-        '401':
-          description: Thiếu token hoặc token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: UNAUTHORIZED
-                message: Thiếu hoặc token xác thực không hợp lệ
-        '403':
-          description: Người dùng không có role PLATFORM_ADMIN
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: FORBIDDEN
-                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
-
-  # ============================================================
-  # PATCH /api/admin/hotels/{id}/status — Duyệt / đình chỉ khách sạn
-  # [PLATFORM_ADMIN only]
-  # ============================================================
-
-  /api/admin/hotels/{id}/status:
-    patch:
-      tags: [Admin]
-      summary: Duyệt hoặc đình chỉ khách sạn (chuyển trạng thái)
-      description: |
-        **[PLATFORM_ADMIN only]** Chuyển trạng thái khách sạn sang `APPROVED` hoặc `SUSPENDED`.
-
-        Các chuyển trạng thái hợp lệ:
-          - `PENDING → APPROVED`: duyệt khách sạn mới đăng ký.
-          - `PENDING → SUSPENDED`: từ chối khách sạn mới đăng ký (kèm `reason`).
-          - `APPROVED → SUSPENDED`: đình chỉ khách sạn đang hoạt động do vi phạm (kèm `reason`).
-          - `SUSPENDED → APPROVED`: khôi phục khách sạn sau khi đã xử lý xong vi phạm.
-        Chuyển sang chính trạng thái hiện tại (no-op) hoặc các cặp trạng thái không nằm trong danh sách trên
-        đều bị từ chối với `409 INVALID_STATUS_TRANSITION`.
-
-        Luồng xử lý:
-          1. Kiểm tra `hotelId` tồn tại, `is_deleted = false`; kiểm tra transition có hợp lệ theo trạng thái
-             hiện tại của khách sạn hay không.
-          2. Cập nhật `hotels.status` và `hotels.updated_at`.
-          3. Ghi 1 bản ghi vào bảng audit (`audit_logs`): `actor_id` (admin thực hiện, lấy từ claim `sub`
-             trong JWT), `action` (`APPROVE_HOTEL` / `SUSPEND_HOTEL`), `target_type = HOTEL`,
-             `target_id = hotelId`, `old_status`, `new_status`, `reason`, `created_at`.
-          4. Nếu `status = APPROVED`: phát Kafka event **`hotel.approved`** (key = `hotelId`) với payload gồm
-             `hotelId`, `ownerId` (`tenant_id`), `hotelName`, `approvedAt`, `approvedBy` — Notification Service
-             lắng nghe topic này để gửi email thông báo duyệt thành công cho Owner.
-          5. Nếu `status = SUSPENDED`: phát Kafka event **`hotel.suspended`** (key = `hotelId`) với payload
-             gồm `hotelId`, `ownerId`, `hotelName`, `reason`, `suspendedAt`, `suspendedBy` — Notification
-             Service lắng nghe để gửi email cảnh báo cho Owner; đồng thời invalidate các khóa Redis Cache
-             liên quan khách sạn này (`hotel_detail:{hotelId}:*`, `hotel_room_types:{hotelId}` và các cache
-             kết quả tìm kiếm `GET /api/hotels` có chứa khách sạn này) để khách sạn bị đình chỉ không còn
-             xuất hiện trong dữ liệu công khai đã cache.
-
-        **RBAC:** chỉ role `PLATFORM_ADMIN` được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
-      operationId: updateHotelStatus
-      security:
-        - bearerAuth: []
-      x-required-role: PLATFORM_ADMIN
-      parameters:
-        - name: id
-          in: path
-          required: true
-          description: ID khách sạn cần chuyển trạng thái.
-          schema:
-            type: string
-            format: uuid
-          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateHotelStatusRequest'
-            example:
-              status: APPROVED
-      responses:
-        '200':
-          description: Cập nhật trạng thái khách sạn thành công
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                  message:
-                    type: string
-                    example: Duyệt khách sạn thành công
-                  data:
-                    $ref: '#/components/schemas/HotelStatusUpdateData'
-              example:
-                code: 200
-                message: Duyệt khách sạn thành công
-                data:
-                  hotelId: a1b2c3d4-e5f6-7890-abcd-ef1234567891
-                  previousStatus: PENDING
-                  status: APPROVED
-                  updatedAt: "2026-07-29T09:00:00Z"
-        '400':
-          description: |
-            Body không hợp lệ: thiếu `status`, `status` không thuộc `[APPROVED, SUSPENDED]`, hoặc thiếu
-            `reason` khi chuyển sang `SUSPENDED`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: INVALID_REQUEST
-                message: "reason là bắt buộc khi chuyển trạng thái sang SUSPENDED"
-        '401':
-          description: Thiếu token hoặc token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: UNAUTHORIZED
-                message: Thiếu hoặc token xác thực không hợp lệ
-        '403':
-          description: Người dùng không có role PLATFORM_ADMIN
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: FORBIDDEN
-                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
-        '404':
-          description: Khách sạn không tồn tại hoặc đã bị xóa mềm
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: HOTEL_NOT_FOUND
-                message: Khách sạn không tồn tại
-        '409':
-          description: Chuyển trạng thái không hợp lệ theo trạng thái hiện tại của khách sạn
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: INVALID_STATUS_TRANSITION
-                message: "Không thể chuyển từ APPROVED sang APPROVED"
-
-  # ============================================================
-  # DELETE /api/admin/hotels/{hotelId}/images/{imageId} — Xóa ảnh vi phạm
-  # [PLATFORM_ADMIN only]
-  # ============================================================
-
-  /api/admin/hotels/{hotelId}/images/{imageId}:
-    delete:
-      tags: [Admin]
-      summary: Xóa ảnh vi phạm của khách sạn
-      description: |
-        **[PLATFORM_ADMIN only]** Admin xóa một ảnh vi phạm (nội dung không phù hợp, sai sự thật với thực
-        tế khách sạn...) khỏi khách sạn.
-
-        Luồng xử lý:
-          1. Kiểm tra ảnh (`hotel_images.id = imageId`) tồn tại và thuộc đúng `hotelId` truyền vào.
-          2. Gọi MinIO xóa object tương ứng với `hotel_images.url` (object key) trên bucket lưu trữ ảnh
-             khách sạn.
-          3. Xóa bản ghi tương ứng trong bảng `hotel_images` (PostgreSQL `hotel_db`).
-          4. Ghi 1 bản ghi vào bảng audit (`audit_logs`), tương tự endpoint duyệt/đình chỉ khách sạn ở trên:
-             `actor_id`, `action = DELETE_HOTEL_IMAGE`, `target_type = HOTEL_IMAGE`, `target_id = imageId`,
-             `created_at`.
-          5. Invalidate cache Redis `hotel_detail:{hotelId}:*`, vì danh sách ảnh trả về trong
-             `GET /api/hotels/{id}` đã thay đổi.
-
-        Nếu xóa object trên MinIO thất bại (lỗi kết nối, object không tồn tại...), request trả về lỗi
-        `503 MINIO_SERVICE_UNAVAILABLE` và **không** xóa bản ghi `hotel_images`, đảm bảo dữ liệu trong
-        `hotel_db` và storage luôn nhất quán với nhau.
-
-        **RBAC:** chỉ role `PLATFORM_ADMIN` được gọi endpoint này; role khác nhận `403 FORBIDDEN`.
-      operationId: deleteHotelImage
-      security:
-        - bearerAuth: []
-      x-required-role: PLATFORM_ADMIN
-      parameters:
-        - name: hotelId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
-        - name: imageId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          example: d4e5f6a7-0001-4a2e-9a3a-cccccccccccc
-      responses:
-        '200':
-          description: Xóa ảnh vi phạm thành công
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: integer
-                    example: 200
-                  message:
-                    type: string
-                    example: Xóa ảnh vi phạm thành công
-                  data:
-                    type: object
-                    nullable: true
-              example:
-                code: 200
-                message: Xóa ảnh vi phạm thành công
-                data: null
-        '401':
-          description: Thiếu token hoặc token không hợp lệ
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: UNAUTHORIZED
-                message: Thiếu hoặc token xác thực không hợp lệ
-        '403':
-          description: Người dùng không có role PLATFORM_ADMIN
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: FORBIDDEN
-                message: Chỉ PLATFORM_ADMIN mới có quyền truy cập API này
-        '404':
-          description: Khách sạn không tồn tại, hoặc ảnh không tồn tại/không thuộc khách sạn này
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: HOTEL_IMAGE_NOT_FOUND
-                message: Ảnh không tồn tại hoặc không thuộc khách sạn này
-        '503':
-          description: Lỗi khi gọi MinIO để xóa object ảnh
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              example:
-                code: MINIO_SERVICE_UNAVAILABLE
-                message: Không thể xóa file ảnh trên MinIO, vui lòng thử lại sau
-
 components:
   securitySchemes:
     bearerAuth:
@@ -722,9 +660,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        JWT do API Gateway xác thực (đăng nhập qua Auth/User Service) và forward xuống Hotel Service qua
-        header `Authorization: Bearer <token>`. Claim `role` trong token phải bằng `PLATFORM_ADMIN` để được
-        phép gọi các endpoint thuộc tag `Admin`; nếu không, service trả về `403 FORBIDDEN`.
+        JWT do Keycloak (realm `hotel-booking-system`) cấp. Gateway forward nguyên header
+        `Authorization: Bearer <JWT>` xuống hotel-service; hotel-service tự verify chữ ký qua JWKS
+        và tự đọc claim `realm_access.roles` để authorize.
+
   schemas:
     HealthResponse:
       type: object
@@ -901,6 +840,227 @@ components:
           type: string
           enum: [PENDING, APPROVED, SUSPENDED]
 
+    # ---------- Create Hotel (request) ----------
+
+    AmenityRequest:
+      type: object
+      description: |
+        `id != null` -> dùng amenity có sẵn trong hệ thống (phải tồn tại, chưa bị xóa).
+        `id == null` -> tạo mới theo `name` (server tự kiểm tra trùng tên không phân biệt hoa/thường
+        trước khi tạo; nếu đã tồn tại thì dùng lại amenity đó, không tạo trùng).
+      properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+          maxLength: 255
+          nullable: true
+          example: Đưa đón sân bay
+
+    PolicyRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [CANCELLATION, CHECKIN, CHECKOUT, SMOKING, PAYMENT, PETS, CHILDREN]
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: Nhận phòng từ 14:00
+
+    RoomTypeRequest:
+      type: object
+      description: Các trường giống cột DB bảng `room_types`, trừ `id` và `hotel_id` (server tự gán).
+      required: [name, maxGuests, bedCounts, basePricePerNight, quantity]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: Standard Twin
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        maxGuests:
+          type: integer
+          minimum: 1
+          example: 2
+        bedCounts:
+          type: integer
+          minimum: 1
+          example: 2
+        basePricePerNight:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          example: 800000
+        quantity:
+          type: integer
+          minimum: 1
+          description: Số lượng phòng thuộc loại này.
+          example: 5
+        area:
+          type: integer
+          nullable: true
+          minimum: 1
+          example: 22
+
+    CreateHotelRequest:
+      type: object
+      required: [name, address, provinceCode, districtCode, wardCode, roomTypes]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          example: Khách sạn Hoàn Kiếm Boutique
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        address:
+          type: string
+          maxLength: 500
+          example: 12 Hàng Bạc, Hoàn Kiếm, Hà Nội
+        provinceCode:
+          type: string
+          pattern: '^\d{2}$'
+          example: "01"
+        districtCode:
+          type: string
+          pattern: '^\d{3}$'
+          example: "001"
+        wardCode:
+          type: string
+          pattern: '^\d{5}$'
+          example: "00010"
+        amenities:
+          type: array
+          description: Không bắt buộc — khách sạn có thể chưa gắn tiện ích nào lúc mới tạo.
+          items:
+            $ref: '#/components/schemas/AmenityRequest'
+        policies:
+          type: array
+          description: Không bắt buộc.
+          items:
+            $ref: '#/components/schemas/PolicyRequest'
+        roomTypes:
+          type: array
+          description: BẮT BUỘC — phải có ít nhất 1 loại phòng.
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RoomTypeRequest'
+
+    # ---------- Create Hotel (response) ----------
+
+    AmenityResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Đưa đón sân bay
+
+    PolicyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CANCELLATION, CHECKIN, CHECKOUT, SMOKING, PAYMENT, PETS, CHILDREN]
+        description:
+          type: string
+          nullable: true
+
+    RoomTypeCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        maxGuests:
+          type: integer
+        bedCounts:
+          type: integer
+        basePricePerNight:
+          type: number
+          format: double
+        quantity:
+          type: integer
+        area:
+          type: integer
+          nullable: true
+
+    CreateHotelResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+          description: Lấy từ claim `sub` của JWT, không phải do client gửi lên.
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        address:
+          type: string
+        provinceCode:
+          type: string
+        districtCode:
+          type: string
+        wardCode:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, SUSPENDED]
+          example: PENDING
+        createdAt:
+          type: string
+          format: date-time
+        amenities:
+          type: array
+          items:
+            $ref: '#/components/schemas/AmenityResponse'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyResponse'
+        roomTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomTypeCreatedResponse'
+
+    # ---------- Hotel Images ----------
+
+    HotelImageResponse:
+      type: object
+      properties:
+        imageId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        isCover:
+          type: boolean
+
     # ---------- Room Types ----------
 
     RoomTypeSummary:
@@ -998,71 +1158,3 @@ components:
                 format: uri
               isCover:
                 type: boolean
-
-    # ---------- Admin (RBAC: PLATFORM_ADMIN) ----------
-
-    HotelAdminSummary:
-      type: object
-      description: Thông tin rút gọn khách sạn dùng cho danh sách quản trị (hàng đợi duyệt).
-      properties:
-        hotelId:
-          type: string
-          format: uuid
-          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
-        name:
-          type: string
-          example: Sapa Green Hotel
-        ownerId:
-          type: string
-          format: uuid
-          description: Chủ khách sạn — cột `tenant_id`, tham chiếu logic tới `user-service`.
-          example: c0000000-0000-0000-0000-000000000009
-        address:
-          $ref: '#/components/schemas/Address'
-        status:
-          type: string
-          enum: [PENDING, APPROVED, SUSPENDED]
-          example: PENDING
-        createdAt:
-          type: string
-          format: date-time
-          example: "2026-07-20T08:15:00Z"
-
-    UpdateHotelStatusRequest:
-      type: object
-      description: Body của `PATCH /api/admin/hotels/{id}/status`.
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [APPROVED, SUSPENDED]
-          description: Trạng thái đích muốn chuyển tới.
-          example: APPROVED
-        reason:
-          type: string
-          nullable: true
-          description: |
-            Lý do chuyển trạng thái — bắt buộc khi `status = SUSPENDED` (từ chối duyệt/đình chỉ do vi phạm).
-            Được lưu vào audit log và đưa vào nội dung email cảnh báo gửi Owner qua Notification Service.
-          example: Ảnh khách sạn không đúng với thực tế, vi phạm chính sách nền tảng
-
-    HotelStatusUpdateData:
-      type: object
-      description: Dữ liệu trả về sau khi chuyển trạng thái khách sạn thành công.
-      properties:
-        hotelId:
-          type: string
-          format: uuid
-          example: a1b2c3d4-e5f6-7890-abcd-ef1234567891
-        previousStatus:
-          type: string
-          enum: [PENDING, APPROVED, SUSPENDED]
-          example: PENDING
-        status:
-          type: string
-          enum: [PENDING, APPROVED, SUSPENDED]
-          example: APPROVED
-        updatedAt:
-          type: string
-          format: date-time
-          example: "2026-07-29T09:00:00Z"
