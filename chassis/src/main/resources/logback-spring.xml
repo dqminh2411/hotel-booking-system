@@ -69,6 +69,33 @@
         <neverBlock>false</neverBlock>
     </appender>
 
+    <!-- ==================== APPENDER: Audit Log File ==================== -->
+    <!--
+        Ghi Audit Log ra file riêng biệt, chỉ chứa pure JSON body.
+        Pattern %msg%n = chỉ lấy nội dung message (JSON) + xuống dòng.
+        Không có timestamp, thread, level prefix — vì JSON audit entry đã chứa đầy đủ.
+        OTel Collector filelog receiver sẽ đọc file này.
+    -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/var/log/audit/${SERVICE_NAME}-audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>/var/log/audit/${SERVICE_NAME}-audit.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Audit Console — dùng cho local dev (plain text, nhìn thấy trên console) -->
+    <appender name="AUDIT_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{HH:mm:ss.SSS} [AUDIT] %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <!-- ==================== PROFILE ROUTING ==================== -->
 
     <!-- Local dev: plain text dễ đọc -->
@@ -76,6 +103,12 @@
         <root level="${LOG_LEVEL_ROOT}">
             <appender-ref ref="CONSOLE_TEXT"/>
         </root>
+
+        <!-- Audit Log: ghi ra console (local dev) + file (nếu có mount) -->
+        <logger name="AUDIT_LOG" level="INFO" additivity="false">
+            <appender-ref ref="AUDIT_CONSOLE"/>
+            <appender-ref ref="AUDIT_FILE"/>
+        </logger>
     </springProfile>
 
     <!-- Staging & Production: JSON async -->
@@ -83,6 +116,11 @@
         <root level="${LOG_LEVEL_ROOT}">
             <appender-ref ref="ASYNC_JSON"/>
         </root>
+
+        <!-- Audit Log: chỉ ghi ra file, không chảy lên root logger -->
+        <logger name="AUDIT_LOG" level="INFO" additivity="false">
+            <appender-ref ref="AUDIT_FILE"/>
+        </logger>
 
         <!-- Tắt verbose log của các thư viện third-party -->
         <logger name="org.hibernate.SQL"                    level="WARN"/>
@@ -94,3 +132,4 @@
         <logger name="com.zaxxer.hikari"                    level="INFO"/>
     </springProfile>
 </configuration>
+

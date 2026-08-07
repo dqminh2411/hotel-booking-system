@@ -37,6 +37,10 @@ import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
 import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
 import com.hotelbooking.hotelservice.service.AdminService;
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
 
 import io.minio.MinioClient;
 import io.minio.RemoveObjectsArgs;
@@ -111,6 +115,14 @@ public class AdminServiceImpl implements AdminService{
 
     @Override
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.APPROVE_HOTEL,
+        message = "Update hotel status",
+        severity = Severity.INFO,
+        targetType = TargetType.HOTEL,
+        targetId = "#hotelId",
+        extraData = {"status=#request.hotelStatus()"}
+    )
     public void updateHotelStatus(UUID hotelId, HotelUpdateStatusRequest request){
         HotelEntity hotelEntity = hotelRepository.findByIdAndIsDeletedFalse(hotelId)
                         .orElseThrow(() -> new AppException("HOTEL_NOT_FOUND", "Không tìm thấy khách sạn có id=" + hotelId.toString(), HttpStatus.NOT_FOUND));

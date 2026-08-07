@@ -1,7 +1,5 @@
 package com.hotelbooking.userservice.service.impl;
 
-import com.hotelbooking.chassis.logging.aop.Loggable;
-import com.hotelbooking.chassis.logging.aop.LogParam;
 import com.hotelbooking.userservice.dto.*;
 import com.hotelbooking.userservice.entity.*;
 import com.hotelbooking.userservice.exception.ApiException;
@@ -29,8 +27,8 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    @Loggable(event = "USER_REGISTERED", message = "Add new user")
-    public UserResponse createUser(@LogParam("keycloakId") UUID keycloakId, CreateUserRequest request) {
+    
+    public UserResponse createUser(UUID keycloakId, CreateUserRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String phone = request.phone().trim();
         String fullName = request.fullName().trim();

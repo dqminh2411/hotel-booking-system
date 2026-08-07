@@ -9,6 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
 import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.dto.HotelSummaryResponse;
 import com.place_booking_service.dto.PlaceBookingRequest;
@@ -33,6 +37,19 @@ public class PlaceBookingService {
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.CREATE_BOOKING,
+        message = "Start booking saga",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingId",
+        extraData = {
+            "hotelId=#hotel.hotelId",
+            "userId=#placeBookingRequest.userId",
+            "checkin=#placeBookingRequest.checkin",
+            "checkout=#placeBookingRequest.checkout"
+        }
+    )
     public UUID startSaga(PlaceBookingRequest placeBookingRequest, User user, HotelSummaryResponse hotel,
             UUID bookingId, String hashRequest) {
         

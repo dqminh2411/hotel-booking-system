@@ -39,10 +39,10 @@ public class OutboxPublisherService {
     KafkaProducerService kafkaProducerService;
     ObjectMapper objectMapper;
 
-     // --- TextMapSetter để inject traceparent vào Map (dùng khi lưu outbox) ---
+     // TextMapSetter để inject traceparent vào Map (dùng khi lưu outbox)
     private static final TextMapSetter<Map<String, String>> MAP_SETTER =
         (carrier, key, value) -> carrier.put(key, value);
-    // --- TextMapGetter để extract traceparent từ Map (dùng khi publish) ---
+    // TextMapGetter để extract traceparent từ Map (dùng khi publish)
     private static final TextMapGetter<Map<String, String>> MAP_GETTER =
         new TextMapGetter<>() {
             @Override
@@ -114,7 +114,7 @@ public class OutboxPublisherService {
             outboxMessage.setStatus("PENDING");
             outboxMessage.setRetryCount(0);
             outboxMessage.setCreatedAt(LocalDateTime.now());
-            outboxMessage.setTraceparent(traceparent);  // ← persist trace context
+            outboxMessage.setTraceparent(traceparent);
             outboxMessageRepository.save(outboxMessage);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize outbox payload", e);

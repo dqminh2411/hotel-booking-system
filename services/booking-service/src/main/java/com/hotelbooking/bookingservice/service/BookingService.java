@@ -28,8 +28,10 @@ import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
-import com.hotelbooking.chassis.logging.aop.LogParam;
-import com.hotelbooking.chassis.logging.aop.Loggable;
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
@@ -267,11 +269,21 @@ public class BookingService {
     }
 
     @Transactional
-    @Loggable(
-        event="CREATE_BOOKING",
-        message = "New booking is created"
+    @AuditLog(
+        eventType = AuditEventType.CREATE_BOOKING,
+        message = "Create booking from saga command",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#command.bookingId",
+        extraData = {
+            "hotelId=#command.hotel.hotelId",
+            "userId=#command.user.userId",
+            "checkin=#command.checkin",
+            "checkout=#command.checkout",
+            "totalAmount=#command.effectiveFinalAmount()"
+        }
     )
-    public void handleCreateBooking(@LogParam("command:") CreateBookingCommand command, List<UUID> sortedRoomTypeId, boolean isReversed){
+    public void handleCreateBooking( CreateBookingCommand command, List<UUID> sortedRoomTypeId, boolean isReversed){
         validateCreateCommand(command);
         if(bookingRepository.existsById(command.bookingId())){
             return;
@@ -394,11 +406,27 @@ public class BookingService {
     }
 
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.CONFIRM_BOOKING,
+        message = "Confirm booking",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingId",
+        extraData = {"sagaId=#sagaId"}
+    )
     public void handleConfirmBooking(UUID sagaId, UUID bookingId) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CONFIRMED, "BookingConfirmed","");
     }
 
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.CANCEL_BOOKING,
+        message = "Cancel booking",
+        severity = Severity.WARN,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingId",
+        extraData = {"sagaId=#sagaId", "reason=#reason"}
+    )
     public void handleCancelBooking(UUID sagaId, UUID bookingId, String reason) {
         updateStatusFromCommand(sagaId, bookingId, BookingStatus.CANCELLED, "BookingCancelled", reason);
     }

@@ -144,3 +144,5 @@ chassis-logging.md
 chassis.md
 OpenTelemetry.md
 otel-chat.md
+implement_log_trace.md
+log_collector.md

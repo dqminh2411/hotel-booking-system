@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,11 @@ import com.payment_service.service.PaymentService;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
+
 @Service
 public class KafkaConsumerService {
 
@@ -37,6 +43,9 @@ public class KafkaConsumerService {
     @Autowired
     private CircuitBreakerRegistry registry;
 
+    @Autowired @Lazy
+    private KafkaConsumerService self;
+
     @KafkaListener(topics = "payment-commands")
     public void paymentCommandsHandler(String payloadJson) throws JsonProcessingException {
         Map<String, Object> payload = new ObjectMapper().readValue(payloadJson, Map.class);
@@ -45,12 +54,24 @@ public class KafkaConsumerService {
 
         ObjectMapper objectMapper = new ObjectMapper();
         switch (eventType) {
-            case "ProcessPayment" -> handleProcessPayment(objectMapper.convertValue(payload, ProcessPayment.class));
+            case "ProcessPayment" -> self.handleProcessPayment(objectMapper.convertValue(payload, ProcessPayment.class));
 
         }
     }
 
-    private void handleProcessPayment(ProcessPayment processPayment) {
+    @AuditLog(
+        eventType = AuditEventType.PROCESS_PAYMENT,
+        message = "Handle process payment command",
+        severity = Severity.INFO,
+        targetType = TargetType.PAYMENT,
+        targetId = "#processPayment.bookingId",
+        extraData = {
+            "amount=#processPayment.amount",
+            "sagaId=#processPayment.sagaId",
+            "userId=#processPayment.userId"
+        }
+    )
+    public void handleProcessPayment(ProcessPayment processPayment) {
         // CircuitBreaker cb = registry.circuitBreaker("paymentGateway");
 
         // System.out.println("STATE BEFORE = " + cb.getState());

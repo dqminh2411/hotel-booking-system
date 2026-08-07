@@ -1,39 +1,23 @@
 receivers:
-  # ── Nhận traces và metrics từ service qua OTLP ───────────────────────
+  # ── Nhận traces từ service qua OTLP ───────────────────────
   otlp:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-  # ── Đọc logs từ stdout của Docker containers  ─────────
-  # filelog:
-  #   include:
-  #     - /var/lib/docker/containers/*/*.log
-  #   include_file_path: true
-  #   start_at: beginning
-  #   operators:
-  #     - type: json_parser
-  #       id: docker_parser
-  #       parse_from: body
 
-  #     - type: json_parser
-  #       id: app_parser
-  #       parse_from: attributes.log
-  #       if: 'attributes["log"] != nil'
-
-  #     - type: move
-  #       from: attributes["@timestamp"]
-  #       to: attributes.timestamp
-  #       if: 'attributes["@timestamp"] != nil'
-
-  #     - type: move
-  #       from: attributes.service
-  #       to: resource["service.name"]
-  #       if: 'attributes.service != nil'
-
-  #     - type: remove
-  #       field: attributes.log
+  # ── Đọc Audit Log từ file riêng (ghi bởi AuditLogger qua Logback) ───
+  # Mỗi service ghi ra /var/log/audit/<service-name>-audit.log
+  # File chỉ chứa pure JSON audit entries, mỗi dòng 1 JSON object.
+  filelog/audit:
+    include:
+      - /var/log/audit/*.log
+    start_at: beginning
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
 
 processors:
   resource:
@@ -46,47 +30,43 @@ processors:
     send_batch_size: 1000
     timeout: 5s
 
-  # filter/logs:
-  #   logs:
-  #     exclude:
-  #       match_type: regexp
-  #       record_attributes:
-  #         - key: "http.path"
-  #           value: "^/actuator/.*"
+  batch/audit:
+    send_batch_size: 10
+    timeout: 1s
 
 exporters:
+  # ── Traces → Jaeger (pipeline hiện tại, không thay đổi) ────────────
   otlp/jaeger:
     endpoint: jaeger:4317
     tls:
       insecure: true
 
-  # elasticsearch:
-  #   endpoints: [http://elasticsearch:9200]
-  #   logs_index: hotelhub-logs
-  #   sending_queue:
-  #     enabled: true
-  #     num_consumers: 10
-  #     queue_size: 1000
+  # ── Audit Logs → Elasticsearch (pipeline MỚI) ─────────────────────
+  elasticsearch/audit:
+    endpoints: [http://elasticsearch:9200]
+    logs_index: hotelhub-audit-logs
+    mapping:
+      mode: raw
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 100
 
-  # prometheus:
-  #   endpoint: 0.0.0.0:8889
-  # ── Thêm debug exporter để in trace log ra stdout ─────────────────
+  # ── Debug exporter ─────────────────────────────────────────────────
   debug:
     verbosity: detailed
 
 service:
   pipelines:
+    # Pipeline 1: Traces → Jaeger
     traces:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [otlp/jaeger,debug]
+      exporters: [otlp/jaeger]
 
-    # logs:
-    #   receivers: [filelog, otlp]
-    #   processors: [resource, filter/logs, batch]
-    #   exporters: [elasticsearch]
+    # Pipeline 2: Audit Logs → Elasticsearch + Debug
+    logs/audit:
+      receivers: [filelog/audit]
+      processors: [batch/audit]
+      exporters: [elasticsearch/audit, debug]
 
-    # metrics:
-    #   receivers: [otlp]
-    #   processors: [resource, batch]
-    #   exporters: [prometheus]
