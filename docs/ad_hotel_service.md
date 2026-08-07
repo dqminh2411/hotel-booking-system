@@ -523,145 +523,249 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    autonumber
+
     actor Owner as HOTEL_OWNER
+    participant Client as Postman / Frontend
+    participant Gateway
+    participant Security as Spring Security
     participant Controller as HotelController
     participant Service as HotelServiceImpl
-    participant Security as SecurityUtils
+    participant Utils as SecurityUtils
     participant Location as Province/District/Ward Repository
     participant Amenity as AmenityRepository
+    participant HotelRepo as HotelRepository
     participant DB as PostgreSQL
     participant Event as ApplicationEventPublisher
+    participant Listener as @TransactionalEventListener
+    participant Kafka
 
-    Owner->>Controller: POST /api/hotels
-    Controller->>Service: createHotel(request)
+    Owner->>Client: Login
+    Client->>Gateway: POST /login
+    Gateway-->>Client: JWT Access Token
 
-    Service->>Security: getCurrentTenantId()
-    Security-->>Service: tenantId
+    Client->>Gateway: POST /api/hotels\nAuthorization: Bearer JWT
 
-    Service->>Location: Validate province/district/ward
-    Location-->>Service: OK
+    Gateway->>Security: Validate JWT
 
-    loop Amenities
-        Service->>Amenity: findByName()
-        alt Exists
-            Amenity-->>Service: Existing Amenity
-        else Not Exists
-            Service->>Amenity: save()
+    alt Invalid Token
+        Security-->>Client: 401 Unauthorized
+    else Valid Token
+
+        Security->>Controller: Authenticated Request
+
+        Controller->>Service: createHotel(request)
+
+        Service->>Utils: getCurrentTenantId()
+        Utils-->>Service: tenantId
+
+        Service->>Location: Validate Province/District/Ward
+        Location-->>Service: OK
+
+        loop Each Amenity
+            Service->>Amenity: findByName()
+
+            alt Amenity exists
+                Amenity-->>Service: Existing Amenity
+            else New Amenity
+                Service->>Amenity: save()
+            end
         end
+
+        Service->>Service: processPolicies()
+
+        Service->>Service: processRoomTypes()
+
+        Service->>HotelRepo: save()
+
+        HotelRepo->>DB: INSERT Hotel
+
+        DB-->>HotelRepo: Success
+
+        Service->>Event: publish(HotelCreatedEvent)
+
+        Service-->>Controller: CreateHotelResponse
+
+        Controller-->>Client: HTTP 201
+
+        Note over DB,Listener: Transaction Commit
+
+        Listener->>Kafka: send(ReviewHotelCommand)
+
+        Kafka-->>Listener: ACK
+
     end
-
-    Service->>Service: processPolicies()
-
-    Service->>Service: processRoomTypes()
-
-    Service->>DB: save Hotel + RoomTypes + Policies
-    DB-->>Service: HotelEntity
-
-    Service->>Event: publish(HotelCreatedEvent)
-
-    Service-->>Controller: CreateHotelResponse
-    Controller-->>Owner: HTTP 201 Created
 ```
 
 ### 3.6. UC-32 - Upload ảnh khách sạn
 
 ```mermaid
 sequenceDiagram
+    autonumber
+
     actor Owner as HOTEL_OWNER
 
-    participant Controller as HotelController
+    participant Client
+    participant Gateway
+    participant Security
+    participant Controller
     participant Service as HotelImageServiceImpl
-    participant Security as SecurityUtils
+    participant Utils as SecurityUtils
+    participant HotelRepo
     participant Validator as ImageValidationUtils
-    participant HotelRepo as HotelRepository
-    participant MinIO as MinioStorageService
-    participant DB as HotelImageRepository
+    participant MinIO
+    participant ImageRepo
+    participant DB
 
-    Owner->>Controller: POST /hotels/{id}/images
+    Owner->>Client: Upload Images
 
-    Controller->>Service: uploadImages()
+    Client->>Gateway: POST /hotels/{id}/images
 
-    Service->>HotelRepo: findHotel(id)
+    Gateway->>Security: Validate JWT
 
-    HotelRepo-->>Service: Hotel
+    alt Invalid Token
 
-    Service->>Security: getCurrentTenantId()
+        Security-->>Client: 401
 
-    Security-->>Service: tenantId
+    else Valid Token
 
-    Service->>Service: Ownership Check
+        Security->>Controller: Authorized Request
 
-    Service->>Validator: validate(images)
+        Controller->>Service: uploadImages()
 
-    Validator-->>Service: OK
+        Service->>HotelRepo: findHotel()
 
-    loop Each Image
-        Service->>MinIO: uploadFile()
-        MinIO-->>Service: objectName
+        HotelRepo-->>Service: Hotel
+
+        Service->>Utils: getCurrentTenantId()
+
+        Utils-->>Service: tenantId
+
+        alt Not Owner
+
+            Service-->>Client: 403 Forbidden
+
+        else Owner
+
+            Service->>Validator: validate(images)
+
+            alt Invalid Images
+
+                Validator-->>Client: 400 Bad Request
+
+            else Images Valid
+
+                loop Upload Each Image
+
+                    Service->>MinIO: uploadFile()
+
+                    MinIO-->>Service: objectName
+
+                end
+
+                Service->>ImageRepo: saveAll()
+
+                ImageRepo->>DB: INSERT hotel_images
+
+                DB-->>ImageRepo: Success
+
+                ImageRepo-->>Service: Saved
+
+                Service-->>Controller: Upload Response
+
+                Controller-->>Client: HTTP 201
+
+            end
+
+        end
+
     end
-
-    Service->>DB: saveAll(images)
-
-    DB-->>Service: Success
-
-    Service-->>Controller: UploadImageResponse
-
-    Controller-->>Owner: HTTP 201
 ```
 
 ### 3.7. UC-33 - Delete ảnh khách sạn
 
 ```mermaid
 sequenceDiagram
+    autonumber
+
     actor User
 
-    participant Controller as HotelController
-    participant Service as HotelImageServiceImpl
-    participant Security as SecurityUtils
-    participant HotelRepo as HotelRepository
-    participant ImageRepo as HotelImageRepository
+    participant Client
+    participant Gateway
+    participant Security
+    participant Controller
+    participant Service
+    participant Utils
+    participant HotelRepo
+    participant ImageRepo
     participant MinIO
     participant DB
 
-    User->>Controller: DELETE /images/{imageId}
+    User->>Client: Delete Image
 
-    Controller->>Service: deleteImage()
+    Client->>Gateway: DELETE /images/{imageId}
 
-    Service->>HotelRepo: findHotel()
+    Gateway->>Security: Validate JWT
 
-    HotelRepo-->>Service: Hotel
+    alt Invalid Token
 
-    Service->>Security: hasRole()
+        Security-->>Client: 401
 
-    alt PLATFORM_ADMIN
+    else Valid Token
 
-        Service->>Service: Skip Ownership
+        Security->>Controller: Authorized Request
 
-    else HOTEL_OWNER
+        Controller->>Service: deleteImage()
 
-        Service->>Service: Check tenantId
+        Service->>HotelRepo: findHotel()
+
+        HotelRepo-->>Service: Hotel
+
+        Service->>Utils: hasRole()
+
+        alt PLATFORM_ADMIN
+
+            Note over Service: Skip Ownership Check
+
+        else HOTEL_OWNER
+
+            Service->>Utils: getCurrentTenantId()
+
+            Utils-->>Service: tenantId
+
+            alt Not Owner
+
+                Service-->>Client: 403 Forbidden
+
+            end
+
+        end
+
+        Service->>ImageRepo: findImage()
+
+        ImageRepo-->>Service: HotelImage
+
+        Service->>ImageRepo: Soft Delete
+
+        alt Deleted Image is Cover
+
+            Service->>ImageRepo: Find Oldest Remaining Image
+
+            ImageRepo-->>Service: New Cover
+
+            Service->>ImageRepo: Update Cover
+
+        end
+
+        Service->>MinIO: deleteObject()
+
+        MinIO-->>Service: Success
+
+        Service-->>Controller: HTTP 204
+
+        Controller-->>Client: No Content
 
     end
-
-    Service->>ImageRepo: findImage()
-
-    ImageRepo-->>Service: HotelImage
-
-    Service->>ImageRepo: Soft Delete
-
-    alt Deleted Image is Cover
-
-        Service->>ImageRepo: Find oldest remaining image
-
-        Service->>ImageRepo: Update new cover
-
-    end
-
-    Service->>MinIO: deleteObject()
-
-    MinIO-->>Service: OK
-
-    Service-->>Controller: HTTP 204
 ```
 
 ### Security (lấy tenant_id)
