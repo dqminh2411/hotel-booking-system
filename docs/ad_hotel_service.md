@@ -518,3 +518,175 @@ sequenceDiagram
         end
     end
 ```
+
+### 3.5. UC-31 - Tạo khách sạn mới
+
+```mermaid
+sequenceDiagram
+    actor Owner as HOTEL_OWNER
+    participant Controller as HotelController
+    participant Service as HotelServiceImpl
+    participant Security as SecurityUtils
+    participant Location as Province/District/Ward Repository
+    participant Amenity as AmenityRepository
+    participant DB as PostgreSQL
+    participant Event as ApplicationEventPublisher
+
+    Owner->>Controller: POST /api/hotels
+    Controller->>Service: createHotel(request)
+
+    Service->>Security: getCurrentTenantId()
+    Security-->>Service: tenantId
+
+    Service->>Location: Validate province/district/ward
+    Location-->>Service: OK
+
+    loop Amenities
+        Service->>Amenity: findByName()
+        alt Exists
+            Amenity-->>Service: Existing Amenity
+        else Not Exists
+            Service->>Amenity: save()
+        end
+    end
+
+    Service->>Service: processPolicies()
+
+    Service->>Service: processRoomTypes()
+
+    Service->>DB: save Hotel + RoomTypes + Policies
+    DB-->>Service: HotelEntity
+
+    Service->>Event: publish(HotelCreatedEvent)
+
+    Service-->>Controller: CreateHotelResponse
+    Controller-->>Owner: HTTP 201 Created
+```
+
+### 3.6. UC-32 - Upload ảnh khách sạn
+
+```mermaid
+sequenceDiagram
+    actor Owner as HOTEL_OWNER
+
+    participant Controller as HotelController
+    participant Service as HotelImageServiceImpl
+    participant Security as SecurityUtils
+    participant Validator as ImageValidationUtils
+    participant HotelRepo as HotelRepository
+    participant MinIO as MinioStorageService
+    participant DB as HotelImageRepository
+
+    Owner->>Controller: POST /hotels/{id}/images
+
+    Controller->>Service: uploadImages()
+
+    Service->>HotelRepo: findHotel(id)
+
+    HotelRepo-->>Service: Hotel
+
+    Service->>Security: getCurrentTenantId()
+
+    Security-->>Service: tenantId
+
+    Service->>Service: Ownership Check
+
+    Service->>Validator: validate(images)
+
+    Validator-->>Service: OK
+
+    loop Each Image
+        Service->>MinIO: uploadFile()
+        MinIO-->>Service: objectName
+    end
+
+    Service->>DB: saveAll(images)
+
+    DB-->>Service: Success
+
+    Service-->>Controller: UploadImageResponse
+
+    Controller-->>Owner: HTTP 201
+```
+
+### 3.7. UC-33 - Delete ảnh khách sạn
+
+```mermaid
+sequenceDiagram
+    actor User
+
+    participant Controller as HotelController
+    participant Service as HotelImageServiceImpl
+    participant Security as SecurityUtils
+    participant HotelRepo as HotelRepository
+    participant ImageRepo as HotelImageRepository
+    participant MinIO
+    participant DB
+
+    User->>Controller: DELETE /images/{imageId}
+
+    Controller->>Service: deleteImage()
+
+    Service->>HotelRepo: findHotel()
+
+    HotelRepo-->>Service: Hotel
+
+    Service->>Security: hasRole()
+
+    alt PLATFORM_ADMIN
+
+        Service->>Service: Skip Ownership
+
+    else HOTEL_OWNER
+
+        Service->>Service: Check tenantId
+
+    end
+
+    Service->>ImageRepo: findImage()
+
+    ImageRepo-->>Service: HotelImage
+
+    Service->>ImageRepo: Soft Delete
+
+    alt Deleted Image is Cover
+
+        Service->>ImageRepo: Find oldest remaining image
+
+        Service->>ImageRepo: Update new cover
+
+    end
+
+    Service->>MinIO: deleteObject()
+
+    MinIO-->>Service: OK
+
+    Service-->>Controller: HTTP 204
+```
+
+### Security (lấy tenant_id)
+
+```mermaid
+sequenceDiagram
+    actor Client
+
+    participant Gateway
+    participant Keycloak
+    participant HotelService
+
+    Client->>Gateway: Request + JWT
+
+    Gateway->>Keycloak: Validate JWT
+
+    Keycloak-->>Gateway: Valid Token
+
+    Gateway->>HotelService: Forward JWT
+
+    HotelService->>HotelService: Extract tenantId
+
+    HotelService->>HotelService: Check Role
+
+    HotelService->>HotelService: Check Ownership
+
+    HotelService-->>Client: Response
+```
