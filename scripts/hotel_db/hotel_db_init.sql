@@ -223,31 +223,31 @@ INSERT INTO hotels (id, tenant_id, name, description, address, province_code, di
 -- ────────────────────────────────────────────────────────────
 -- 4. Hotel images
 -- ────────────────────────────────────────────────────────────
-INSERT INTO hotel_images (hotel_id, url, is_cover) VALUES
-    ('b0000000-0000-0000-0000-000000000001', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000001', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000002', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000002', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000003', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000003', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000004', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000004', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000005', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000005', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000006', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000006', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000007', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000007', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000008', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000008', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000009', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000009', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000010', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000010', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000011', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000011', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false),
-    ('b0000000-0000-0000-0000-000000000012', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', true),
-    ('b0000000-0000-0000-0000-000000000012', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', false);
+INSERT INTO hotel_images (hotel_id, url, object_name, is_cover) VALUES
+    ('b0000000-0000-0000-0000-000000000001', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000001/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000001', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000001/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000002', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000002/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000002', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000002/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000003', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000003/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000003', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000003/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000004', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000004/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000004', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000004/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000005', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000005/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000005', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000005/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000006', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000006/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000006', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000006/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000007', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000007/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000007', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000007/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000008', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000008/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000008', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000008/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000009', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000009/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000009', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000009/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000010', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000010/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000010', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000010/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000011', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000011/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000011', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000011/gallery-1.jpg', false),
+    ('b0000000-0000-0000-0000-000000000012', 'https://images.unsplash.com/photo-1566073771259-6a8506099945', 'hotels/b0000000-0000-0000-0000-000000000012/cover.jpg', true),
+    ('b0000000-0000-0000-0000-000000000012', 'https://images.unsplash.com/photo-1582719508461-905c673771fd', 'hotels/b0000000-0000-0000-0000-000000000012/gallery-1.jpg', false);
 
 -- ────────────────────────────────────────────────────────────
 -- 5. Hotel amenities
@@ -731,6 +731,6 @@ SELECT 'room_type_images',         COUNT(*) FROM room_type_images
 UNION ALL
 SELECT 'room_type_amenities',      COUNT(*) FROM room_type_amenities
 UNION ALL
-SELECT 'pricing_rules',            COUNT(*) FROM pricing_rules;
+SELECT 'pricing_rules',            COUNT(*) FROM pricing_rules
 UNION ALL
 SELECT 'rooms',                    COUNT(*) FROM rooms;
