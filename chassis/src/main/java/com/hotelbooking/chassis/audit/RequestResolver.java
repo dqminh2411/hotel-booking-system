@@ -7,6 +7,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Optional;
 
+import io.opentelemetry.api.baggage.Baggage;
+
 /**
  * Lấy thông tin request hiện tại.
  *
@@ -19,18 +21,29 @@ public class RequestResolver {
     /**
      * Lấy IP client.
      * Hỗ trợ X-Forwarded-For và X-Real-IP cho trường hợp đứng sau reverse proxy.
+     * Fallback lấy từ OpenTelemetry Baggage nếu ở async/Kafka thread.
      *
      * @return IP hoặc "unknown" nếu không xác định được
      */
     public String resolveRequestIp() {
         try {
             HttpServletRequest request = getCurrentRequest();
-            if (request == null) {
-                return "unknown";
+            if (request != null) {
+                String ip = extractClientIp(request);
+                if (ip != null && !ip.isBlank()) {
+                    return ip;
+                }
             }
-            return extractClientIp(request);
+
+            // Fallback: Lấy từ OpenTelemetry Baggage (cho async/Kafka thread)
+            String baggageIp = Baggage.current().getEntryValue("requestIp");
+            if (baggageIp != null && !baggageIp.isBlank()) {
+                return baggageIp;
+            }
+
+            return "unknown";
         } catch (Exception e) {
-            log.debug("Cannot resolve request IP", e);
+            log.debug("Cannot resolve request IP from HttpServletRequest or Baggage", e);
             return "unknown";
         }
     }

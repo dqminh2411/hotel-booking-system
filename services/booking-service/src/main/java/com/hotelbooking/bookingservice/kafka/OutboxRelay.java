@@ -58,11 +58,21 @@ public class OutboxRelay {
                     : event.getTopic();
 
                 final String key = bookingId;
-                // ── Restore OTel trace context từ traceparent đã lưu ────────────────
-                // Span PRODUCER của kafkaTemplate.send() sẽ là child của span gốc
+                // ── Restore OTel trace context + Baggage từ traceparent đã lưu ────────────────
+                // Span PRODUCER của kafkaTemplate.send() sẽ đính kèm cả traceparent và baggage vào Kafka headers
                 if (event.getTraceparent() != null) {
                     Map<String, String> carrier = new HashMap<>();
-                    carrier.put("traceparent", event.getTraceparent());
+                    String tpStr = event.getTraceparent();
+                    if (tpStr.startsWith("{")) {
+                        try {
+                            Map<String, String> map = objectMapper.readValue(tpStr, Map.class);
+                            carrier.putAll(map);
+                        } catch (Exception e) {
+                            carrier.put("traceparent", tpStr);
+                        }
+                    } else {
+                        carrier.put("traceparent", tpStr);
+                    }
                     Context restoredCtx = GlobalOpenTelemetry.getPropagators()
                         .getTextMapPropagator()
                         .extract(Context.current(), carrier, MAP_GETTER);

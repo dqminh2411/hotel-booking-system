@@ -1,6 +1,8 @@
 package com.hotelbooking.chassis.audit;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.baggage.BaggageBuilder;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Scope;
@@ -79,8 +81,26 @@ public class AuditLogAspect {
                 .setAttribute("audit.target_type", auditLog.targetType().name())
                 .startSpan();
 
-        try (Scope scope = auditSpan.makeCurrent()) {
-            // Thực thi business method (các DB queries, Spring Data repo, Kafka publish... nằm dưới auditSpan!)
+        // Resolve actor và request info
+        String actorId = actorResolver.resolveActorId();
+        String actorType = actorResolver.resolveActorType();
+        String requestIp = requestResolver.resolveRequestIp();
+
+        // Tạo OTel Baggage chứa actorId, actorType, requestIp để tự động lan truyền qua Outbox / Kafka
+        BaggageBuilder baggageBuilder = Baggage.current().toBuilder();
+        if (actorId != null && !"anonymous".equals(actorId)) {
+            baggageBuilder.put("actorId", actorId);
+        }
+        if (actorType != null && !"ANONYMOUS".equals(actorType)) {
+            baggageBuilder.put("actorType", actorType);
+        }
+        if (requestIp != null && !"unknown".equals(requestIp)) {
+            baggageBuilder.put("requestIp", requestIp);
+        }
+        Baggage baggage = baggageBuilder.build();
+
+        try (Scope scope = auditSpan.makeCurrent(); Scope baggageScope = baggage.makeCurrent()) {
+            // Thực thi business method (các DB queries, Spring Data repo, Kafka publish... nằm dưới auditSpan và baggage!)
             Object result = pjp.proceed();
 
             // Tính duration

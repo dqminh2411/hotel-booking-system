@@ -42,6 +42,11 @@ public class AuditAutoConfiguration {
     }
 
     @Bean
+    public AuditBaggageFilter auditBaggageFilter(ActorResolver actorResolver, RequestResolver requestResolver) {
+        return new AuditBaggageFilter(actorResolver, requestResolver);
+    }
+
+    @Bean
     public AuditLogAspect auditLogAspect(AuditLogger auditLogger,
             SpanEventPublisher spanEventPublisher,
             ActorResolver actorResolver,
