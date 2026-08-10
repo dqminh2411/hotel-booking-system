@@ -98,7 +98,6 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
@@ -124,12 +123,11 @@
             <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- OpenTelemetry API — compile only, SDK provided by Java Agent at runtime -->
+        <!-- OpenTelemetry API -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-api</artifactId>
             <version>1.49.0</version>
-            <scope>provided</scope>
         </dependency>
 
     </dependencies>

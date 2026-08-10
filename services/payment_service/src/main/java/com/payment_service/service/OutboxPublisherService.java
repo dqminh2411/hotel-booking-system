@@ -65,17 +65,7 @@ public class OutboxPublisherService {
                 
                 if (message.getTraceparent() != null) {
                     Map<String, String> carrier = new HashMap<>();
-                    String tpStr = message.getTraceparent();
-                    if (tpStr.startsWith("{")) {
-                        try {
-                            Map<String, String> map = objectMapper.readValue(tpStr, Map.class);
-                            carrier.putAll(map);
-                        } catch (Exception e) {
-                            carrier.put("traceparent", tpStr);
-                        }
-                    } else {
-                        carrier.put("traceparent", tpStr);
-                    }
+                    carrier.put("traceparent", message.getTraceparent());
                     Context restoredCtx = GlobalOpenTelemetry.getPropagators()
                         .getTextMapPropagator()
                         .extract(Context.current(), carrier, MAP_GETTER);
@@ -106,7 +96,7 @@ public class OutboxPublisherService {
     public void saveOutboxMessage(String topic, Object message, String eventType) {
         try {
             String payload = objectMapper.writeValueAsString(message);
-            String traceparent = extractCurrentContextCarrier();
+            String traceparent = extractCurrentTraceparent();
             OutboxMessage outboxMessage = new OutboxMessage();
             outboxMessage.setId(UUID.randomUUID());
             outboxMessage.setEventType(eventType);
@@ -122,16 +112,13 @@ public class OutboxPublisherService {
         }
     }
 
-    private String extractCurrentContextCarrier() {
+    private String extractCurrentTraceparent() {
+        SpanContext ctx = Span.current().getSpanContext();
+        if (!ctx.isValid()) return null;
         Map<String, String> carrier = new HashMap<>();
         GlobalOpenTelemetry.getPropagators()
             .getTextMapPropagator()
             .inject(Context.current(), carrier, MAP_SETTER);
-        if (carrier.isEmpty()) return null;
-        try {
-            return objectMapper.writeValueAsString(carrier);
-        } catch (Exception e) {
-            return carrier.get("traceparent");
-        }
+        return carrier.get("traceparent");
     }
 }

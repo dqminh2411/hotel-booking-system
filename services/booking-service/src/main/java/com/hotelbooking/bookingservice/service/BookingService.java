@@ -481,13 +481,7 @@ public class BookingService {
                 GlobalOpenTelemetry.getPropagators()
                     .getTextMapPropagator()
                     .inject(Context.current(), carrier, MAP_SETTER);
-                if (!carrier.isEmpty()) {
-                    try {
-                        outbox.setTraceparent(objectMapper.writeValueAsString(carrier));
-                    } catch (Exception e) {
-                        outbox.setTraceparent(carrier.get("traceparent"));
-                    }
-                }
+                outbox.setTraceparent(carrier.get("traceparent"));
             }
             outboxEventRepository.save(outbox);
         } catch (Exception ex) {

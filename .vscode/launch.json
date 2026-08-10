@@ -3,13 +3,6 @@
   "configurations": [
     {
       "type": "java",
-      "name": "JavaCoreReview",
-      "request": "launch",
-      "mainClass": "JavaCoreReview",
-      "projectName": ""
-    },
-    {
-      "type": "java",
       "name": "place booking service debug",
       "request": "attach",
       "projectName": "place-booking-service",

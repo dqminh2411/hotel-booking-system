@@ -71,22 +71,12 @@ public class OutboxPublisherService {
                 // Điều này gắn span producer vào đúng trace của HTTP request gốc
                 if (message.getTraceparent() != null) {
                     Map<String, String> carrier = new HashMap<>();
-                    String tpStr = message.getTraceparent();
-                    if (tpStr.startsWith("{")) {
-                        try {
-                            Map<String, String> map = objectMapper.readValue(tpStr, Map.class);
-                            carrier.putAll(map);
-                        } catch (Exception e) {
-                            carrier.put("traceparent", tpStr);
-                        }
-                    } else {
-                        carrier.put("traceparent", tpStr);
-                    }
+                    carrier.put("traceparent", message.getTraceparent());
                     Context restoredCtx = GlobalOpenTelemetry.getPropagators()
                         .getTextMapPropagator()
                         .extract(Context.current(), carrier, MAP_GETTER);
                     // Chạy send trong context đã restore → Java Agent tự tạo
-                    // child span PRODUCER và đính kèm W3C headers (traceparent + baggage) vào Kafka record
+                    // child span PRODUCER gắn đúng vào trace gốc
                     try (io.opentelemetry.context.Scope scope = restoredCtx.makeCurrent()) {
                         kafkaProducerService.send(message.getTopic(), bookingId, payloadObj);
                     }
@@ -108,14 +98,14 @@ public class OutboxPublisherService {
     }
 
      /**
-     * Lưu outbox message kèm W3C traceparent và Baggage của request hiện tại.
-     * Context được capture ngay trong HTTP request thread → có valid SpanContext + Baggage.
+     * Lưu outbox message kèm W3C traceparent của request hiện tại.
+     * traceparent được capture ngay trong HTTP request thread → có valid SpanContext.
      */
     public void saveOutboxMessage(String topic, Object message, String eventType) {
         try {
             String payload = objectMapper.writeValueAsString(message);
-            // ── Capture traceparent + baggage từ context hiện tại ──────────
-            String traceparent = extractCurrentContextCarrier();
+            // ── Capture traceparent từ context hiện tại ──────────
+            String traceparent = extractCurrentTraceparent();
             OutboxMessage outboxMessage = new OutboxMessage();
             outboxMessage.setId(UUID.randomUUID());
             outboxMessage.setEventType(eventType);
@@ -132,18 +122,15 @@ public class OutboxPublisherService {
     }
 
     /**
-     * Lấy W3C headers (traceparent + baggage) từ current OTel Context.
+     * Lấy W3C traceparent header từ current OTel Context.
      */
-    private String extractCurrentContextCarrier() {
+    private String extractCurrentTraceparent() {
+        SpanContext ctx = Span.current().getSpanContext();
+        if (!ctx.isValid()) return null;
         Map<String, String> carrier = new HashMap<>();
         GlobalOpenTelemetry.getPropagators()
             .getTextMapPropagator()
             .inject(Context.current(), carrier, MAP_SETTER);
-        if (carrier.isEmpty()) return null;
-        try {
-            return objectMapper.writeValueAsString(carrier);
-        } catch (Exception e) {
-            return carrier.get("traceparent");
-        }
+        return carrier.get("traceparent");
     }
 }

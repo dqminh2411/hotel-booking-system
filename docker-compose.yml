@@ -4,27 +4,27 @@
 
 name: microservices-assignment
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "${FRONTEND_PORT:-3000}:5173"
-    env_file:
-      - .env
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
-      CHOKIDAR_USEPOLLING: "true"
-      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
-      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
-      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
-      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - gateway
-    networks:
-      - app-network
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "${FRONTEND_PORT:-3000}:5173"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+  #     CHOKIDAR_USEPOLLING: "true"
+  #     VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+  #     VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
+  #     VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
+  #     VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - gateway
+  #   networks:
+  #     - app-network
 
 
   chassis-init:
@@ -262,45 +262,45 @@ services:
     networks:
       - app-network
 
-  promotion-db:
-    image: postgres:16-alpine
-    # restart: unless-stopped
-    ports:
-      - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
-    environment:
-      POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
-      POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
-    volumes:
-      - promotion-db-data:/var/lib/postgresql/data
-      - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${PROMOTION_DB_USER:-postgres}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
+  # promotion-db:
+  #   image: postgres:16-alpine
+  #   # restart: unless-stopped
+  #   ports:
+  #     - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
+  #   environment:
+  #     POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
+  #     POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
+  #   volumes:
+  #     - promotion-db-data:/var/lib/postgresql/data
+  #     - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
+  #   healthcheck:
+  #     test: [ "CMD-SHELL", "pg_isready -U ${PROMOTION_DB_USER:-postgres}" ]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
-  notification-db:
-    image: postgres:16-alpine
-    # restart: unless-stopped
-    ports:
-      - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
-    environment:
-      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
-      POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
-    volumes:
-      - notification-db-data:/var/lib/postgresql/data
-      - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
+  # notification-db:
+  #   image: postgres:16-alpine
+  #   # restart: unless-stopped
+  #   ports:
+  #     - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
+  #   environment:
+  #     POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+  #     POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+  #   volumes:
+  #     - notification-db-data:/var/lib/postgresql/data
+  #     - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
   redis:
     image: redis:7.2-alpine
@@ -634,48 +634,48 @@ services:
   #     - ./chassis:/app/chassis
   #     - maven-cache:/root/.m2
 
-  notification-service:
-    build: ./services/notification-service
-    ports:
-      - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
-      - "5013:5013" # debug
-    env_file:
-      - .env
-    environment:
-      SERVER_PORT: 5000
-      DB_HOST: notification-db
-      DB_PORT: 5432
-      DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
-      DB_USER: ${NOTIFICATION_DB_USER:-postgres}
-      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      KAFKA_CONSUMER_GROUP: notification-group
-      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
-    depends_on:
-      notification-db:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      eureka-server:
-        condition: service_healthy
-      chassis-init:
-        condition: service_completed_successfully
-    command:
-      - mvn
-      - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
-    networks:
-      - app-network
-    volumes:
-      - ./services/notification-service:/app
-      - ./chassis:/app/chassis
-      - maven-cache:/root/.m2
+  # notification-service:
+  #   build: ./services/notification-service
+  #   ports:
+  #     - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
+  #     - "5013:5013" # debug
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     SERVER_PORT: 5000
+  #     DB_HOST: notification-db
+  #     DB_PORT: 5432
+  #     DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+  #     DB_USER: ${NOTIFICATION_DB_USER:-postgres}
+  #     DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+  #     KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+  #     KAFKA_CONSUMER_GROUP: notification-group
+  #     EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+  #     EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+  #     MAIL_HOST: ${MAIL_HOST}
+  #     MAIL_PORT: ${MAIL_PORT}
+  #     MAIL_USERNAME: ${MAIL_USERNAME}
+  #     MAIL_PASSWORD: ${MAIL_PASSWORD}
+  #     FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
+  #   depends_on:
+  #     notification-db:
+  #       condition: service_healthy
+  #     kafka:
+  #       condition: service_healthy
+  #     eureka-server:
+  #       condition: service_healthy
+  #     chassis-init:
+  #       condition: service_completed_successfully
+  #   command:
+  #     - mvn
+  #     - spring-boot:run
+  #     - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - ./services/notification-service:/app
+  #     - ./chassis:/app/chassis
+  #     - maven-cache:/root/.m2
 
   keycloak-db:
     image: postgres:16-alpine
