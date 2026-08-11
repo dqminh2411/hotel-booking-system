@@ -19,8 +19,7 @@ import io.opentelemetry.api.baggage.Baggage;
 public class RequestResolver {
 
     /**
-     * Lấy IP client.
-     * Hỗ trợ X-Forwarded-For và X-Real-IP cho trường hợp đứng sau reverse proxy.
+     * Lấy IP client
      * Fallback lấy từ OpenTelemetry Baggage nếu ở async/Kafka thread.
      *
      * @return IP hoặc "unknown" nếu không xác định được
@@ -29,7 +28,7 @@ public class RequestResolver {
         try {
             HttpServletRequest request = getCurrentRequest();
             if (request != null) {
-                String ip = extractClientIp(request);
+                String ip = request.getRemoteAddr();
                 if (ip != null && !ip.isBlank()) {
                     return ip;
                 }
@@ -48,15 +47,7 @@ public class RequestResolver {
         }
     }
 
-    /**
-     * Trích xuất client IP, xử lý trường hợp đứng sau reverse proxy / load balancer.
-     */
-    private String extractClientIp(HttpServletRequest request) {
-        return Optional.ofNullable(request.getHeader("X-Forwarded-For"))
-                .map(xff -> xff.split(",")[0].trim())
-                .orElseGet(() -> Optional.ofNullable(request.getHeader("X-Real-IP"))
-                        .orElse(request.getRemoteAddr()));
-    }
+    
 
     /**
      * Lấy endpoint (URI) của request hiện tại.

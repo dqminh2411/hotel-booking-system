@@ -146,3 +146,4 @@ OpenTelemetry.md
 otel-chat.md
 implement_log_trace.md
 log_collector.md
+full_trace_success.json

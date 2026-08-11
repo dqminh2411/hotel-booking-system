@@ -64,6 +64,15 @@
 | booking_detail | JSONB | NOT NULL | Chi tiết booking dạng JSON (thông tin snapshot tại thời điểm đặt) |
 | is_deleted | BOOLEAN | NOT NULL | Xóa mềm đối tượng |
 
+**Bảng `roomtype_inventory`**
+
+| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| --- | --- | --- | --- |
+| room_type_id | VARCHAR(255) | PK | ID loại phòng trong bảng room_types ở hotel-service |
+| hotel_id | VARCHAR(255) | PK | ID khách sạn trong bảng hotels ở hotel-service |
+| total_quantity | INTEGER | NOT NULL, > 0 | Số lượng phòng |
+| synced_at | TIMESTAMPTZ | NOT NULL | Thời điểm sync |
+
 **Bảng `outbox_events`**
 
 | Cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
@@ -77,6 +86,8 @@
 | is_deleted | BOOLEAN | NOT NULL | Xóa mềm đối tượng |
 
 > Outbox Pattern: event được INSERT cùng transaction với business data. `OutboxRelay` (`@Scheduled`) đọc bảng này và publish lên Kafka, đảm bảo at-least-once delivery.
+
+
 
 ---
 
