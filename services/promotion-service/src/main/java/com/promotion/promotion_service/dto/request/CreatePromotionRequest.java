@@ -27,7 +27,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CreatePromotionRequest {
 
-    
+
     private UUID tenantId;
 
     @NotBlank

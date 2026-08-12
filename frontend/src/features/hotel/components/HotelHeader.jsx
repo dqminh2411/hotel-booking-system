@@ -4,7 +4,7 @@ function scrollToRoomTypes() {
   document.getElementById('room-types')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-export default function HotelHeader({ hotel }) {
+export default function HotelHeader({ hotel, actions }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex flex-col gap-2">
@@ -24,9 +24,13 @@ export default function HotelHeader({ hotel }) {
         </p>
       </div>
 
-      <button type="button" onClick={scrollToRoomTypes} className="accent-button shrink-0">
-        Đặt ngay
-      </button>
+      {actions ? (
+        <div className="shrink-0">{actions}</div>
+      ) : (
+        <button type="button" onClick={scrollToRoomTypes} className="accent-button shrink-0">
+          Đặt ngay
+        </button>
+      )}
     </div>
   );
 }

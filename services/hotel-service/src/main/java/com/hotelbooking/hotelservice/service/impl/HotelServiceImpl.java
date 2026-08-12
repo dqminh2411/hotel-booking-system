@@ -2,43 +2,30 @@ package com.hotelbooking.hotelservice.service.impl;
 
 import com.hotelbooking.hotelservice.client.BookingServiceClient;
 import com.hotelbooking.hotelservice.constant.HotelStatus;
-import com.hotelbooking.hotelservice.entity.AmenityEntity;
-import com.hotelbooking.hotelservice.dto.request.HotelSearchRequest;
-import com.hotelbooking.hotelservice.dto.request.RoomCheckinRequest;
+import com.hotelbooking.hotelservice.constant.ScopeType;
+import com.hotelbooking.hotelservice.dto.request.*;
+import com.hotelbooking.hotelservice.entity.*;
 import com.hotelbooking.hotelservice.dto.response.*;
-import com.hotelbooking.hotelservice.entity.HotelEntity;
-import com.hotelbooking.hotelservice.entity.HotelImageEntity;
-import com.hotelbooking.hotelservice.entity.PolicyEntity;
-import com.hotelbooking.hotelservice.entity.RoomEntity;
-import com.hotelbooking.hotelservice.entity.RoomTypeEntity;
+import com.hotelbooking.hotelservice.event.HotelCreatedEvent;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.exception.HotelNotFoundException;
 import com.hotelbooking.hotelservice.exception.InvalidDateRangeException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
-import com.hotelbooking.hotelservice.repository.HotelAmenityRepository;
-import com.hotelbooking.hotelservice.repository.HotelImageRepository;
-import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.PolicyRepository;
-import com.hotelbooking.hotelservice.repository.RoomRepository;
-import com.hotelbooking.hotelservice.repository.RoomTypeRepository;
-import com.hotelbooking.hotelservice.mapper.HotelMapper;
-import com.hotelbooking.hotelservice.mapper.RoomTypeMapper;
 import com.hotelbooking.hotelservice.repository.*;
+import com.hotelbooking.hotelservice.security.SecurityUtils;
 import com.hotelbooking.hotelservice.service.HotelService;
 import jakarta.validation.ValidationException;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
 
-import java.rmi.server.UID;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
@@ -69,6 +56,12 @@ public class HotelServiceImpl implements HotelService {
     RoomRepository roomRepository;
     AmenityRepository amenityRepository;
     RoomTypeAmenityRepository roomTypeAmenityRepository;
+    ApplicationEventPublisher applicationEventPublisher;
+    ProvinceRepository provinceRepository;
+    DistrictRepository districtRepository;
+    WardRepository wardRepository;
+    SecurityUtils securityUtils;
+
 
     @Override
     @Transactional(readOnly = true)
@@ -82,7 +75,7 @@ public class HotelServiceImpl implements HotelService {
         HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
                 .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
 
-        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdAndIsDeletedFalseOrderByIsCoverDescCreatedAtAsc(hotelId);
         List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
         List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
 
@@ -97,6 +90,21 @@ public class HotelServiceImpl implements HotelService {
 
         return hotelMapper.toHotelDetailsResponse(
                 hotel, images, policies, hotelAmenities, filteredRoomTypes, bookedCountByRoomType);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HotelDetailsResponse getHotelDetailForAdmin(UUID hotelId){
+        HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalse(hotelId)
+                .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
+
+        List<HotelImageEntity> images = hotelImageRepository.findByHotel_IdAndIsDeletedFalseOrderByIsCoverDescCreatedAtAsc(hotelId);
+        List<PolicyEntity> policies = policyRepository.findByHotel_IdAndIsDeletedFalse(hotelId);
+        List<AmenityEntity> hotelAmenities = hotelAmenityRepository.findActiveAmenitiesByHotelId(hotelId);
+        List<RoomTypeEntity> roomTypes = roomTypeRepository.findActiveByHotelIdWithCoverImage(hotelId);
+
+        return hotelMapper.toHotelDetailsResponse(
+                hotel, images, policies, hotelAmenities, roomTypes, Map.of());
     }
 
     @Override
@@ -251,6 +259,210 @@ public class HotelServiceImpl implements HotelService {
                     HttpStatus.BAD_REQUEST);
         }
     }
+
+    @Override
+    @PreAuthorize("hasRole('HOTEL_OWNER')")
+    @Transactional
+    public CreateHotelResponse createHotel(CreateHotelRequest request) {
+        UUID tenantId = securityUtils.getCurrentTenantId();
+
+        ProvinceEntity province = provinceRepository.findById(request.getProvinceCode())
+                .orElseThrow(() -> new AppException(
+                        "PROVINCE_NOT_FOUND",
+                        "Không tìm thấy provinceCode: " + request.getProvinceCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        DistrictEntity district = districtRepository.findById(request.getDistrictCode())
+                .orElseThrow(() -> new AppException(
+                        "DISTRICT_NOT_FOUND",
+                        "Không tìm thấy districtCode: " + request.getDistrictCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        WardEntity ward = wardRepository.findById(request.getWardCode())
+                .orElseThrow(() -> new AppException(
+                        "WARD_NOT_FOUND",
+                        "Không tìm thấy wardCode: " + request.getWardCode(),
+                        HttpStatus.BAD_REQUEST));
+
+        // Validate district thuộc đúng province, ward thuộc đúng district
+        // (tránh trường hợp client gửi 3 code hợp lệ riêng lẻ nhưng không cùng 1 cây địa giới)
+        if (!district.getProvince().getCode().equals(province.getCode())) {
+            throw new AppException(
+                    "INVALID_LOCATION_HIERARCHY",
+                    "districtCode không thuộc provinceCode đã cho",
+                    HttpStatus.BAD_REQUEST);
+        }
+        if (!ward.getDistrict().getCode().equals(district.getCode())) {
+            throw new AppException(
+                    "INVALID_LOCATION_HIERARCHY",
+                    "wardCode không thuộc districtCode đã cho",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        Instant now = Instant.now();
+        HotelEntity hotel = new HotelEntity();
+        hotel.setTenantId(tenantId);
+        hotel.setName(request.getName());
+        hotel.setDescription(request.getDescription());
+        hotel.setAddress(request.getAddress());
+        hotel.setProvince(province);
+        hotel.setDistrict(district);
+        hotel.setWard(ward);
+        hotel.setStatus(HotelStatus.PENDING);
+        hotel.setIsDeleted(false);
+        hotel.setCreatedAt(now);
+        hotel.setUpdatedAt(now);
+
+        HotelEntity saved = hotelRepository.save(hotel);
+
+        List<AmenityResponse> amenityResponses = processAmenities(request.getAmenities(), saved);
+        List<PolicyResponse> policyResponses = processPolicies(request.getPolicies(), saved);
+        List<RoomTypeCreatedResponse> roomTypeResponses = processRoomTypes(request.getRoomTypes(), saved, now);
+
+        log.info("Tạo hotel mới id={} tenantId={} status=PENDING amenities={} policies={} roomTypes={}",
+                saved.getId(), tenantId, amenityResponses.size(), policyResponses.size(), roomTypeResponses.size());
+
+        // Publish event NỘI BỘ ngay trong transaction. Kafka message thật sự
+        // chỉ được gửi đi ở HotelKafkaEventPublisher, SAU KHI transaction này commit.
+        applicationEventPublisher.publishEvent(new HotelCreatedEvent(
+                saved.getId(),
+                saved.getTenantId(),
+                saved.getName(),
+                saved.getCreatedAt()));
+
+        return CreateHotelResponse.builder()
+                .id(saved.getId())
+                .tenantId(saved.getTenantId())
+                .name(saved.getName())
+                .description(saved.getDescription())
+                .address(saved.getAddress())
+                .provinceCode(saved.getProvince().getCode())
+                .districtCode(saved.getDistrict().getCode())
+                .wardCode(saved.getWard().getCode())
+                .status(saved.getStatus())
+                .createdAt(saved.getCreatedAt())
+                .amenities(amenityResponses)
+                .policies(policyResponses)
+                .roomTypes(roomTypeResponses)
+                .build();
+    }
+
+    /**
+     * Với mỗi amenity trong request: nếu có id -> dùng amenity có sẵn (phải
+     * tồn tại, chưa bị xoá). Nếu không có id -> tìm theo tên (không phân biệt
+     * hoa/thường); nếu đã tồn tại thì dùng lại, chưa có thì tạo mới với
+     * scope = HOTEL. Sau đó tạo liên kết HotelAmenityEntity.
+     */
+    private List<AmenityResponse> processAmenities(List<AmenityRequest> requests, HotelEntity hotel) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<AmenityResponse> result = new ArrayList<>();
+        for (AmenityRequest req : requests) {
+            AmenityEntity amenity = resolveAmenity(req);
+
+            HotelAmenityEntity link = new HotelAmenityEntity();
+            link.setId(new HotelAmenityId(hotel.getId(), amenity.getId()));
+            link.setHotel(hotel);
+            link.setAmenity(amenity);
+            link.setIsDeleted(false);
+            hotelAmenityRepository.save(link);
+
+            result.add(AmenityResponse.builder()
+                    .id(amenity.getId())
+                    .name(amenity.getName())
+                    .build());
+        }
+        return result;
+    }
+
+    private AmenityEntity resolveAmenity(AmenityRequest req) {
+        if (req.getId() != null) {
+            return amenityRepository.findById(req.getId())
+                    .filter(a -> !Boolean.TRUE.equals(a.getIsDeleted()))
+                    .orElseThrow(() -> new AppException(
+                            "AMENITY_NOT_FOUND",
+                            "Không tìm thấy amenity id: " + req.getId(),
+                            HttpStatus.BAD_REQUEST));
+        }
+
+        if (req.getName() == null || req.getName().isBlank()) {
+            throw new AppException(
+                    "AMENITY_NAME_REQUIRED",
+                    "Mỗi amenity phải có id (dùng cái có sẵn) hoặc name (tạo mới)",
+                    HttpStatus.BAD_REQUEST);
+        }
+
+        String trimmedName = req.getName().trim();
+        return amenityRepository.findByNameIgnoreCaseAndIsDeletedFalse(trimmedName)
+                .orElseGet(() -> {
+                    AmenityEntity newAmenity = new AmenityEntity();
+                    newAmenity.setName(trimmedName);
+                    newAmenity.setScope(ScopeType.HOTEL);
+                    newAmenity.setIsDeleted(false);
+                    AmenityEntity createdAmenity = amenityRepository.save(newAmenity);
+                    log.info("Tạo amenity mới '{}' (id={})", trimmedName, createdAmenity.getId());
+                    return createdAmenity;
+                });
+    }
+
+    private List<PolicyResponse> processPolicies(List<PolicyRequest> requests, HotelEntity hotel) {
+        if (requests == null || requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<PolicyResponse> result = new ArrayList<>();
+        for (PolicyRequest req : requests) {
+            PolicyEntity policy = new PolicyEntity();
+            policy.setHotel(hotel);
+            policy.setType(req.getType());
+            policy.setDescription(req.getDescription());
+            policy.setIsDeleted(false);
+
+            PolicyEntity saved = policyRepository.save(policy);
+            result.add(PolicyResponse.builder()
+                    .id(saved.getId())
+                    .type(saved.getType())
+                    .description(saved.getDescription())
+                    .build());
+        }
+        return result;
+    }
+
+    /** roomTypes bắt buộc có ít nhất 1 phần tử (đã validate bằng @NotEmpty ở DTO). */
+    private List<RoomTypeCreatedResponse> processRoomTypes(List<RoomTypeRequest> requests, HotelEntity hotel, Instant now) {
+        List<RoomTypeCreatedResponse> result = new ArrayList<>();
+        for (RoomTypeRequest req : requests) {
+            RoomTypeEntity roomType = new RoomTypeEntity();
+            roomType.setHotel(hotel);
+            roomType.setName(req.getName());
+            roomType.setDescription(req.getDescription());
+            roomType.setMaxGuests(req.getMaxGuests());
+            roomType.setBedCounts(req.getBedCounts());
+            roomType.setBasePricePerNight(req.getBasePricePerNight());
+            roomType.setQuantity(req.getQuantity());
+            roomType.setArea(req.getArea());
+            roomType.setIsDeleted(false);
+            roomType.setCreatedAt(now);
+            roomType.setUpdatedAt(now);
+
+            RoomTypeEntity saved = roomTypeRepository.save(roomType);
+            result.add(RoomTypeCreatedResponse.builder()
+                    .id(saved.getId())
+                    .name(saved.getName())
+                    .description(saved.getDescription())
+                    .maxGuests(saved.getMaxGuests())
+                    .bedCounts(saved.getBedCounts())
+                    .basePricePerNight(saved.getBasePricePerNight())
+                    .quantity(saved.getQuantity())
+                    .area(saved.getArea())
+                    .build());
+        }
+        return result;
+    }
+
+
 
     // đây là phần Long thêm và sửa
 

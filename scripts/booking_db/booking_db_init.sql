@@ -122,7 +122,7 @@ INSERT INTO roomtype_inventory (room_type_id, hotel_id, total_quantity) VALUES
     ('d1000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000001', 4),
     
     -- Presidential Suite (Số lượng gốc: 1) -> Rất hợp lý để test giành giật phòng hiếm!
-    ('d1000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000001', 1)
+    ('d1000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000001', 2)
 ON CONFLICT (room_type_id) DO NOTHING;
 
 
