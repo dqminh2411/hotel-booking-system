@@ -91,9 +91,14 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     topic         VARCHAR(100) NOT NULL,
     payload       JSONB       NOT NULL,
-    published     BOOLEAN     NOT NULL DEFAULT false,
+    status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
+    retry_count   INTEGER     NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMP,
+    locked_until  TIMESTAMP,
+
+    CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
     is_deleted    BOOLEAN     NOT NULL DEFAULT false,
     traceparent   VARCHAR(55)
 );

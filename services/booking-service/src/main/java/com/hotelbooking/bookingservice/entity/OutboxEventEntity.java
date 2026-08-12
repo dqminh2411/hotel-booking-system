@@ -27,8 +27,17 @@ public class OutboxEventEntity {
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;
 
-    @Column(name = "published", nullable = false)
-    private Boolean published;
+    @Column(name = "status", nullable = false)
+    private String status;
+
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount;
+
+    @Column(name = "next_retry_at")
+    private Instant nextRetryAt;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;

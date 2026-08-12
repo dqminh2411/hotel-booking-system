@@ -115,15 +115,19 @@ sequenceDiagram
 
     React->>GW: API Request (Bearer Access Token)
 
-    GW->>KC: Validate JWT (or validate using JWKS)
+    GW->>GW: Validate JWT using JWKS
 
-    KC-->>GW: Token is valid
+    GW->>GW: Token is valid
 
     GW->>US: Forward Request
+
+    US ->> US: Validate JWT using JWKS and authorization
 
     US-->>GW: Response
 
     GW-->>React: Response
+
+    React -->>User: Display
 ```
 
 ### 2.3 Authorization Flow
@@ -134,26 +138,23 @@ sequenceDiagram
 
     participant React
     participant Gateway
-    participant BookingService
     participant HotelService
 
-    React->>Gateway: GET /api/bookings\nAuthorization: Bearer JWT
+    React->>Gateway: POST /api/hotels <br/> Authorization: Bearer JWT
 
     Gateway->>Gateway: Validate JWT
 
-    Gateway->>BookingService: Forward authenticated request
+    Gateway->>HotelService: Forward authenticated request
 
-    BookingService->>BookingService: Extract JWT claims
+    HotelService->>HotelService: Extract JWT claims
 
-    BookingService->>BookingService: Check ROLE_CUSTOMER
+    HotelService->>HotelService: Check ROLE_HOTEL_OWNER
 
-    BookingService->>HotelService: Request hotel information
+    HotelService->>HotelService: Create new hotel
 
-    HotelService-->>BookingService: Hotel details
+    HotelService-->>Gateway: Response: success 200
 
-    BookingService-->>Gateway: Booking data
-
-    Gateway-->>React: HTTP 200
+    Gateway-->>React: Response: success 200
 ```
 
 # II. Tích hợp Keycloak
@@ -837,3 +838,33 @@ const logout = useCallback(async () => {
 - Callback `onAuthLogout` (đăng ký trong `keycloak.init()`) đồng bộ lại state React (`authenticated=false`, `user=null`) — kể cả khi logout xảy ra do session hết hạn hoặc bị logout từ tab/thiết bị khác (không chỉ khi user tự bấm nút Đăng xuất).
 
 **Cấu hình bắt buộc phía Keycloak:** client `frontend-client` phải khai **Valid post logout redirect URIs** khớp domain frontend (`http://localhost:3000/*` và domain production tương ứng) — thiếu cấu hình này, Keycloak sẽ từ chối redirect về sau khi logout, user bị kẹt lại ở trang Keycloak.
+
+
+---
+
+sign up: 
+registration url: http://localhost:8085/realms/hotel-booking-system/login-actions/registration?session_code=-7TMGOohPZh0s6xfswwv3O6IxXNVqv7MDE1Tusi81Ks&execution=c08ce255-43be-4b2f-bde7-0672b6824efd&client_id=frontend-client&tab_id=7bswUvwiurI&client_data=eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiI3ODRmYzY0Ni05ZjcxLTRkNjItYjBlOC1hMzNmZGMwNDdlM2UifQ
+form data: 5 fields
+
+required-action:
+url: http://localhost:8085/realms/hotel-booking-system/login-actions/required-action?execution=VERIFY_EMAIL&client_id=frontend-client&tab_id=7bswUvwiurI&client_data=eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiI3ODRmYzY0Ni05ZjcxLTRkNjItYjBlOC1hMzNmZGMwNDdlM2UifQ
+
+query param
+execution VERIFY_EMAIL
+client_id frontend-client
+tab_id 7bswUvwiurI
+client_data eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiI3ODRmYzY0Ni05ZjcxLTRkNjItYjBlOC1hMzNmZGMwNDdlM2UifQ
+
+
+verify email url:
+http://localhost:8085/realms/hotel-booking-system/login-actions/action-token?key=eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0ZjAyNzZjNi0zODM0LTQwZTgtYjU0OC1iNmZlNDcwMzM0NzgifQ.eyJleHAiOjE3ODQ1MTkwOTUsImlhdCI6MTc4NDUxODc5NSwianRpIjoiYTFiOTQwNTQtZGE5Yi00NjQxLWExMmEtNTUzYjRiMWNmNWJlIiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo4MDg1L3JlYWxtcy9ob3RlbC1ib29raW5nLXN5c3RlbSIsImF1ZCI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA4NS9yZWFsbXMvaG90ZWwtYm9va2luZy1zeXN0ZW0iLCJzdWIiOiIzY2QwZGUwYS1mOGIxLTQxMjUtODBjYi0zNWE0MDA3ZjBmNTEiLCJ0eXAiOiJ2ZXJpZnktZW1haWwiLCJhenAiOiJmcm9udGVuZC1jbGllbnQiLCJub25jZSI6IjJmZTlhOTMwLTA0NzctNTAxZi04ZTZkLTRjY2FmMjE1ZWU3NCIsImFzaWQiOiJVc3VuUkpQSUw4WlJQX1ozMzdZT2U1bHQudzdIRzZuYVlOdTguMDMyNjQ0YWItMzk0MC00MTdkLWIwMjYtYTBjNTk3ZGIzZjY3IiwiZW1sIjoibWluaHp5cjA0QGdtYWlsLmNvbSJ9.yxhjE1W14qtKrdVwX8chWpeylWZoxSLD6L9ByPv3qcxU3JOkkKXhtrtn0Uk2m_RRKO6Ocn0brPlh9CThh069HA&client_id=frontend-client&tab_id=w7HG6naYNu8&client_data=eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiIwNzI4ZjljNC0zYzQ2LTQ0ZDMtOWI2ZC1mNWQzMmM2OTk4NDkifQ
+
+
+http://localhost:8085/realms/hotel-booking-system/login-actions/required-action?session_code=G967dINqDlvXxQMeeALAZAjCzfOhnk_con4ZKJv6YWY&execution=UPDATE_PASSWORD&client_id=frontend-client&tab_id=w7HG6naYNu8&client_data=eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiIwNzI4ZjljNC0zYzQ2LTQ0ZDMtOWI2ZC1mNWQzMmM2OTk4NDkifQ
+
+
+http://localhost:8085/realms/hotel-booking-system/login-actions/required-action?session_code=vDsx25C2qBOTnZImJeRhai2uT2llCbMScCZo0UvqYGI&execution=UPDATE_PASSWORD&client_id=frontend-client&tab_id=w7HG6naYNu8&client_data=eyJydSI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzAwMC92ZXJpZnktZW1haWwiLCJydCI6ImNvZGUiLCJybSI6ImZyYWdtZW50Iiwic3QiOiIwNzI4ZjljNC0zYzQ2LTQ0ZDMtOWI2ZC1mNWQzMmM2OTk4NDkifQ
+
+
+
+2026-07-20 04:34:40,174 WARN  [org.keycloak.events] (executor-thread-69) type="REFRESH_TOKEN_ERROR", realmId="a08090fc-9e8f-4367-927b-0beb14ff15d2", realmName="hotel-booking-system", clientId="frontend-client", userId="null", sessionId="UsunRJPIL8ZRP_Z337YOe5lt", ipAddress="172.18.0.1", error="invalid_token", reason="Session not active", grant_type="refresh_token", refresh_token_type="Refresh", refresh_token_id="9b4de191-dd12-f2c3-0c37-998c20a42070", refresh_token_sub="3cd0de0a-f8b1-4125-80cb-35a4007f0f51", client_auth_method="client-secret"

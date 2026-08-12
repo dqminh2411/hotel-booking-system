@@ -1,42 +1,47 @@
 package com.promotion.promotion_service.entity;
 
-import jakarta.persistence.*;
-import lombok.*;
-import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.JdbcTypeCode;
 
+@Getter
+@Setter
 @Entity
 @Table(name = "outbox_events")
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class OutboxEventEntity {
-
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    UUID id;
+    @Column(name = "id")
+    private UUID id;
 
-    @Column(name = "topic", nullable = false, length = 100)
-    String topic;
+    @Column(name = "topic", nullable = false)
+    private String topic;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
-    String payload;
+    private String payload;
 
-    @Column(name = "published", nullable = false)
-    boolean published;
+    @Column(name = "status", nullable = false)
+    private String status;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    LocalDateTime createdAt;
+    @Column(name = "retry_count", nullable = false)
+    private Integer retryCount;
+
+    @Column(name = "next_retry_at")
+    private Instant nextRetryAt;
+
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
 
     @Column(name = "published_at")
     LocalDateTime publishedAt;

@@ -132,6 +132,7 @@ usersId.csv
 promotion_management_js/
 prompt_merge_promotion.md
 promotion_service_guide.md
+
 files/
 *.http
 queue_db_solution.md
