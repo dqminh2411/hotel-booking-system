@@ -19,7 +19,7 @@ import com.hotelbooking.bookingservice.dto.kafka.CreateBookingCommand;
 import com.hotelbooking.bookingservice.entity.BookedRoomTypeEntity;
 import com.hotelbooking.bookingservice.entity.BookingEntity;
 import com.hotelbooking.bookingservice.entity.BookingInfoEntity;
-import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.hotelbooking.bookingservice.entity.RoomTypeInventory;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
 import com.hotelbooking.bookingservice.enums.OutboxEventStatus;
@@ -28,7 +28,6 @@ import com.hotelbooking.bookingservice.exception.ExternalServiceException;
 import com.hotelbooking.bookingservice.repository.BookedRoomTypeRepository;
 import com.hotelbooking.bookingservice.repository.BookingInfoRepository;
 import com.hotelbooking.bookingservice.repository.BookingRepository;
-import com.hotelbooking.bookingservice.repository.OutboxEventRepository;
 import com.hotelbooking.bookingservice.repository.RoomTypeInventoryRepository;
 import com.hotelbooking.chassis.audit.AuditEventType;
 import com.hotelbooking.chassis.audit.AuditLog;
@@ -83,7 +82,7 @@ public class BookingService {
     BookingRepository bookingRepository;
     BookedRoomTypeRepository bookedRoomTypeRepository;
     BookingInfoRepository bookingInfoRepository;
-    OutboxEventRepository outboxEventRepository;
+    OutboxRelay outboxRelay;
     ObjectMapper objectMapper;
     RoomTypeInventoryRepository roomTypeInventoryRepository;
     StringRedisTemplate stringRedisTemplate;
@@ -481,22 +480,9 @@ public class BookingService {
             outbox.setId(UUID.randomUUID());
             outbox.setTopic(OUTBOX_TOPIC);
             outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setStatus(OutboxEventStatus.PENDING.toString());
+            outbox.setPublished(Boolean.FALSE);
             outbox.setCreatedAt(Instant.now());
-            // ── Capture W3C traceparent từ span hiện tại ──────────────────────────
-            // Khi gọi từ @KafkaListener, Java Agent đã tạo span → SpanContext hợp lệ
-            SpanContext spanCtx = Span.current().getSpanContext();
-            if (spanCtx.isValid()) {
-                java.util.Map<String, String> carrier = new java.util.HashMap<>();
-                GlobalOpenTelemetry.getPropagators()
-                    .getTextMapPropagator()
-                    .inject(Context.current(), carrier, MAP_SETTER);
-                outbox.setTraceparent(carrier.get("traceparent"));
-            }
-            outbox.setRetryCount(0);
             outboxEventRepository.save(outbox);
-
-            eventPublisher.publishEvent(new OutboxEventPublishEvent());
         } catch (Exception ex) {
             throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
         }

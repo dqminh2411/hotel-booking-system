@@ -13,6 +13,7 @@ import com.hotelbooking.chassis.audit.AuditEventType;
 import com.hotelbooking.chassis.audit.AuditLog;
 import com.hotelbooking.chassis.audit.Severity;
 import com.hotelbooking.chassis.audit.TargetType;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.place_booking_service.dto.CreateBooking;
 import com.place_booking_service.dto.HotelSummaryResponse;
 import com.place_booking_service.dto.PlaceBookingRequest;
@@ -33,7 +34,7 @@ import lombok.experimental.FieldDefaults;
 public class PlaceBookingService {
 
     SagaStateRepository sagaStateRepository;
-    OutboxPublisherService outboxPublisherService;
+    OutboxRelay outboxPublisherService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional

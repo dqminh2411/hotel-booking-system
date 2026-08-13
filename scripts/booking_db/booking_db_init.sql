@@ -94,13 +94,14 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
+
     retry_count   INTEGER     NOT NULL DEFAULT 0,
     next_retry_at TIMESTAMP,
     locked_until  TIMESTAMP,
-
-    CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
     is_deleted    BOOLEAN     NOT NULL DEFAULT false,
-    traceparent   VARCHAR(55)
+    traceparent   VARCHAR(55),
+    event_type VARCHAR(100),
+    CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
 );
 
 CREATE TABLE IF NOT EXISTS roomtype_inventory (

@@ -1,15 +1,9 @@
 package com.hotelbooking.chassis.tracing.config;
 
-
-import org.springframework.boot.autoconfigure.AutoConfiguration;
-
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-
-
-import com.hotelbooking.chassis.tracing.properties.TracingProperties;
-
-
-@AutoConfiguration
-@EnableConfigurationProperties(TracingProperties.class)
+/**
+ * Tracing is now handled by OpenTelemetry Java Agent (-javaagent).
+ * No Spring Boot auto-configuration is needed for tracing.
+ * This class is kept as a placeholder for future custom tracing beans if needed.
+ */
 public class TracingAutoConfiguration {
 }

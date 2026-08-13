@@ -30,12 +30,11 @@ import com.hotelbooking.hotelservice.dto.response.HotelPendingResponse;
 import com.hotelbooking.hotelservice.dto.response.UserResponse;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.HotelImageEntity;
-import com.hotelbooking.hotelservice.entity.OutboxEventEntity;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.hotelbooking.hotelservice.service.AdminService;
 import com.hotelbooking.chassis.audit.AuditEventType;
 import com.hotelbooking.chassis.audit.AuditLog;
@@ -71,7 +70,8 @@ public class AdminServiceImpl implements AdminService{
     StringRedisTemplate stringRedisTemplate;
     UserServiceFeignClient userServiceFeignClient;
     ObjectMapper objectMapper;
-    OutboxEventRepository outboxEventRepository;
+    private final OutboxRelay outboxPublisherService;
+
     MinioClient minioClient;
 
     @NonFinal
@@ -151,7 +151,8 @@ public class AdminServiceImpl implements AdminService{
                     eventType,
                     request.reason()        
         );
-        saveOutboxEvent(emailRequest, "hotel-status-actions");
+       
+        outboxPublisherService.saveEvent("hotel-status-actions", emailRequest);
         
         // clearKeyHotelId(hotelId);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
