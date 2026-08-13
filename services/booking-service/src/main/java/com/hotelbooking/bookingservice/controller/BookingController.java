@@ -2,19 +2,28 @@ package com.hotelbooking.bookingservice.controller;
 
 import com.hotelbooking.bookingservice.dto.ApiResponse;
 import com.hotelbooking.bookingservice.dto.BookingCheckinInfo;
+import com.hotelbooking.bookingservice.dto.BookingDetail;
 import com.hotelbooking.bookingservice.dto.BookingResponse;
 import com.hotelbooking.bookingservice.dto.CheckinRequest;
 import com.hotelbooking.bookingservice.dto.CountBookingsResponse;
 import com.hotelbooking.bookingservice.dto.UpdateBookingStatusRequest;
+import com.hotelbooking.bookingservice.dto.kafka.BookingConfirmed;
+import com.hotelbooking.bookingservice.entity.BookingEntity;
 import com.hotelbooking.bookingservice.enums.BookingStatus;
+import com.hotelbooking.bookingservice.enums.PaymentMethod;
+import com.hotelbooking.bookingservice.repository.BookingRepository;
 import com.hotelbooking.bookingservice.service.BookingService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+
 
 import lombok.RequiredArgsConstructor;
 
@@ -26,6 +35,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -33,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.validation.annotation.Validated;
 
 import org.springframework.security.access.prepost.PreAuthorize;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 
 @RestController
 @Validated
@@ -40,6 +51,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 @RequestMapping({"/bookings", ""})
 public class BookingController {
     private final BookingService bookingService;
+    private final OutboxRelay outboxRelay;
+    private final BookingRepository bookingRepository;
 
     @GetMapping("/count")
     public CountBookingsResponse countBookings(
@@ -109,5 +122,35 @@ public class BookingController {
                         .message("Lấy danh sách booking hôm nay của khách sạn thành công")
                         .data(bookingService.getBookingToday(hotelId, null, BookingStatus.CHECKEDIN, pageable))
                         .build();
+    }
+
+    @PostMapping("/test-outbox")
+    public ApiResponse<?> testOutbox(){
+        BookingDetail bc = new BookingDetail();
+        bc.setBookingId(UUID.randomUUID());
+
+        outboxRelay.saveEvent("booking-events", new BookingConfirmed(UUID.randomUUID(), "BookingConfirmed", bc));
+
+        BookingEntity b = new BookingEntity();
+        b.setId(UUID.randomUUID());
+        b.setHotelId(UUID.randomUUID());
+        b.setCurrency("VND");
+        b.setCustomerId(UUID.randomUUID());
+        b.setCheckinDate(LocalDate.now());
+        b.setCheckoutDate(LocalDate.now().plusDays(1));
+        b.setFinalAmount(BigDecimal.valueOf(1000));
+        b.setStatus(BookingStatus.CONFIRMED);
+        b.setNumAdults(2);
+        b.setOriginalAmount(BigDecimal.valueOf(1000));
+        b.setPaymentMethod(PaymentMethod.CREDIT_CARD);
+        b.setCreatedAt(Instant.now());
+        b.setIsDeleted(false);
+        b.setIdempotencyKey(UUID.randomUUID().toString());
+        
+        bookingRepository.save(b);
+        return ApiResponse.<Void>builder()
+                            .code(200)
+                            .message("Test outbox api thành công")
+                            .build();
     }
 }

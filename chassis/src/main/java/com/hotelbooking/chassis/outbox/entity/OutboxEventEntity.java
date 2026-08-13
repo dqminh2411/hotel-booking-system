@@ -12,6 +12,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,7 +34,8 @@ public class OutboxEventEntity {
     @Column(name = "topic", nullable = false)
     private String topic;
 
-    @Column(name = "payload", nullable = false, columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;
 
     @Column(name = "published", nullable = false)
