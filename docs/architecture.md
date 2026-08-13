@@ -363,6 +363,7 @@
 | Client Frontend | Keycloak | HTTP/REST | Đăng nhập SSO, Refresh Token, Userinfo. |
 | Client Frontend | API Gateway | HTTP/REST | Gọi API chức năng nghiệp vụ hệ thống. |
 | API Gateway | Keycloak | HTTP/REST | Tải JWKS Public Keys để verify JWT Signature. |
+| Place Booking Service, Hotel Service, User Service, Booking Service,  Notification Service, Promotion Service | Keycloak | HTTP REST | Tải JWKS Public Keys để verify JWT Signature | 
 | API Gateway | Eureka Server | REST | Đăng ký instance Gateway và tra cứu service list. |
 | API Gateway | Microservices | REST | Direct routing theo tên service (`lb://SERVICE-NAME`). |
 | Hotel Service | MinIO | S3 API (HTTP) | Upload/Download hình ảnh khách sạn & phòng. |
@@ -371,19 +372,23 @@
 | Promotion Service | Redis | RESP (TCP) | Redis Lock & Counter chống vượt quá giới hạn coupon. |
 | Place Booking Service | User Service | REST Sync | Kiểm tra tài khoản khách hàng active. |
 | Place Booking Service | Hotel Service | REST Sync | Kiểm tra thông tin giá & loại phòng. |
-| Hotel Service | Booking Service | REST Sync | Truy vấn số lượng phòng active để tính availability. |
+| Place Booking Service | Booking Service | REST Sync | Truy vấn số lượng phòng active để tính availability. |
 | Place Booking Service | Kafka Broker | Kafka TCP | Publish commands (`booking-commands`, `payment-commands`, `promotion-commands`, `notification-commands`). |
 | Booking / Payment / Promotion | Kafka Broker | Kafka TCP | Consume commands và publish events tương ứng. |
 | Notification Service | Kafka Broker | Kafka TCP | Consume notification commands & promotion active notifications. |
-| Microservices | OTel Collector | OTLP gRPC (4317) | Gửi OpenTelemetry traces. |
-| Microservices | Shared Audit Volume | File I/O | Ghi file `/var/log/audit/*.log`. |
+| Microservices | OTel Collector | OTLP/HTTP (4318) | Gửi OpenTelemetry traces. |
 | OTel Collector | Elasticsearch | HTTP REST (9200) | Ghi Audit Log records vào ES index `audit-logs-*`. |
-| OTel Collector | Jaeger | OTLP / gRPC | Chuyển tiếp traces data sang Jaeger Trace Engine. |
+| OTel Collector | Jaeger | OTLP/gRPC (4317) | Chuyển tiếp traces data sang Jaeger Trace Engine. |
+| Jaeger | Elasticsearch | HTTP REST (9200) | Ghi và Truy vấn dữ liệu Traces. |
 | Kibana | Elasticsearch | HTTP REST (9200) | Trực quan hóa Audit Log Dashboard. |
 
 ---
 
-## 4. Sơ đồ Kiến trúc Hệ thống theo Subsystem
+## 4. Sơ đồ Kiến trúc Hệ thống
+
+Sơ đồ kiến trúc hệ thống tổng quan
+
+![Sơ đồ kiến trúc hệ thống tổng quan](./asset/architecture.png)
 
 Để đảm bảo các sơ đồ trực quan, dễ đọc và không bị chồng chéo, kiến trúc hệ thống được phân chia thành các sơ đồ con (subsystem diagram). Mỗi sơ đồ tập trung vào các thành phần nội bộ của subsystem đó; các subsystem bên ngoài có giao tiếp được biểu diễn bằng các **Hộp đen Tượng trưng**.
 

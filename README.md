@@ -33,30 +33,10 @@ Hệ thống tích hợp giải pháp giám sát toàn diện gồm:
 
 ---
 
-## Sơ đồ Kiến trúc Hệ thống (Tóm tắt)
+## Sơ đồ Kiến trúc Hệ thống
 
-```mermaid
-flowchart TD
-    Client["Frontend App\n(React + Vite - Port 3000)"] -->|1. OAuth2 Login / Get Token| KC["Keycloak IdP\n(:8085 + keycloak-db :5439)"]
-    Client -->|2. REST API Request + JWT| GW["API Gateway\n(:8080)"]
 
-    GW <-->|JWKS Signature Verify| KC
-    GW <-->|Discover Services| Eureka["Eureka Server\n(:8761)"]
-
-    GW -->|Route REST Requests| Services["Lớp Microservices Nghiệp vụ\n- User Service (:5002) ──> user_db (:5432)\n- Hotel Service (:5003) ──> hotel_db (:5433)\n- Booking Service (:5004) ──> booking_db (:5434)\n- Place Booking Service (:5001) ──> place_booking_db (:5435)\n- Payment Service (:5005) ──> payment_db (:5436)\n- Promotion Service (:5007) ──> promotion_db (:5438)\n- Notification Service (:5006) ──> notification_db (:5437)"]
-
-    Services <-->|Cache Search & Stock/Coupon Lock| Redis[("Redis Cache & Lock\n(:6380)")]
-    Services <-->|Upload / Download Images| MinIO["MinIO Object Storage\n(:9000/9001)"]
-    Services <-->|Saga Commands & Events| Kafka["Kafka Message Broker\n(:9092)"]
-
-    GW -.->|OTLP Traces & Audit Logs| OTel["OpenTelemetry Collector\n(:4317 / :4318)"]
-    Services -.->|OTLP Traces & Audit Logs| OTel
-
-    OTel -->|Trace Spans Timeline| Jaeger["Jaeger Tracing UI\n(:16686)"]
-    OTel -->|Bulk Audit Logs| ES[("Elasticsearch Engine\n(:9200)")]
-    Kibana["Kibana Audit Dashboard\n(:5601)"] <-->|Query Log Trends| ES
-```
-
+![Sơ đồ kiến trúc hệ thống](./docs/asset/architecture.PNG)
 ---
 
 ## Thành phần & Cổng kết nối (Ports)
@@ -64,24 +44,24 @@ flowchart TD
 | Thành phần | Vai trò / Trách nhiệm | Công nghệ | Host Port |
 |---|---|---|---:|
 | **Frontend** | Giao diện Customer, Staff, Owner và Admin | React + Vite | `3000` |
-| **API Gateway** | Point-of-entry, routing, JWKS JWT validation, OTel Traces | Spring Cloud Gateway | `8080` |
+| **API Gateway** | Entrypoint, routing, xác thực JWT với JWKS, OTel Traces | Spring Cloud Gateway | `8080` |
 | **Eureka Server** | Service Registry & Discovery | Spring Cloud Netflix Eureka | `8761` |
-| **Keycloak** | Identity Provider (IdP), OAuth2/OIDC SSO, Realm management | Keycloak 26.7.0 | `8085` |
-| **keycloak-db** | Cơ sở dữ liệu tài khoản & realm Keycloak | PostgreSQL 16 | `5439` |
-| **user-service** | Quản lý hồ sơ người dùng, tài khoản, tenant & subscription | Spring Boot 3 + PostgreSQL (`5432`) | `5002` |
-| **hotel-service** | Khách sạn, loại phòng, tiện ích, tích hợp MinIO & Redis | Spring Boot 3 + PostgreSQL (`5433`) | `5003` |
-| **booking-service** | Vòng đời đơn đặt phòng, lịch sử, Redis room lock | Spring Boot 3 + PostgreSQL (`5434`) | `5004` |
-| **place-booking-service** | Saga Orchestration điều phối luồng đặt phòng & thanh toán | Spring Boot 3 + PostgreSQL (`5435`) | `5001` |
-| **payment-service** | Xử lý thanh toán, refund, VNPay, Circuit Breaker | Spring Boot 3 + PostgreSQL (`5436`) | `5005` |
-| **promotion-service** | Quản lý mã giảm giá, coupon, Redis voucher lock | Spring Boot 3 + PostgreSQL (`5438`) | `5007` |
-| **notification-service** | Gửi email, FCM push notification, log thông báo | Spring Boot 3 + PostgreSQL (`5437`) | `5006` |
-| **Redis** | In-memory cache thông tin khách sạn & distributed lock | Redis 7.2 Alpine | `6380` |
+| **Keycloak** | Xác thực & cấp phát JWT token, OAuth2/OIDC SSO, phân quyền vai trò, quản lý Realm | Keycloak 26.7.0 | `8085` |
+| **keycloak-db** | Cơ sở dữ liệu tài khoản, vai trò & realm Keycloak | PostgreSQL 16 | `5439` |
+| **user-service** | Quản lý hồ sơ user, tenant (chủ khách sạn) & gói đăng ký | Spring Boot 3 + PostgreSQL (`5432`) | `5002` |
+| **hotel-service** | Khách sạn, loại phòng, tiện ích, MinIO (dùng Redis cache thông tin khách sạn) | Spring Boot 3 + PostgreSQL (`5433`) | `5003` |
+| **booking-service** | Quản lý đơn đặt phòng, lịch sử đặt phòng, phòng còn trống (dùng redis chống race condition khi đặt) | Spring Boot 3 + PostgreSQL (`5434`) | `5004` |
+| **place-booking-service** | Saga Orchestration điều phối luồng đặt phòng, thanh toán, khuyến mãi và bù trừ | Spring Boot 3 + PostgreSQL (`5435`) | `5001` |
+| **payment-service** | Xử lý thanh toán | Spring Boot 3 + PostgreSQL (`5436`) | `5005` |
+| **promotion-service** | Quản lý Coupon, khuyến mãi (dùng redis chống race condition khi sử dụng coupon ) | Spring Boot 3 + PostgreSQL (`5438`) | `5007` |
+| **notification-service** | Gửi email, FCM push notification | Spring Boot 3 + PostgreSQL (`5437`) | `5006` |
+| **Redis** | Cache thông tin khách sạn, xử lý race condition đặt phòng | Redis 7.2 Alpine | `6380` |
 | **MinIO** | Object Storage lưu trữ hình ảnh khách sạn, phòng, avatar | MinIO | `9000` / `9001` |
-| **Kafka & Zookeeper** | Event Streaming Broker cho giao tiếp bất đồng bộ | Apache Kafka + Zookeeper | `9092` / `2181` |
-| **OTel Collector** | Agent thu thập Traces (OTLP gRPC) & Audit Logs pipeline | OTel Collector Contrib | `4317` / `4318` |
-| **Jaeger** | Hệ thống tra cứu Distributed Tracing UI | Jaeger 2.20 | `16686` |
-| **Elasticsearch** | Storage Engine lưu trữ Audit Logs & Indexing | Elasticsearch 8.13 | `9200` |
-| **Kibana** | Dashboard trực quan hóa Audit Log Trends & Analytics | Kibana 8.13 | `5601` |
+| **Kafka & Zookeeper** | Message Broker cho giao tiếp bất đồng bộ | Apache Kafka + Zookeeper | `9092` |
+| **OTel Collector** |  Thu thập Traces  & Audit Logs | OTel Collector Contrib | `4317` / `4318` |
+| **Jaeger** | Backend và giao diện Distributed Tracing  | Jaeger 2.20 | `16686` |
+| **Elasticsearch** | CSDL lưu trữ Audit Logs & dữ liệu Tracing | Elasticsearch 8.13 | `9200` |
+| **Kibana** | Dashboard trực quan hóa Audit Log | Kibana 8.13 | `5601` |
 
 ---
 
