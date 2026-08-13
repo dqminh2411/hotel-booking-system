@@ -1,6 +1,6 @@
-package com.hotelbooking.bookingservice.repository;
+package com.place_booking_service.repository;
 
-import com.hotelbooking.bookingservice.entity.OutboxEventEntity;
+import com.place_booking_service.entity.OutboxEventEntity;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
