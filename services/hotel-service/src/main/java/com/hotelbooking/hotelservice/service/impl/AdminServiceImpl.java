@@ -204,32 +204,6 @@ public class AdminServiceImpl implements AdminService{
         });
     }
 
-    private static final TextMapSetter<Map<String, String>> MAP_SETTER =
-        (carrier, key, value) -> carrier.put(key, value);
-
-    private void saveOutboxEvent(Object event, String topic) {
-        try {
-            OutboxEventEntity outbox = new OutboxEventEntity();
-            outbox.setId(UUID.randomUUID());
-            outbox.setTopic(topic);
-            outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setPublished(Boolean.FALSE);
-            outbox.setCreatedAt(Instant.now());
-            
-            SpanContext spanCtx = Span.current().getSpanContext();
-            if (spanCtx.isValid()) {
-                Map<String, String> carrier = new java.util.HashMap<>();
-                GlobalOpenTelemetry.getPropagators()
-                    .getTextMapPropagator()
-                    .inject(Context.current(), carrier, MAP_SETTER);
-                outbox.setTraceparent(carrier.get("traceparent"));
-            }
-            
-            outboxEventRepository.save(outbox);
-        } catch (Exception ex) {
-            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
 
     // http://minio:9000/hotel-images/imgName
     private String extractImgName(String imgUrl){

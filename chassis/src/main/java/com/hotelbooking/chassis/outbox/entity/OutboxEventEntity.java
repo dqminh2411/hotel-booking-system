@@ -38,6 +38,10 @@ public class OutboxEventEntity {
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     private String payload;
 
+    @Column(name = "status")
+    @Builder.Default
+    private String status = OutboxEventStatus.PENDING.name();
+
     @Column(name = "published", nullable = false)
     @Builder.Default
     private Boolean published = false;
