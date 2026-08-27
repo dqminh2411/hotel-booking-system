@@ -8,14 +8,14 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
 @EnableScheduling
-@EntityScan(basePackages = {
-    "com.hotelbooking.userservice.entity",
-    "com.hotelbooking.chassis.outbox.entity"
-})
-@EnableJpaRepositories(basePackages = {
-    "com.hotelbooking.userservice.repository",
-    "com.hotelbooking.chassis.outbox.repository"
-})
+// @EntityScan(basePackages = {
+//     "com.hotelbooking.userservice.entity",
+//     "com.hotelbooking.chassis.outbox.entity"
+// })
+// @EnableJpaRepositories(basePackages = {
+//     "com.hotelbooking.userservice.repository",
+//     "com.hotelbooking.chassis.outbox.repository"
+// })
 public class UserServiceApplication {
 
 	public static void main(String[] args) {

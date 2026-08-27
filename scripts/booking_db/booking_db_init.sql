@@ -89,9 +89,11 @@ CREATE TABLE IF NOT EXISTS booking_info (
 -- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS outbox_events (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100),
     topic         VARCHAR(100) NOT NULL,
     payload       JSONB       NOT NULL,
     status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    published     BOOLEAN     NOT NULL DEFAULT false,   
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
 
@@ -100,7 +102,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     locked_until  TIMESTAMP,
     is_deleted    BOOLEAN     NOT NULL DEFAULT false,
     traceparent   VARCHAR(55),
-    event_type VARCHAR(100),
+    
     CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
 );
 

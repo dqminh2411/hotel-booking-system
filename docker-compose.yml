@@ -63,7 +63,9 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: gateway
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -147,26 +149,26 @@ services:
   #   networks:
   #     - app-network
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
-    volumes:
-      - ./minio/data:/data
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: minio
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: admin
+  #     MINIO_ROOT_PASSWORD: password123
+  #   volumes:
+  #     - ./minio/data:/data
+  #   command: server /data --console-address ":9001"
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
   user-db:
     image: postgres:16-alpine
@@ -262,25 +264,25 @@ services:
     networks:
       - app-network
 
-  # promotion-db:
-  #   image: postgres:16-alpine
-  #   # restart: unless-stopped
-  #   ports:
-  #     - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
-  #   environment:
-  #     POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
-  #     POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
-  #     POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
-  #   volumes:
-  #     - promotion-db-data:/var/lib/postgresql/data
-  #     - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
-  #   healthcheck:
-  #     test: [ "CMD-SHELL", "pg_isready -U ${PROMOTION_DB_USER:-postgres}" ]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 10
-  #   networks:
-  #     - app-network
+  promotion-db:
+    image: postgres:16-alpine
+    # restart: unless-stopped
+    ports:
+      - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
+    environment:
+      POSTGRES_DB: ${PROMOTION_DB_NAME:-promotion_db}
+      POSTGRES_USER: ${PROMOTION_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
+    volumes:
+      - promotion-db-data:/var/lib/postgresql/data
+      - ./scripts/promotion_db/promotion_db_init.sql:/docker-entrypoint-initdb.d/promotion_db_init.sql:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PROMOTION_DB_USER:-postgres}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
 
   # notification-db:
   #   image: postgres:16-alpine
@@ -340,7 +342,9 @@ services:
       EMAIL_VERIFICATION_URL: ${EMAIL_VERIFICATION_URL:-http://localhost:3000/verify-email}
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: user-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -390,7 +394,9 @@ services:
       MINIO_BUCKET_HOTEL_IMAGES: ${MINIO_BUCKET_HOTEL_IMAGES:-hotel-images}
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: hotel-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -444,7 +450,9 @@ services:
       KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs}
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: booking-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -502,7 +510,9 @@ services:
       REDIS_PORT: 6379
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: place-booking-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -563,7 +573,9 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       # ── OpenTelemetry Java Agent ──
       OTEL_SERVICE_NAME: payment-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_TRACES_SAMPLER: parentbased_always_on
       OTEL_PROPAGATORS: tracecontext,baggage
@@ -591,48 +603,48 @@ services:
       - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
       - audit-logs:/var/log/audit
 
-  # promotion-service:
-  #   build: ./services/promotion-service
-  #   ports:
-  #     - "${PROMOTION_SERVICE_PORT:-5007}:5000"
-  #   env_file:
-  #     - .env
-  #   environment:
-  #     DB_HOST: ${PROMOTION_DB_HOST:-promotion-db}
-  #     DB_PORT: ${PROMOTION_DB_PORT:-5432}
-  #     DB_NAME: ${PROMOTION_DB_NAME:-promotion_db}
-  #     DB_USER: ${PROMOTION_DB_USER:-postgres}
-  #     DB_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
-  #     SERVER_PORT: 5000
-  #     KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-  #     KAFKA_CONSUMER_GROUP: promotion-group
-  #     EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
-  #     EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
-  #     REDIS_HOST: redis
-  #     REDIS_PORT: 6379
-  #   depends_on:
-  #     promotion-db:
-  #       condition: service_healthy
-  #     kafka:
-  #       condition: service_healthy
-  #     eureka-server:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     chassis-init:
-  #       condition: service_completed_successfully
-  #   healthcheck:
-  #     test: [ "CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP" ]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 12
-  #     start_period: 30s
-  #   networks:
-  #     - app-network
-  #   volumes:
-  #     - ./services/promotion-service:/app
-  #     - ./chassis:/app/chassis
-  #     - maven-cache:/root/.m2
+  promotion-service:
+    build: ./services/promotion-service
+    ports:
+      - "${PROMOTION_SERVICE_PORT:-5007}:5000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${PROMOTION_DB_HOST:-promotion-db}
+      DB_PORT: ${PROMOTION_DB_PORT:-5432}
+      DB_NAME: ${PROMOTION_DB_NAME:-promotion_db}
+      DB_USER: ${PROMOTION_DB_USER:-postgres}
+      DB_PASSWORD: ${PROMOTION_DB_PASSWORD:-postgres}
+      SERVER_PORT: 5000
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+      KAFKA_CONSUMER_GROUP: promotion-group
+      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      promotion-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    volumes:
+      - ./services/promotion-service:/app
+      - ./chassis:/app/chassis
+      - maven-cache:/root/.m2
 
   # notification-service:
   #   build: ./services/notification-service
@@ -726,23 +738,23 @@ services:
       - app-network
 
   # ── Elasticsearch ──────────────────────────────────────────────────────
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false      # Tắt auth cho dev
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g       # Giới hạn RAM
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    networks:
-      - app-network
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+  #   environment:
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false      # Tắt auth cho dev
+  #     - ES_JAVA_OPTS=-Xms1g -Xmx1g       # Giới hạn RAM
+  #   ports:
+  #     - "9200:9200"
+  #   volumes:
+  #     - elasticsearch_data:/usr/share/elasticsearch/data
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   networks:
+  #     - app-network
 
   # ── Kibana ─────────────────────────────────────────────────────────────
   # kibana:
@@ -758,53 +770,53 @@ services:
   #     - app-network
 
   # ── ES Init — Tạo index template cho Audit Log ──────────────────────
-  es-init:
-    image: curlimages/curl:8.5.0
-    restart: "no"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    volumes:
-      - ./infra/elasticsearch:/etc/elasticsearch:ro
-    entrypoint: ["sh", "/etc/elasticsearch/init-audit-template.sh"]
-    networks:
-      - app-network
+  # es-init:
+  #   image: curlimages/curl:8.5.0
+  #   restart: "no"
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./infra/elasticsearch:/etc/elasticsearch:ro
+  #   entrypoint: ["sh", "/etc/elasticsearch/init-audit-template.sh"]
+  #   networks:
+  #     - app-network
 
   # ── OTel Collector ─────────────────────
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.158.0
-    command: ["--config=/etc/otel/otel-collector.yaml"]
-    environment:
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-    volumes:
-      - ./infra/otel:/etc/otel:ro
-      # Mount shared audit log volume — Collector đọc file từ đây
-      - audit-logs:/var/log/audit:ro
-    ports:
-      - "4317:4317"    # OTLP gRPC — service gửi traces/metrics đến đây
-      - "4318:4318"    # OTLP HTTP — alternative cho gRPC
-      - "8888:8888"    # Collector internal metrics (Prometheus scrape)
-    depends_on:
-      - elasticsearch
-      - jaeger
-    networks:
-      - app-network
+  # otel-collector:
+  #   image: otel/opentelemetry-collector-contrib:0.158.0
+  #   command: ["--config=/etc/otel/otel-collector.yaml"]
+  #   environment:
+  #     - ENVIRONMENT=${ENVIRONMENT:-development}
+  #   volumes:
+  #     - ./infra/otel:/etc/otel:ro
+  #     # Mount shared audit log volume — Collector đọc file từ đây
+  #     - audit-logs:/var/log/audit:ro
+  #   ports:
+  #     - "4317:4317"    # OTLP gRPC — service gửi traces/metrics đến đây
+  #     - "4318:4318"    # OTLP HTTP — alternative cho gRPC
+  #     - "8888:8888"    # Collector internal metrics (Prometheus scrape)
+  #   depends_on:
+  #     - elasticsearch
+  #     - jaeger
+  #   networks:
+  #     - app-network
 
-  # ── Jaeger (Distributed Tracing backend) ──────────────────────────────
-  jaeger:
-    image: jaegertracing/jaeger:2.20.0
-    command: ["--config=/etc/jaeger/jaeger.yaml"]
-    volumes:
-      - ./infra/jaeger:/etc/jaeger:ro
-    ports:
-      - "16686:16686"  # Jaeger UI
-      - "4317"   # OTLP gRPC (Jaeger nhận từ Collector)
-      - "4318"   # OTLP HTTP
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-    networks:
-      - app-network
+  # # ── Jaeger (Distributed Tracing backend) ──────────────────────────────
+  # jaeger:
+  #   image: jaegertracing/jaeger:2.20.0
+  #   command: ["--config=/etc/jaeger/jaeger.yaml"]
+  #   volumes:
+  #     - ./infra/jaeger:/etc/jaeger:ro
+  #   ports:
+  #     - "16686:16686"  # Jaeger UI
+  #     - "4317"   # OTLP gRPC (Jaeger nhận từ Collector)
+  #     - "4318"   # OTLP HTTP
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:
