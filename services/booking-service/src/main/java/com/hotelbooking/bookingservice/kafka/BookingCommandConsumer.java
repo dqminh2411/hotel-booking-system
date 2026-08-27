@@ -9,6 +9,7 @@ import com.hotelbooking.bookingservice.dto.kafka.ConfirmBooking;
 import com.hotelbooking.bookingservice.dto.kafka.CreateBookingCommand;
 import com.hotelbooking.bookingservice.enums.ReserveResult;
 import com.hotelbooking.bookingservice.exception.AppException;
+import com.hotelbooking.bookingservice.exception.InsufficientRoomException;
 import com.hotelbooking.bookingservice.service.BookingService;
 import com.hotelbooking.bookingservice.service.RoomInventoryRedisService;
 
@@ -84,16 +85,30 @@ public class BookingCommandConsumer {
         }
 
         boolean isRedisDown = (result == ReserveResult.UNKNOWN);
+        List<UUID> listSortedRoomTypeId = roomTypeQuantities.keySet().stream()
+                                                            .distinct()
+                                                            .sorted()
+                                                            .toList();
+
         try {
-            List<UUID> listSortedRoomTypeId = roomTypeQuantities.keySet().stream()
-                                                                .distinct()
-                                                                .sorted()
-                                                                .toList();
-            bookingService.handleCreateBooking(command, listSortedRoomTypeId, !isRedisDown);
+            bookingService.handleCreateBooking(command, listSortedRoomTypeId);
+        } catch (InsufficientRoomException e) {
+            log.warn("Không đủ phòng khi tạo booking {}: {}", command.bookingId(), e.getMessage());
+
+            if (!isRedisDown) { // chỉ release khi redis còn sống và mình đã trừ trước đó
+                roomInventoryRedisService.release(command.bookingId(), roomTypeQuantities, command.checkin(), command.checkout());
+            }
+
+            bookingService.saveOutboxEvent(
+                    new BookingFailed(
+                        command.sagaId(),
+                        "BookingFailed",
+                        bookingService.toBookingDetail(command),
+                        "Loại phòng bạn yêu cầu không còn đủ. Hãy quay lại và chọn lại phòng khác nhé."));
         } catch (Exception e) {
-            log.error("Lỗi khi tạo booking");
-            
-            if (!isRedisDown) { // tránh lỗi gọi redis, chỉ release lại số lượng khi redis còn sống và mình đã trừ
+            log.error("Lỗi khi tạo booking {}", command.bookingId(), e);
+
+            if (!isRedisDown) {
                 roomInventoryRedisService.release(command.bookingId() ,roomTypeQuantities, command.checkin(), command.checkout());
             }
             throw new AppException("BOOKING_FAILED", "Tạo booking thất bại", HttpStatus.INTERNAL_SERVER_ERROR);

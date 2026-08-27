@@ -48,4 +48,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse(ex.getCode(), ex.getMessage()));
     }
+
+    @ExceptionHandler(InsufficientRoomException.class)
+    public ResponseEntity<ErrorResponse> handleInsufficientRoom(InsufficientRoomException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("ROOM_NOT_ENOUGH", ex.getMessage()));
+    }
 }
