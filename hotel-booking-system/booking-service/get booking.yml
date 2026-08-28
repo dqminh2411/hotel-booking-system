@@ -1,0 +1,27 @@
+info:
+  name: get booking
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://localhost:5004/bookings/:bookingId
+  params:
+    - name: bookingId
+      value: b8278333-1b38-41cb-881b-1a9109aae600
+      type: path
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const token = bru.getVar("access_token");
+        req.setHeader("Authorization", `Bearer ${token}`);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

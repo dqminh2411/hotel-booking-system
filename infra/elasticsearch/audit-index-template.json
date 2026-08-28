@@ -1,0 +1,37 @@
+{
+  "index_patterns": ["hotelhub-audit-logs*"],
+  "data_stream": {},
+  "priority": 200,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": "true",
+      "properties": {
+        "logId":        { "type": "keyword" },
+        "timestamp":    { "type": "date" },
+        "eventType":    { "type": "keyword" },
+        "message":      { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 }}},
+        "severity":     { "type": "keyword" },
+        "actorId":      { "type": "keyword" },
+        "actorType":    { "type": "keyword" },
+        "requestIp":    { "type": "keyword" },
+        "targetId":     { "type": "keyword" },
+        "targetType":   { "type": "keyword" },
+        "serviceName":  { "type": "keyword" },
+        "traceId":      { "type": "keyword" },
+        "spanId":       { "type": "keyword" },
+        "httpMethod":   { "type": "keyword" },
+        "endpoint":     { "type": "keyword" },
+        "resultStatus": { "type": "keyword" },
+        "durationMs":   { "type": "long" },
+        "errorCode":    { "type": "keyword" },
+        "errorMessage": { "type": "text" },
+        "extraData":    { "type": "object", "dynamic": true }
+      }
+    }
+  }
+}

@@ -11,6 +11,11 @@ import com.payment_service.dto.PaymentRefunded;
 import com.payment_service.dto.ProcessPayment;
 import com.payment_service.dto.RefundPayment;
 
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
+
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 
@@ -18,6 +23,19 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 public class PaymentService {
 
     @CircuitBreaker(name = "paymentGateway", fallbackMethod = "paymentGatewayFallback")
+    @AuditLog(
+        eventType = AuditEventType.PROCESS_PAYMENT,
+        message = "Process payment via gateway",
+        severity = Severity.INFO,
+        targetType = TargetType.PAYMENT,
+        targetId = "#processPayment.bookingId",
+        extraData = {
+            "amount=#processPayment.amount",
+            "currency=#processPayment.currency",
+            "paymentMethod=#processPayment.paymentMethod",
+            "sagaId=#processPayment.sagaId"
+        }
+    )
     public PaymentProcessResult processPayment(ProcessPayment processPayment) {
 
         // Mock payment gateway: 90% success

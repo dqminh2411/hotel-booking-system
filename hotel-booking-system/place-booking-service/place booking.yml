@@ -1,0 +1,47 @@
+info:
+  name: place booking
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:8080/place-booking
+  body:
+    type: json
+    data: |-
+      {
+        "userId": "587ae577-e49a-4c71-8df9-67ae4a7ce752",
+        "hotelId": "b0000000-0000-0000-0000-000000000001",
+        "roomTypeList": [
+          {
+            "roomTypeId": "d1000000-0000-0000-0000-000000000005",
+            "bookingQuantity": 1,
+            "name": "Presidential Suite",
+            "bedCount": 1,
+            "price": 8500000,
+            "totalQuantity": 1
+          }
+        ],
+        "checkin": "2026-09-29",
+        "checkout": "2026-09-30",
+        "numAdults": 2,
+        "totalAmount": 8500000,
+        "currency": "VND",
+        "paymentMethod": "CREDIT_CARD",
+        "idempotencyKey": "{{$guid}}", 
+        "paymentToken": "tok_test_123",
+        "forceToken": "{{$guid}}"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const token = bru.getVar("access_token");
+        req.setHeader("Authorization", `Bearer ${token}`);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

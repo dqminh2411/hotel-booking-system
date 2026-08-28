@@ -27,7 +27,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    // add keycloak id from jwt
+    
     public UserResponse createUser(UUID keycloakId, CreateUserRequest request) {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         String phone = request.phone().trim();

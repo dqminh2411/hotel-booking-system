@@ -7,7 +7,11 @@ import com.hotelbooking.bookingservice.dto.kafka.BookingFailed;
 import com.hotelbooking.bookingservice.dto.kafka.CancelBooking;
 import com.hotelbooking.bookingservice.dto.kafka.ConfirmBooking;
 import com.hotelbooking.bookingservice.dto.kafka.CreateBookingCommand;
+import com.hotelbooking.bookingservice.enums.ReserveResult;
+import com.hotelbooking.bookingservice.exception.AppException;
+import com.hotelbooking.bookingservice.exception.InsufficientRoomException;
 import com.hotelbooking.bookingservice.service.BookingService;
+import com.hotelbooking.bookingservice.service.RoomInventoryRedisService;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -15,11 +19,11 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
+import org.springframework.http.HttpStatus;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -30,7 +34,7 @@ import org.springframework.stereotype.Component;
 public class BookingCommandConsumer {
     ObjectMapper objectMapper;
     BookingService bookingService;
-    RedissonClient redissonClient;
+    RoomInventoryRedisService roomInventoryRedisService;
 
     @KafkaListener(topics = "booking-commands")
     public void consume(String message) throws JsonProcessingException{
@@ -51,56 +55,63 @@ public class BookingCommandConsumer {
     }
 
     private void handleLockCreateBooking(CreateBookingCommand command){
-        List<UUID> listRoomTypeId = command.roomTypeList().stream()
-                    .map(rt -> rt.roomTypeId())
-                    .distinct() 
-                    .sorted()
-                    .toList();
 
-        List<RLock> listRLock = listRoomTypeId.stream()
-                        // key = "lock:booking:d0001...."
-                        .map(rt -> redissonClient.getLock("lock:booking:" + rt.toString()))
-                        .toList();
+        Map<UUID, Integer> roomTypeQuantities = command.roomTypeList().stream()
+                                                .collect(Collectors.toMap(
+                                                    CreateBookingCommand.RoomTypeItem::roomTypeId,
+                                                    CreateBookingCommand.RoomTypeItem::bookingQuantity,
+                                                    Integer::sum
+                                                ));
         
-        RLock multiLock = redissonClient.getMultiLock(listRLock.toArray(new RLock[0]));
-        boolean isLocked = false;
+        ReserveResult result;
         try {
-            // giải thích tham số:
-            // 5: wait time - đợi xin khóa tối đa 5s
-            // -1: least time - thời gian nhả khóa (-1 là khi khóa hết hạn mà chưa xong thì tự động gia hạn)
-            // có thể cho wait time lên 10s
-            // trong thực tế, dự định để leaseTime = 15s
-            isLocked = multiLock.tryLock(5, -1, TimeUnit.SECONDS);
-            if (!isLocked) {
-                // khóa lỗi thì trả về việc tạo booking false đi (tại 5-10s là cx đủ lâu để biết lỗi rồi)
+            result = roomInventoryRedisService.tryReserve(command.bookingId(), roomTypeQuantities, command.checkin(), command.checkout());
+
+        } catch (Exception e) {
+            log.warn("Redis lỗi, không chọn chặn sớm --> truy vấn CSDL như bình thường");
+            // vì bị lỗi redis không còn làm chốt chặn trả lời sớm --> gọi db nhưng sẽ bị chậm đi
+            result = ReserveResult.UNKNOWN;
+        }
+
+        if(result == ReserveResult.REJECTED){
+            log.warn("Từ chối booking {} do hết phòng", command.bookingId());
                 bookingService.saveOutboxEvent(
                     new BookingFailed(
                         command.sagaId(),
                         "BookingFailed",
                         bookingService.toBookingDetail(command),
-                        "Hệ thống đang bận/quá tải, vui lòng thử lại"));
-                return;
-            }
-            log.info("Lấy khóa thành công {}", listRoomTypeId);
-            bookingService.handleCreateBooking(command, listRoomTypeId);
+                        "Phòng bạn chọn đã hết chỗ trong những ngày này. Vui lòng chọn lại!"));
+            return;
+        }
 
-        } catch (InterruptedException ex) {
-            // cho trường hợp bị lỗi khi đang đứng chờ khóa
-            Thread.currentThread().interrupt();
-            log.error("Tiến trình chờ khóa bị ngắt", ex);
-            throw new RuntimeException("Lỗi máy chủ khi đang xử lý yêu cầu");
-        } catch(Exception e){
-            log.info("Lỗi khi xử lý đặt phòng: " + e.getMessage());
-            throw e;
-        } finally{
-            if(isLocked){
-                try {
-                    multiLock.unlock();
-                } catch (Exception e) {
-                    log.error("Lỗi khi trả khóa cho các phòng {}. (Khóa sẽ tự động hết hạn)", listRoomTypeId, e);
-                }
+        boolean isRedisDown = (result == ReserveResult.UNKNOWN);
+        List<UUID> listSortedRoomTypeId = roomTypeQuantities.keySet().stream()
+                                                            .distinct()
+                                                            .sorted()
+                                                            .toList();
+
+        try {
+            bookingService.handleCreateBooking(command, listSortedRoomTypeId);
+        } catch (InsufficientRoomException e) {
+            log.warn("Không đủ phòng khi tạo booking {}: {}", command.bookingId(), e.getMessage());
+
+            if (!isRedisDown) { // chỉ release khi redis còn sống và mình đã trừ trước đó
+                roomInventoryRedisService.release(command.bookingId(), roomTypeQuantities, command.checkin(), command.checkout());
             }
 
+            bookingService.saveOutboxEvent(
+                    new BookingFailed(
+                        command.sagaId(),
+                        "BookingFailed",
+                        bookingService.toBookingDetail(command),
+                        "Loại phòng bạn yêu cầu không còn đủ. Hãy quay lại và chọn lại phòng khác nhé."));
+        } catch (Exception e) {
+            log.error("Lỗi khi tạo booking {}", command.bookingId(), e);
+
+            if (!isRedisDown) {
+                roomInventoryRedisService.release(command.bookingId() ,roomTypeQuantities, command.checkin(), command.checkout());
+            }
+            throw new AppException("BOOKING_FAILED", "Tạo booking thất bại", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

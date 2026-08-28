@@ -17,12 +17,12 @@ import com.promotion.promotion_service.exception.BusinessException;
 import com.promotion.promotion_service.constant.promotion_usage.PromotionUsageStatus;
 import com.promotion.promotion_service.dto.kafka.*;
 import com.promotion.promotion_service.entity.PromotionUsageEntity;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.promotion.promotion_service.repository.CouponRepository;
 import com.promotion.promotion_service.repository.PromotionConditionRepository;
 import com.promotion.promotion_service.repository.PromotionRepository;
 import com.promotion.promotion_service.repository.PromotionScopeRepository;
 import com.promotion.promotion_service.repository.PromotionUsageRepository;
-import com.promotion.promotion_service.service.OutboxPublisherService;
 import com.promotion.promotion_service.service.PromotionService;
 import jakarta.ws.rs.BadRequestException;
 import lombok.AccessLevel;
@@ -53,7 +53,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final PromotionConditionRepository promotionConditionRepository;
     private final PromotionRepository promotionRepository;
     private final PromotionUsageRepository promotionUsageRepository;
-    private final OutboxPublisherService outboxPublisherService;
+    private final OutboxRelay outboxPublisherService;
 
 
     @Override
@@ -888,7 +888,7 @@ public class PromotionServiceImpl implements PromotionService {
         // nếu có yêu cầu dùng promotion bị trùng
         if (promotionUsageRepository.existsByIdempotencyKey(idempotencyKey)) {
             Optional<PromotionUsageEntity> existing = promotionUsageRepository.findByBookingId(command.getBookingId());
-            
+
             if (existing.isPresent() && existing.get().getStatus() != PromotionUsageStatus.CANCELLED) {
                 PromotionUsageEntity u = existing.get();
                 BigDecimal finalAmt = command.getTotalAmount().subtract(u.getDiscountAmount()).max(BigDecimal.ZERO);

@@ -1,0 +1,72 @@
+receivers:
+  # ── Nhận traces từ service qua OTLP ───────────────────────
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # ── Đọc Audit Log từ file riêng (ghi bởi AuditLogger qua Logback) ───
+  # Mỗi service ghi ra /var/log/audit/<service-name>-audit.log
+  # File chỉ chứa pure JSON audit entries, mỗi dòng 1 JSON object.
+  filelog/audit:
+    include:
+      - /var/log/audit/*.log
+    start_at: beginning
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+
+processors:
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: "development"
+        action: insert
+
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+
+  batch/audit:
+    send_batch_size: 10
+    timeout: 1s
+
+exporters:
+  # ── Traces → Jaeger (pipeline hiện tại, không thay đổi) ────────────
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # ── Audit Logs → Elasticsearch (pipeline MỚI) ─────────────────────
+  elasticsearch/audit:
+    endpoints: [http://elasticsearch:9200]
+    logs_index: hotelhub-audit-logs
+    mapping:
+      mode: raw
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 100
+
+  # ── Debug exporter ─────────────────────────────────────────────────
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    # Pipeline 1: Traces → Jaeger
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlp/jaeger]
+
+    # Pipeline 2: Audit Logs → Elasticsearch + Debug
+    logs/audit:
+      receivers: [filelog/audit]
+      processors: [batch/audit]
+      exporters: [elasticsearch/audit, debug]
+

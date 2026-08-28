@@ -44,8 +44,14 @@ public class HotelImageEntity {
     @Column(name = "url", nullable = false, length = 500)
     String url;
 
+    @Column(name = "object_name", nullable = false, length = 500)
+    String objectName;
+
     @Column(name = "is_cover", nullable = false)
     Boolean isCover = false;
+
+    @Column(name = "is_deleted", nullable = false)
+    Boolean isDeleted = false;
 
     @Column(name = "created_at", nullable = false)
     Instant createdAt;

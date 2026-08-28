@@ -247,10 +247,66 @@ CREATE INDEX idx_promotion_audit_logs_created_at
 -- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS outbox_events (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100),
     topic         VARCHAR(100) NOT NULL,
     payload       JSONB       NOT NULL,
-    published     BOOLEAN     NOT NULL DEFAULT false,
+    status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    published     BOOLEAN     NOT NULL DEFAULT false,   
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
-    is_deleted    BOOLEAN     NOT NULL DEFAULT false
+
+    retry_count   INTEGER     NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMP,
+    locked_until  TIMESTAMP,
+    is_deleted    BOOLEAN     NOT NULL DEFAULT false,
+    traceparent   VARCHAR(55),
+    
+    CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
 );
+
+-- =====================================================
+-- SAMPLE SEED DATA FOR TESTING
+-- =====================================================
+
+INSERT INTO promotions (
+    id, name, description, type, discount_type, discount_value, max_discount_amount,
+    min_booking_amount, min_nights, start_at, end_at, status, total_usage_limit, per_user_usage_limit, current_usage_count, stackable
+) VALUES (
+    'e1000000-0000-0000-0000-000000000001',
+    'Khuyến mãi chào hè 2026',
+    'Giảm 10% tối đa 500,000 VND cho đơn đặt phòng từ 1,000,000 VND khi sử dụng mã HE2026',
+    'COUPON',
+    'PERCENTAGE',
+    10.00,
+    500000.00,
+    1000000.00,
+    1,
+    '2026-01-01 00:00:00+00',
+    '2027-12-31 23:59:59+00',
+    'ACTIVE',
+    1000,
+    5,
+    0,
+    FALSE
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO coupons (
+    id, promotion_id, code, status, usage_limit, current_usage_count
+) VALUES (
+    'c1000000-0000-0000-0000-000000000001',
+    'e1000000-0000-0000-0000-000000000001',
+    'HE2026',
+    'ACTIVE',
+    1000,
+    0
+) ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO promotion_scopes (
+    id, promotion_id, scope_type, scope_ref_id
+) VALUES (
+    's1000000-0000-0000-0000-000000000001',
+    'e1000000-0000-0000-0000-000000000001',
+    'SYSTEM',
+    NULL
+) ON CONFLICT (id) DO NOTHING;
+

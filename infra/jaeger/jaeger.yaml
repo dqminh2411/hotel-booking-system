@@ -1,0 +1,38 @@
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 5s
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: es_backend
+
+extensions:
+  jaeger_storage:
+    backends:
+      es_backend:
+        elasticsearch:
+          server_urls:
+            - "http://elasticsearch:9200"
+          indices:
+            index_prefix: "jaeger"
+
+  jaeger_query:
+    storage:
+      traces: "es_backend"

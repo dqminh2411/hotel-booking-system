@@ -89,37 +89,78 @@ CREATE TABLE IF NOT EXISTS booking_info (
 -- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS outbox_events (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type VARCHAR(100),
     topic         VARCHAR(100) NOT NULL,
     payload       JSONB       NOT NULL,
-    published     BOOLEAN     NOT NULL DEFAULT false,
+    status        VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    published     BOOLEAN     NOT NULL DEFAULT false,   
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
     published_at  TIMESTAMP,
-    is_deleted    BOOLEAN     NOT NULL DEFAULT false
+
+    retry_count   INTEGER     NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMP,
+    locked_until  TIMESTAMP,
+    is_deleted    BOOLEAN     NOT NULL DEFAULT false,
+    traceparent   VARCHAR(55),
+    
+    CONSTRAINT chk_status CHECK (status IN ('PENDING','PROCESSING','PUBLISHED','DEAD_LETTER'))
 );
 
-CREATE TABLE IF NOT EXISTS roomtype_inventory (
-    room_type_id   UUID          PRIMARY KEY,
-    hotel_id       UUID          NOT NULL,
-    total_quantity INT           NOT NULL,
-    synced_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+-- Thiết kế mới (theo THIẾT_KẾ_VÀ_CÀI_ĐẶT_LẠI_QUÁ_TRÌNH_TẠO_BOOKING.docx, mục 4 & 7):
+-- inventory theo TỪNG NGÀY thay vì 1 dòng/room_type, để conditional UPDATE trừ tồn kho
+-- atomic mà không cần SELECT ... FOR UPDATE. available_quantity là nguồn dữ liệu trực tiếp,
+-- được BookingService.reserveInventory() decrement mỗi khi tạo booking.
+--
+-- Bảng cũ có cấu trúc khác hẳn (PK là room_type_id đơn, không có inventory_date/
+-- available_quantity) nên không thể ALTER đơn giản - drop và tạo lại cho môi trường
+-- dev/test. Nếu DB đã có dữ liệu thật, cần viết migration ALTER TABLE riêng, không dùng
+-- lại đoạn DROP này.
+DROP TABLE IF EXISTS roomtype_inventory;
+
+CREATE TABLE roomtype_inventory (
+    hotel_id            UUID    NOT NULL,
+    room_type_id        UUID    NOT NULL,
+    inventory_date      DATE    NOT NULL,
+    total_quantity      INTEGER NOT NULL,
+    available_quantity  INTEGER NOT NULL,
+    CONSTRAINT pk_roomtype_inventory PRIMARY KEY (room_type_id, inventory_date),
+    CONSTRAINT chk_total_quantity_positive         CHECK (total_quantity > 0),
+    CONSTRAINT chk_available_quantity_non_negative CHECK (available_quantity >= 0),
+    CONSTRAINT chk_available_quantity_valid        CHECK (available_quantity <= total_quantity)
 );
 
-INSERT INTO roomtype_inventory (room_type_id, hotel_id, total_quantity) VALUES
-    -- Standard Room (Số lượng gốc: 10)
-    ('d1000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 10),
-    
-    -- Deluxe Room (Số lượng gốc: 8)
-    ('d1000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 8),
-    
-    -- Superior Twin Room (Số lượng gốc: 6)
-    ('d1000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000001', 6),
-    
-    -- Junior Suite (Số lượng gốc: 4)
-    ('d1000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000001', 4),
-    
-    -- Presidential Suite (Số lượng gốc: 1) -> Rất hợp lý để test giành giật phòng hiếm!
-    ('d1000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000001', 1)
-ON CONFLICT (room_type_id) DO NOTHING;
+-- Seed: tạo inventory cho 180 ngày kể từ hôm nay bằng generate_series (mục 8 trong docx),
+-- available_quantity = total_quantity vì chưa có booking nào. 180 ngày khớp với
+-- WARM_UP_DAYS trong InventoryWarnUpSchedule.java (LocalDate.now() -> plusDays(180), tức
+-- CURRENT_DATE .. CURRENT_DATE + 179 ngày, đúng 180 dòng/room_type).
+INSERT INTO roomtype_inventory (hotel_id, room_type_id, inventory_date, total_quantity, available_quantity)
+SELECT
+    rt.hotel_id,
+    rt.room_type_id,
+    d::date AS inventory_date,
+    rt.total_quantity,
+    rt.total_quantity AS available_quantity
+FROM (
+    VALUES
+        -- Standard Room (Số lượng gốc: 10)
+        ('d1000000-0000-0000-0000-000000000001'::uuid, 'b0000000-0000-0000-0000-000000000001'::uuid, 10),
+        -- Deluxe Room (Số lượng gốc: 8)
+        ('d1000000-0000-0000-0000-000000000002'::uuid, 'b0000000-0000-0000-0000-000000000001'::uuid, 8),
+        -- Superior Twin Room (Số lượng gốc: 6)
+        ('d1000000-0000-0000-0000-000000000003'::uuid, 'b0000000-0000-0000-0000-000000000001'::uuid, 6),
+        -- Junior Suite (Số lượng gốc: 4)
+        ('d1000000-0000-0000-0000-000000000004'::uuid, 'b0000000-0000-0000-0000-000000000001'::uuid, 4),
+        -- Presidential Suite (Số lượng gốc: 2) -> Rất hợp lý để test giành giật phòng hiếm!
+        ('d1000000-0000-0000-0000-000000000005'::uuid, 'b0000000-0000-0000-0000-000000000001'::uuid, 2)
+) AS rt(room_type_id, hotel_id, total_quantity)
+CROSS JOIN generate_series(CURRENT_DATE, CURRENT_DATE + INTERVAL '179 days', INTERVAL '1 day') AS d
+ON CONFLICT (room_type_id, inventory_date) DO NOTHING;
+
+-- Hỗ trợ InventoryWarnUpSchedule.findAllByIdInventoryDateBetween(): quét theo inventory_date
+-- trên TẤT CẢ room type, PK (room_type_id, inventory_date) không tối ưu cho kiểu quét này
+-- vì room_type_id đứng trước - cần index riêng dẫn đầu bằng inventory_date.
+CREATE INDEX IF NOT EXISTS idx_roomtype_inventory_date
+    ON roomtype_inventory (inventory_date);
 
 
 -- ────────────────────────────────────────────────────────────
@@ -159,4 +200,6 @@ SELECT 'booked_roomtypes',         COUNT(*) FROM booked_roomtypes
 UNION ALL
 SELECT 'booking_info',             COUNT(*) FROM booking_info
 UNION ALL
-SELECT 'outbox_events',            COUNT(*) FROM outbox_events;
+SELECT 'outbox_events',            COUNT(*) FROM outbox_events
+UNION ALL
+SELECT 'roomtype_inventory',       COUNT(*) FROM roomtype_inventory;

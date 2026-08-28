@@ -4,28 +4,36 @@
 
 name: microservices-assignment
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - "${FRONTEND_PORT:-3000}:5173"
-    env_file:
-      - .env
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
-      CHOKIDAR_USEPOLLING: "true"
-      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
-      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
-      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
-      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    depends_on:
-      - gateway
-    networks:
-      - app-network
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "${FRONTEND_PORT:-3000}:5173"
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+  #     CHOKIDAR_USEPOLLING: "true"
+  #     VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+  #     VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-}
+  #     VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-}
+  #     VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-}
+  #   volumes:
+  #     - ./frontend:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     - gateway
+  #   networks:
+  #     - app-network
 
+
+  chassis-init:
+    image: maven:3.9-eclipse-temurin-21
+    restart: "no"
+    volumes:
+      - ./chassis:/app/chassis
+      - maven-cache:/root/.m2
+    command: sh -c "rm -rf /root/.m2/repository/com/hotelbooking/hotelbooking-chassis && mvn -f /app/chassis/pom.xml clean install -DskipTests -q"
 
   eureka-server:
     build: ./services/eureka-server
@@ -40,6 +48,7 @@ services:
       - app-network
     volumes:
       - ./services/eureka-server:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
 
   gateway:
@@ -52,22 +61,42 @@ services:
       SERVER_PORT: 8000
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: gateway
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_INSTRUMENTATION_HTTP_SERVER_TELEMETRY_EXCLUDED_PATTERN: /actuator/*
     depends_on:
       eureka-server:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
       place-booking-service:
         condition: service_healthy
       booking-service:
         condition: service_started
       user-service:
         condition: service_started
-      notification-service:
-        condition: service_started
+      # notification-service:
+      #   condition: service_started
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./gateway:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -107,18 +136,39 @@ services:
     networks:
       - app-network
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8081:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-    networks:
-      - app-network
+  # kafka-ui:
+  #   image: provectuslabs/kafka-ui:latest
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #   ports:
+  #     - "8081:8080"
+  #   environment:
+  #     KAFKA_CLUSTERS_0_NAME: local
+  #     KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+  #   networks:
+  #     - app-network
+
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: minio
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     MINIO_ROOT_USER: admin
+  #     MINIO_ROOT_PASSWORD: password123
+  #   volumes:
+  #     - ./minio/data:/data
+  #   command: server /data --console-address ":9001"
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
   user-db:
     image: postgres:16-alpine
@@ -216,7 +266,7 @@ services:
 
   promotion-db:
     image: postgres:16-alpine
-    restart: unless-stopped
+    # restart: unless-stopped
     ports:
       - "${PROMOTION_DB_EXTERNAL_PORT:-5438}:5432"
     environment:
@@ -234,30 +284,29 @@ services:
     networks:
       - app-network
 
-  notification-db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
-    environment:
-      POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
-      POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
-    volumes:
-      - notification-db-data:/var/lib/postgresql/data
-      - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks:
-      - app-network
+  # notification-db:
+  #   image: postgres:16-alpine
+  #   # restart: unless-stopped
+  #   ports:
+  #     - "${NOTIFICATION_DB_EXTERNAL_PORT:-5437}:5432"
+  #   environment:
+  #     POSTGRES_DB: ${NOTIFICATION_DB_NAME:-notification_db}
+  #     POSTGRES_USER: ${NOTIFICATION_DB_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+  #   volumes:
+  #     - notification-db-data:/var/lib/postgresql/data
+  #     - ./scripts/notification_db/notification_db_init.sql:/docker-entrypoint-initdb.d/notification_db_init.sql:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER:-postgres}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+  #   networks:
+  #     - app-network
 
   redis:
     image: redis:7.2-alpine
     container_name: redis
-    restart: unless-stopped
     ports:
       - "${REDIS_PORT:-6380}:6379"
     volumes:
@@ -291,16 +340,35 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_VERIFICATION_URL: ${EMAIL_VERIFICATION_URL:-http://localhost:3000/verify-email}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: user-service
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     depends_on:
       user-db:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/user-service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   hotel-service:
     build: ./services/hotel-service
@@ -319,6 +387,22 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-password123}
+      MINIO_BUCKET_HOTEL_IMAGES: ${MINIO_BUCKET_HOTEL_IMAGES:-hotel-images}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: hotel-service
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+
     depends_on:
       hotel-db:
         condition: service_healthy
@@ -326,11 +410,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/hotel-service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   booking-service:
     build: ./services/booking-service
@@ -355,10 +448,20 @@ services:
       REDIS_PORT: 6379
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8085/realms/hotel-booking-system}
       KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/hotel-booking-system/protocol/openid-connect/certs}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: booking-service
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     command:
       - mvn
       - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010
+      - "-Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5010"
     depends_on:
       booking-db:
         condition: service_healthy
@@ -368,6 +471,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
       interval: 10s
@@ -378,7 +483,10 @@ services:
       - app-network
     volumes:
       - ./services/booking-service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   place-booking-service:
     build: ./services/place_booking_service
@@ -400,10 +508,20 @@ services:
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: place-booking-service
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     command:
       - mvn
       - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011
+      - "-Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5011"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP"]
       interval: 10s
@@ -425,11 +543,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     networks:
       - app-network
     volumes:
       - ./services/place_booking_service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   payment-service:
     build: ./services/payment_service
@@ -448,6 +571,16 @@ services:
       KAFKA_CONSUMER_GROUP: payment-group
       EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
       EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+      # ── OpenTelemetry Java Agent ──
+      OTEL_SERVICE_NAME: payment-service
+      OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-false}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: parentbased_always_on
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_LOGS_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
     depends_on:
       payment-db:
         condition: service_healthy
@@ -455,11 +588,20 @@ services:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     networks:
       - app-network
+    command:
+      - mvn
+      - spring-boot:run
+      - -Dspring-boot.run.jvmArguments=-javaagent:/opt/otel/opentelemetry-javaagent.jar
     volumes:
       - ./services/payment_service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
+      - ./infra/opentelemetry-javaagent.jar:/opt/otel/opentelemetry-javaagent.jar:ro
+      - audit-logs:/var/log/audit
 
   promotion-service:
     build: ./services/promotion-service
@@ -489,6 +631,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chassis-init:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD-SHELL", "wget -qO- http://localhost:5000/actuator/health | grep -q UP" ]
       interval: 10s
@@ -499,47 +643,51 @@ services:
       - app-network
     volumes:
       - ./services/promotion-service:/app
+      - ./chassis:/app/chassis
       - maven-cache:/root/.m2
 
-  notification-service:
-    build: ./services/notification-service
-    ports:
-      - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
-      - "5013:5013" # debug
-    env_file:
-      - .env
-    environment:
-      SERVER_PORT: 5000
-      DB_HOST: notification-db
-      DB_PORT: 5432
-      DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
-      DB_USER: ${NOTIFICATION_DB_USER:-postgres}
-      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
-      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
-      KAFKA_CONSUMER_GROUP: notification-group
-      EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
-      EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
-      MAIL_HOST: ${MAIL_HOST}
-      MAIL_PORT: ${MAIL_PORT}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
-    depends_on:
-      notification-db:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      eureka-server:
-        condition: service_healthy
-    command:
-      - mvn
-      - spring-boot:run
-      - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
-    networks:
-      - app-network
-    volumes:
-      - ./services/notification-service:/app
-      - maven-cache:/root/.m2
+  # notification-service:
+  #   build: ./services/notification-service
+  #   ports:
+  #     - "${NOTIFICATION_SERVICE_PORT:-5006}:5000"
+  #     - "5013:5013" # debug
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     SERVER_PORT: 5000
+  #     DB_HOST: notification-db
+  #     DB_PORT: 5432
+  #     DB_NAME: ${NOTIFICATION_DB_NAME:-notification_db}
+  #     DB_USER: ${NOTIFICATION_DB_USER:-postgres}
+  #     DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD:-postgres}
+  #     KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:29092}
+  #     KAFKA_CONSUMER_GROUP: notification-group
+  #     EUREKA_ENABLED: ${EUREKA_ENABLED:-true}
+  #     EUREKA_SERVER_URL: ${EUREKA_SERVER_URL:-http://eureka-server:8761/eureka}
+  #     MAIL_HOST: ${MAIL_HOST}
+  #     MAIL_PORT: ${MAIL_PORT}
+  #     MAIL_USERNAME: ${MAIL_USERNAME}
+  #     MAIL_PASSWORD: ${MAIL_PASSWORD}
+  #     FIREBASE_SERVICE_ACCOUNT_JSON_PATH: ${FIREBASE_SERVICE_ACCOUNT_JSON_PATH:-}
+  #   depends_on:
+  #     notification-db:
+  #       condition: service_healthy
+  #     kafka:
+  #       condition: service_healthy
+  #     eureka-server:
+  #       condition: service_healthy
+  #     chassis-init:
+  #       condition: service_completed_successfully
+  #   command:
+  #     - mvn
+  #     - spring-boot:run
+  #     - -Dspring-boot.run.jvmArguments=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5013
+  #   networks:
+  #     - app-network
+  #   volumes:
+  #     - ./services/notification-service:/app
+  #     - ./chassis:/app/chassis
+  #     - maven-cache:/root/.m2
 
   keycloak-db:
     image: postgres:16-alpine
@@ -588,6 +736,88 @@ services:
       - ./keycloak/import:/opt/keycloak/data/import
     networks:
       - app-network
+
+  # ── Elasticsearch ──────────────────────────────────────────────────────
+  # elasticsearch:
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+  #   environment:
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false      # Tắt auth cho dev
+  #     - ES_JAVA_OPTS=-Xms1g -Xmx1g       # Giới hạn RAM
+  #   ports:
+  #     - "9200:9200"
+  #   volumes:
+  #     - elasticsearch_data:/usr/share/elasticsearch/data
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #   networks:
+  #     - app-network
+
+  # ── Kibana ─────────────────────────────────────────────────────────────
+  # kibana:
+  #   image: docker.elastic.co/kibana/kibana:8.13.0
+  #   environment:
+  #     - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+  #   ports:
+  #     - "5601:5601"
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #   networks:
+  #     - app-network
+
+  # ── ES Init — Tạo index template cho Audit Log ──────────────────────
+  # es-init:
+  #   image: curlimages/curl:8.5.0
+  #   restart: "no"
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./infra/elasticsearch:/etc/elasticsearch:ro
+  #   entrypoint: ["sh", "/etc/elasticsearch/init-audit-template.sh"]
+  #   networks:
+  #     - app-network
+
+  # ── OTel Collector ─────────────────────
+  # otel-collector:
+  #   image: otel/opentelemetry-collector-contrib:0.158.0
+  #   command: ["--config=/etc/otel/otel-collector.yaml"]
+  #   environment:
+  #     - ENVIRONMENT=${ENVIRONMENT:-development}
+  #   volumes:
+  #     - ./infra/otel:/etc/otel:ro
+  #     # Mount shared audit log volume — Collector đọc file từ đây
+  #     - audit-logs:/var/log/audit:ro
+  #   ports:
+  #     - "4317:4317"    # OTLP gRPC — service gửi traces/metrics đến đây
+  #     - "4318:4318"    # OTLP HTTP — alternative cho gRPC
+  #     - "8888:8888"    # Collector internal metrics (Prometheus scrape)
+  #   depends_on:
+  #     - elasticsearch
+  #     - jaeger
+  #   networks:
+  #     - app-network
+
+  # # ── Jaeger (Distributed Tracing backend) ──────────────────────────────
+  # jaeger:
+  #   image: jaegertracing/jaeger:2.20.0
+  #   command: ["--config=/etc/jaeger/jaeger.yaml"]
+  #   volumes:
+  #     - ./infra/jaeger:/etc/jaeger:ro
+  #   ports:
+  #     - "16686:16686"  # Jaeger UI
+  #     - "4317"   # OTLP gRPC (Jaeger nhận từ Collector)
+  #     - "4318"   # OTLP HTTP
+  #   depends_on:
+  #     elasticsearch:
+  #       condition: service_healthy
+  #   networks:
+  #     - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -601,3 +831,6 @@ volumes:
   maven-cache:
   redis-data:
   keycloak-db-data:
+  minio-data:
+  elasticsearch_data:
+  audit-logs:

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Lấy config từ application.properties / application.yml qua Spring Environment -->
+    <springProperty name="SERVICE_NAME"
+                    source="spring.application.name"
+                    defaultValue="unknown-service"/>
+    <springProperty name="LOG_LEVEL_ROOT"
+                    source="logging.level.root"
+                    defaultValue="INFO"/>
+    <springProperty name="JSON_ENABLED"
+                    source="chassis.logging.json-enabled"
+                    defaultValue="true"/>
+
+    <!-- ==================== APPENDER: Plain Text (local dev) ==================== -->
+    <appender name="CONSOLE_TEXT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{traceId:-NO_TRACE}] [%X{tenantId:-}] - %msg%n%ex</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ==================== APPENDER: JSON (staging/production) ==================== -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+
+            <!-- Tắt caller data (chậm và ít dùng) -->
+            <includeCallerData>false</includeCallerData>
+
+            <!-- Field cố định: service name -->
+            <customFields>{"service":"${SERVICE_NAME}"}</customFields>
+
+            <!-- Đổi tên field mặc định để khớp ELK convention -->
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+                <levelValue>[ignore]</levelValue>
+                <level>severity</level>
+            </fieldNames>
+
+            <!-- MDC fields tự động được include -->
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <includeMdcKeyName>tenantId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>clientIp</includeMdcKeyName>
+            <includeMdcKeyName>requestId</includeMdcKeyName>
+            <includeMdcKeyName>http.method</includeMdcKeyName>
+            <includeMdcKeyName>http.path</includeMdcKeyName>
+
+            <!-- Stack trace formatter -->
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerCause>20</maxDepthPerCause>
+                <shortenedClassNameLength>30</shortenedClassNameLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+
+        </encoder>
+    </appender>
+
+    <!-- Async wrapper — không block business thread khi ghi log -->
+    <appender name="ASYNC_JSON" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="CONSOLE_JSON"/>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+        <neverBlock>false</neverBlock>
+    </appender>
+
+    <!-- ==================== APPENDER: Audit Log File ==================== -->
+    <!--
+        Ghi Audit Log ra file riêng biệt, chỉ chứa pure JSON body.
+        Pattern %msg%n = chỉ lấy nội dung message (JSON) + xuống dòng.
+        Không có timestamp, thread, level prefix — vì JSON audit entry đã chứa đầy đủ.
+        OTel Collector filelog receiver sẽ đọc file này.
+    -->
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/var/log/audit/${SERVICE_NAME}-audit.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>/var/log/audit/${SERVICE_NAME}-audit.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Audit Console — dùng cho local dev (plain text, nhìn thấy trên console) -->
+    <appender name="AUDIT_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{HH:mm:ss.SSS} [AUDIT] %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ==================== PROFILE ROUTING ==================== -->
+
+    <!-- Local dev: plain text dễ đọc -->
+    <springProfile name="local,default">
+        <root level="${LOG_LEVEL_ROOT}">
+            <appender-ref ref="CONSOLE_TEXT"/>
+        </root>
+
+        <!-- Audit Log: ghi ra console (local dev) + file (nếu có mount) -->
+        <logger name="AUDIT_LOG" level="INFO" additivity="false">
+            <appender-ref ref="AUDIT_CONSOLE"/>
+            <appender-ref ref="AUDIT_FILE"/>
+        </logger>
+    </springProfile>
+
+    <!-- Staging & Production: JSON async -->
+    <springProfile name="staging,production">
+        <root level="${LOG_LEVEL_ROOT}">
+            <appender-ref ref="ASYNC_JSON"/>
+        </root>
+
+        <!-- Audit Log: chỉ ghi ra file, không chảy lên root logger -->
+        <logger name="AUDIT_LOG" level="INFO" additivity="false">
+            <appender-ref ref="AUDIT_FILE"/>
+        </logger>
+
+        <!-- Tắt verbose log của các thư viện third-party -->
+        <logger name="org.hibernate.SQL"                    level="WARN"/>
+        <logger name="org.hibernate.orm.jdbc.bind"         level="WARN"/>
+        <logger name="org.springframework.web"              level="WARN"/>
+        <logger name="org.springframework.security"         level="WARN"/>
+        <logger name="io.netty"                             level="WARN"/>
+        <logger name="org.apache.kafka"                     level="WARN"/>
+        <logger name="com.zaxxer.hikari"                    level="INFO"/>
+    </springProfile>
+</configuration>
+

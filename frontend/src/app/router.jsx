@@ -18,6 +18,13 @@ import { PromotionListPage } from '../features/promotion/pages/PromotionListPage
 import { PromotionCreatePage } from '../features/promotion/pages/PromotionCreatePage/PromotionCreatePage';
 import { PromotionDetailPage } from '../features/promotion/pages/PromotionDetailPage/PromotionDetailPage';
 import { PromotionEditPage } from '../features/promotion/pages/PromotionEditPage/PromotionEditPage';
+import { AdminHotelPendingListPage } from '../pages/AdminHotelPendingListPage';
+import AdminHotelDetailPage from '../pages/AdminHotelDetailPage';
+// === Bo sung moi: quan ly User / Tenant - Subscriptions cho Admin ===
+import AdminDashboardPage from '../pages/AdminDashboardPage';
+import AdminUsersPage from '../pages/AdminUsersPage';
+import AdminTenantsPage from '../pages/AdminTenantsPage';
+import AdminTenantSubscriptionsPage from '../pages/AdminTenantSubscriptionsPage';
 
 export default function AppRouter() {
   return (
@@ -40,6 +47,13 @@ export default function AppRouter() {
       <Route path="/promotions/create" element={<PromotionCreatePage />} />
       <Route path="/promotions/:id" element={<PromotionDetailPage />} />
       <Route path="/promotions/:id/edit" element={<PromotionEditPage />} />
+      <Route path="/admin/hotels/pending" element={<AdminHotelPendingListPage />} />
+      <Route path="/admin/hotels/:hotelId" element={<AdminHotelDetailPage />} />
+      {/* === Bo sung moi === */}
+      <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+      <Route path="/admin/users" element={<AdminUsersPage />} />
+      <Route path="/admin/tenants" element={<AdminTenantsPage />} />
+      <Route path="/admin/tenants/:tenantId/subscriptions" element={<AdminTenantSubscriptionsPage />} />
       <Route path="*" element={<NotFoundPage />} />
       <Route path="/hotels" element={<HomePageSearch />} />
       <Route path="/hotels/search" element={<SearchResultsPage />} />

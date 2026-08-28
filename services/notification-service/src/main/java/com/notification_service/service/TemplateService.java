@@ -1,5 +1,7 @@
 package com.notification_service.service;
 
+import com.notification_service.dto.EmailHotelStatusRequest;
+import com.notification_service.dto.EmailHotelStatusTemplate;
 import com.notification_service.dto.EmailRequest;
 import com.notification_service.dto.EmailTemplate;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,59 @@ public class TemplateService {
                 data.booking().bookingId(),
                 data.booking().hotel().name(),
                 data.reason()
+            );
+        };
+    }
+
+    public String buildHotelEmailContent(EmailHotelStatusTemplate template, EmailHotelStatusRequest data){
+        
+        return switch (template){
+            case HOTEL_APPROVED -> """
+                    Xin chào %s,
+
+                    Yêu cầu đăng tin về khách sạn của bạn đã được phê duyệt!
+                    
+                    - Khách sạn: %s
+                    - Địa chỉ: %s
+
+                    - Chủ khách sạn: %s
+                    - Email: %s
+
+                    Từ giờ bạn có thể nhận các booking từ mọi khách hàng có yêu cầu trên hệ thống!
+                    Chúc bạn có trải nghiệm sử dụng hệ thống thật hài lòng! 
+                    """.formatted(
+                        data.tenant().name(),
+                        data.hotel().name(),
+                        data.hotel().address(),
+                        data.tenant().name(),
+                        data.tenant().email()
+            );
+
+            case HOTEL_SUSPENDED -> """
+                    Xin chào %s,
+
+                    Yêu cầu đăng tin về khách sạn của bạn đã bị từ chối!
+                    
+                    - Khách sạn: %s
+                    - Địa chỉ: %s
+
+                    - Chủ khách sạn: %s
+                    - Email: %s
+
+                    =========Lý do=========
+                    %s
+                    =======================
+                    
+                    Bạn hãy sửa/cập nhật lại thông tin đã sai rồi gửi lại yêu cầu nhé.
+                    
+                    Chúc bạn có trải nghiệm sử dụng hệ thống thật hài lòng! 
+                    """.formatted(
+                        data.tenant().name(),
+                        data.hotel().name(),
+                        data.hotel().address(),
+                        data.tenant().name(),
+                        data.tenant().email(),
+                        data.reason()
             );
         };
     }

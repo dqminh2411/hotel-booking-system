@@ -11,5 +11,14 @@ export const ROUTES = {
     detail: (id) => `/promotions/${id}`,
     edit: (id) => `/promotions/${id}/edit`,
   },
+  admin: {
+    hotelsPending: '/admin/hotels/pending',
+    hotelDetail: (hotelId) => `/admin/hotels/${hotelId}`,
+    // === Bo sung moi (khong dong den cac key co san o tren) ===
+    dashboard: '/admin/dashboard',
+    users: '/admin/users',
+    tenants: '/admin/tenants',
+    tenantSubscriptions: (tenantId) => `/admin/tenants/${tenantId}/subscriptions`,
+  },
   notFound: '*',
 };
