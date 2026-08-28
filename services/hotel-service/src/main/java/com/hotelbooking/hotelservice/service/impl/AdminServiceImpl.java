@@ -30,19 +30,28 @@ import com.hotelbooking.hotelservice.dto.response.HotelPendingResponse;
 import com.hotelbooking.hotelservice.dto.response.UserResponse;
 import com.hotelbooking.hotelservice.entity.HotelEntity;
 import com.hotelbooking.hotelservice.entity.HotelImageEntity;
-import com.hotelbooking.hotelservice.entity.OutboxEventEntity;
 import com.hotelbooking.hotelservice.exception.AppException;
 import com.hotelbooking.hotelservice.mapper.HotelMapper;
 import com.hotelbooking.hotelservice.repository.HotelImageRepository;
 import com.hotelbooking.hotelservice.repository.HotelRepository;
-import com.hotelbooking.hotelservice.repository.OutboxEventRepository;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.hotelbooking.hotelservice.service.AdminService;
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
 
 import io.minio.MinioClient;
 import io.minio.RemoveObjectsArgs;
 import io.minio.Result;
 import io.minio.messages.DeleteError;
 import io.minio.messages.DeleteObject;
+
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapSetter;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -61,7 +70,8 @@ public class AdminServiceImpl implements AdminService{
     StringRedisTemplate stringRedisTemplate;
     UserServiceFeignClient userServiceFeignClient;
     ObjectMapper objectMapper;
-    OutboxEventRepository outboxEventRepository;
+    private final OutboxRelay outboxPublisherService;
+
     MinioClient minioClient;
 
     @NonFinal
@@ -105,6 +115,14 @@ public class AdminServiceImpl implements AdminService{
 
     @Override
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.APPROVE_HOTEL,
+        message = "Update hotel status",
+        severity = Severity.INFO,
+        targetType = TargetType.HOTEL,
+        targetId = "#hotelId",
+        extraData = {"status=#request.hotelStatus()"}
+    )
     public void updateHotelStatus(UUID hotelId, HotelUpdateStatusRequest request){
         HotelEntity hotelEntity = hotelRepository.findByIdAndIsDeletedFalse(hotelId)
                         .orElseThrow(() -> new AppException("HOTEL_NOT_FOUND", "Không tìm thấy khách sạn có id=" + hotelId.toString(), HttpStatus.NOT_FOUND));
@@ -133,7 +151,8 @@ public class AdminServiceImpl implements AdminService{
                     eventType,
                     request.reason()        
         );
-        saveOutboxEvent(emailRequest, "hotel-status-actions");
+       
+        outboxPublisherService.saveEvent("hotel-status-actions", emailRequest);
         
         // clearKeyHotelId(hotelId);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -185,19 +204,6 @@ public class AdminServiceImpl implements AdminService{
         });
     }
 
-    private void saveOutboxEvent(Object event, String topic) {
-        try {
-            OutboxEventEntity outbox = new OutboxEventEntity();
-            outbox.setId(UUID.randomUUID());
-            outbox.setTopic(topic);
-            outbox.setPayload(objectMapper.writeValueAsString(event));
-            outbox.setPublished(Boolean.FALSE);
-            outbox.setCreatedAt(Instant.now());
-            outboxEventRepository.save(outbox);
-        } catch (Exception ex) {
-            throw new AppException("INTERNAL_SERVER_ERROR", "Failed to write outbox event", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
 
     // http://minio:9000/hotel-images/imgName
     private String extractImgName(String imgUrl){

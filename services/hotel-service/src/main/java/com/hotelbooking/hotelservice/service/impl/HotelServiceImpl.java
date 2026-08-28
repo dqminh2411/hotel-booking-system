@@ -22,6 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hotelbooking.hotelservice.dto.HotelSearchItemDTO;
 import com.hotelbooking.hotelservice.dto.CheapestRoomTypeDTO;
 import com.hotelbooking.hotelservice.dto.AddressDTO;
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -186,6 +190,13 @@ public class HotelServiceImpl implements HotelService {
 
     @Override
     @Transactional(readOnly = true)
+    @AuditLog(
+        eventType = AuditEventType.CUSTOM,
+        message = "Get requested room types by hotel",
+        severity = Severity.INFO,
+        targetType = TargetType.HOTEL,
+        targetId = "#hotelId"
+    )
     public HotelAndRoomTypesResponse getRequestedRoomTypesByHotel(UUID hotelId, List<UUID> roomTypeList) {
         HotelEntity hotel = hotelRepository.findByIdAndIsDeletedFalseAndStatus(hotelId, HotelStatus.APPROVED)
                 .orElseThrow(() -> new HotelNotFoundException(hotelId.toString()));
@@ -204,6 +215,13 @@ public class HotelServiceImpl implements HotelService {
 
     @Override
     @Transactional
+    @AuditLog(
+        eventType = AuditEventType.UPDATE_HOTEL,
+        message = "Update room status",
+        severity = Severity.INFO,
+        targetType = TargetType.HOTEL,
+        extraData = {"oldStatus=#request.oldStatus()", "newStatus=#request.newStatus()"}
+    )
     public void updateRoomStatus(RoomCheckinRequest request) {
         List<UUID> roomIds = request.roomIds();
         if (roomIds == null || roomIds.isEmpty()) {

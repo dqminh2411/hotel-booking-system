@@ -37,6 +37,7 @@ flowchart TB
 
     subgraph Identity
         KC["Keycloak"]
+        KCDB[("Keycloak DB")]
     end
 
     subgraph Backend
@@ -62,6 +63,8 @@ flowchart TB
     React -->|OIDC Login| KC
 
     KC -->|JWT Access Token| React
+
+    KC -->|Read/write data| KCDB
 
     React -->|Bearer Token| GW
 

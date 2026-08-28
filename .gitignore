@@ -138,3 +138,15 @@ files/
 queue_db_solution.md
 redis-atomic-reservation-kien-truc.pdf
 minio/data/
+docs/asset/place_booking_success_flow.svg
+docs/asset/acti-dia.txt
+docs/asset/hotel_booking_success_flow.png
+chassis-logging.md
+chassis.md
+OpenTelemetry.md
+otel-chat.md
+implement_log_trace.md
+log_collector.md
+full_trace_success.json
+jwks_res.json
+hotel-booking-system.postman_collection.json

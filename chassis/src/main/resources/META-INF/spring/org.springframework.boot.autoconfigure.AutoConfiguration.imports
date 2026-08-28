@@ -1,0 +1,3 @@
+com.hotelbooking.chassis.tracing.config.TracingAutoConfiguration
+com.hotelbooking.chassis.audit.AuditAutoConfiguration
+com.hotelbooking.chassis.outbox.config.OutboxAutoConfiguration

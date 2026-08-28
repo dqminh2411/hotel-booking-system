@@ -71,3 +71,9 @@ eureka:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka}
 
+chassis:
+  logging:
+    enabled: true
+    json-enabled: ${CHASSIS_LOGGING_JSON_ENABLED:true}
+
+

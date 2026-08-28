@@ -1,0 +1,33 @@
+{
+  "index_patterns": ["hotelhub-logs-*"],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "hotelhub-logs-policy",
+    "refresh_interval": "5s"
+  },
+  "mappings": {
+    "properties": {
+      "@timestamp":       { "type": "date" },
+      "severity":         { "type": "keyword" },
+      "service":          { "type": "keyword" },
+      "traceId":          { "type": "keyword" },
+      "spanId":           { "type": "keyword" },
+      "tenantId":         { "type": "keyword" },
+      "userId":           { "type": "keyword" },
+      "clientIp":         { "type": "ip" },
+      "event":            { "type": "keyword" },
+      "message":          { "type": "text", "fields": { "raw": { "type": "keyword" }}},
+      "duration_ms":      { "type": "long" },
+      "http.method":      { "type": "keyword" },
+      "http.path":        { "type": "keyword" },
+      "http.status":      { "type": "integer" },
+      "exception.type":   { "type": "keyword" },
+      "exception.message":{ "type": "text" },
+      "environment":      { "type": "keyword" },
+      "kafka.topic":      { "type": "keyword" },
+      "kafka.partition":  { "type": "integer" },
+      "kafka.offset":     { "type": "long" }
+    }
+  }
+}

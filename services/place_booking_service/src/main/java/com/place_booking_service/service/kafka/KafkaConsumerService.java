@@ -7,13 +7,15 @@ import java.util.UUID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hotelbooking.chassis.outbox.service.OutboxRelay;
 import com.place_booking_service.dto.*;
-import com.place_booking_service.service.OutboxPublisherService;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +23,25 @@ import org.springframework.transaction.annotation.Transactional;
 import com.place_booking_service.entity.SagaState;
 import com.place_booking_service.repository.SagaStateRepository;
 
+import com.hotelbooking.chassis.audit.AuditEventType;
+import com.hotelbooking.chassis.audit.AuditLog;
+import com.hotelbooking.chassis.audit.Severity;
+import com.hotelbooking.chassis.audit.TargetType;
+
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class KafkaConsumerService {
 
     SagaStateRepository sagaStateRepository;
-    OutboxPublisherService outboxPublisherService;
+    OutboxRelay outboxPublisherService;
+
+    /**
+     * Self-injection qua proxy để AOP có thể intercept internal method calls.
+     * Cần thiết vì Spring proxy-based AOP không intercept được self-call.
+     */
+    @Autowired @Lazy @lombok.experimental.NonFinal
+    KafkaConsumerService self;
 
     @KafkaListener(topics = "booking-events")
     @Transactional
@@ -44,10 +58,10 @@ public class KafkaConsumerService {
         ObjectMapper mapper = new ObjectMapper();
 
         switch (eventType) {
-            case "BookingCreated" -> handleBookingCreated(mapper.convertValue(payload, BookingCreated.class));
-            case "BookingConfirmed" -> handleBookingConfirmed(mapper.convertValue(payload, BookingConfirmed.class));
-            case "BookingFailed" -> handleBookingFailed(mapper.convertValue(payload, BookingFailed.class));
-            case "BookingCancelled" -> handleBookingCancelled(mapper.convertValue(payload, BookingCancelled.class));
+            case "BookingCreated" -> self.handleBookingCreated(mapper.convertValue(payload, BookingCreated.class));
+            case "BookingConfirmed" -> self.handleBookingConfirmed(mapper.convertValue(payload, BookingConfirmed.class));
+            case "BookingFailed" -> self.handleBookingFailed(mapper.convertValue(payload, BookingFailed.class));
+            case "BookingCancelled" -> self.handleBookingCancelled(mapper.convertValue(payload, BookingCancelled.class));
         }
     }
     @KafkaListener(topics = "payment-events")
@@ -63,8 +77,8 @@ public class KafkaConsumerService {
         }
         ObjectMapper mapper = new ObjectMapper();
         switch (eventType) {
-            case "PaymentSucceeded"-> handlePaymentSucceeded(mapper.convertValue(payload, PaymentSucceeded.class)) ;
-            case "PaymentFailed"-> handlePaymentFailed(mapper.convertValue(payload, PaymentFailed.class));
+            case "PaymentSucceeded"-> self.handlePaymentSucceeded(mapper.convertValue(payload, PaymentSucceeded.class)) ;
+            case "PaymentFailed"-> self.handlePaymentFailed(mapper.convertValue(payload, PaymentFailed.class));
         }
     }
 
@@ -179,7 +193,15 @@ public class KafkaConsumerService {
     }
 
 
-    private void handleBookingCreated(BookingCreated bookingCreated) {
+    @AuditLog(
+        eventType = AuditEventType.CREATE_BOOKING,
+        message = "Saga: Booking created, dispatching payment",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingCreated.bookingId",
+        extraData = {"sagaStep=BOOKING_CREATED", "totalAmount=#bookingCreated.totalAmount"}
+    )
+    public void handleBookingCreated(BookingCreated bookingCreated) {
         System.out.println(bookingCreated);
 
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingCreated.getBookingId());
@@ -212,7 +234,15 @@ public class KafkaConsumerService {
 
     }
 
-    private void handleBookingConfirmed(BookingConfirmed bookingConfirmed) {
+    @AuditLog(
+        eventType = AuditEventType.CONFIRM_BOOKING,
+        message = "Saga: Booking confirmed, sending notification",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingConfirmed.booking.bookingId",
+        extraData = {"sagaStep=COMPLETED"}
+    )
+    public void handleBookingConfirmed(BookingConfirmed bookingConfirmed) {
 
         System.out.println(bookingConfirmed);
 
@@ -245,7 +275,15 @@ public class KafkaConsumerService {
         }
     }
 
-    private void handleBookingFailed(BookingFailed bookingFailed) {
+    @AuditLog(
+        eventType = AuditEventType.CREATE_BOOKING,
+        message = "Saga: Booking failed",
+        severity = Severity.WARN,
+        targetType = TargetType.BOOKING,
+        targetId = "#bookingFailed.booking.bookingId",
+        extraData = {"sagaStep=BOOKING_FAILED", "reason=#bookingFailed.reason"}
+    )
+    public void handleBookingFailed(BookingFailed bookingFailed) {
 
         System.out.println(bookingFailed);
         UUID bookingId = bookingFailed.getBooking().getBookingId();
@@ -318,7 +356,15 @@ public class KafkaConsumerService {
         }
     }
 
-    private void handlePaymentSucceeded(PaymentSucceeded paymentSucceeded) {
+    @AuditLog(
+        eventType = AuditEventType.PROCESS_PAYMENT,
+        message = "Saga: Payment succeeded, confirming booking",
+        severity = Severity.INFO,
+        targetType = TargetType.BOOKING,
+        targetId = "#paymentSucceeded.bookingId",
+        extraData = {"sagaStep=PAYMENT_SUCCEEDED", "paymentId=#paymentSucceeded.paymentId"}
+    )
+    public void handlePaymentSucceeded(PaymentSucceeded paymentSucceeded) {
         System.out.println("payment succeeded "+paymentSucceeded);
         UUID bookingId = paymentSucceeded.getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
@@ -349,7 +395,15 @@ public class KafkaConsumerService {
         }
     }
 
-    private void handlePaymentFailed(PaymentFailed paymentFailed) {
+    @AuditLog(
+        eventType = AuditEventType.PROCESS_PAYMENT,
+        message = "Saga: Payment failed, cancelling booking",
+        severity = Severity.WARN,
+        targetType = TargetType.BOOKING,
+        targetId = "#paymentFailed.bookingId",
+        extraData = {"sagaStep=PAYMENT_FAILED", "reason=#paymentFailed.reason"}
+    )
+    public void handlePaymentFailed(PaymentFailed paymentFailed) {
         System.out.println("payment failed "+paymentFailed);
         UUID bookingId = paymentFailed.getBookingId();
         Optional<SagaState> sagaOpt = sagaStateRepository.findByBookingId(bookingId);
